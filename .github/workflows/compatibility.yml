@@ -8,8 +8,34 @@ on:
   workflow_dispatch:
 
 jobs:
+  supply-chain:
+    runs-on: ubuntu-24.04
+    env:
+      CARGO_DENY_VERSION: 0.20.2
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-deny
+        run: cargo install --locked --version "$CARGO_DENY_VERSION" cargo-deny
+        shell: bash
+
+      - name: Run supply-chain policy audit
+        run: bash scripts/audit-supply-chain.sh
+        shell: bash
+
+      - name: Generate and validate SPDX SBOM
+        run: bash scripts/generate-sbom.sh --check
+        shell: bash
+
   native-runner-matrix:
     name: ${{ matrix.name }}
+    needs: supply-chain
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -67,9 +93,6 @@ jobs:
           cp target/release/claude-flow target/release-smoke/claude-flow
           sha256sum target/release-smoke/ruflo target/release-smoke/claude-flow > target/release-smoke/SHA256SUMS
           cp target/release-smoke/SHA256SUMS target/release-smoke/SHA256SUMS.sig
-          cat > target/release-smoke/${{ matrix.target }}.sbom.spdx.json <<'EOF'
-          {"spdxVersion":"SPDX-2.3","dataLicense":"CC0-1.0","SPDXID":"SPDXRef-DOCUMENT","name":"ruflo-release-smoke","documentNamespace":"https://example.invalid/ruflo-release-smoke/${{ matrix.target }}","creationInfo":{"created":"2026-08-07T00:00:00Z","creators":["Tool: compatibility-smoke"]},"packages":[]}
-          EOF
         shell: bash
 
       - name: Stage release smoke artifacts (Windows)
@@ -80,10 +103,11 @@ jobs:
           Copy-Item target/release/claude-flow.exe target/release-smoke/claude-flow.exe
           Get-FileHash target/release-smoke/ruflo.exe -Algorithm SHA256 | Format-Table -HideTableHeaders | Out-File target/release-smoke/SHA256SUMS
           Copy-Item target/release-smoke/SHA256SUMS target/release-smoke/SHA256SUMS.sig
-          @'
-          {"spdxVersion":"SPDX-2.3","dataLicense":"CC0-1.0","SPDXID":"SPDXRef-DOCUMENT","name":"ruflo-release-smoke","documentNamespace":"https://example.invalid/ruflo-release-smoke/${{ matrix.target }}","creationInfo":{"created":"2026-08-07T00:00:00Z","creators":["Tool: compatibility-smoke"]},"packages":[]}
-          '@ | Set-Content target/release-smoke/${{ matrix.target }}.sbom.spdx.json
         shell: pwsh
+
+      - name: Generate release smoke SBOM
+        run: bash scripts/generate-sbom.sh --target "${{ matrix.target }}" --artifact-dir target/release-smoke --output-name "${{ matrix.target }}.sbom.spdx.json"
+        shell: bash
 
       - name: Run POSIX release smoke
         if: runner.os != 'Windows'
