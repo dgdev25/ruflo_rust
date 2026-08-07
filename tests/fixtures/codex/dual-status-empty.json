@@ -1,0 +1,19 @@
+{
+  "argv": ["dual", "status", "--namespace", "native-acceptance"],
+  "exit": 0,
+  "stdout": "\nDual-Mode Collaboration Status\n\nMemory Entries\n\n[WARN] No entries found\n[INFO] Store data: claude-flow memory store -k \"key\" --value \"data\"\n\n",
+  "stderr": "",
+  "environment": {},
+  "platform": {"family": "portable"},
+  "provenance": {
+    "kind": "reduced-schema",
+    "source": "installed:claude-flow-codex@3.0.1",
+    "reduction": "The live command spawns `npx ruflo@latest memory list`, whose npm notice and optional embedding-backend startup lines are process/cache dependent. This fixture retains the stable dual-status header and the nested empty-memory view while removing only those volatile child-startup lines.",
+    "redactions": ["npx notice", "embedding backend startup diagnostics"]
+  },
+  "recording": {
+    "recorded_at": "2026-08-07T19:25:52Z",
+    "recorded_by": "live-oracle-capture",
+    "harness": "differential-cli"
+  }
+}

@@ -648,6 +648,9 @@ dependencies = [
 [[package]]
 name = "ruflo-codex-cli"
 version = "0.1.0"
+dependencies = [
+ "ruflo-storage",
+]
 
 [[package]]
 name = "ruflo-config"

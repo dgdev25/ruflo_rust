@@ -224,6 +224,21 @@ fn codex_facade_replays_reduced_invalid_worker_contract() {
 }
 
 #[test]
+fn codex_facade_replays_reduced_dual_status_memory_view() {
+    let fixture = CliFixture::load("tests/fixtures/codex/dual-status-empty.json").unwrap();
+    let project = tempfile::tempdir().unwrap();
+    let output = Command::new(executable_path("claude-flow-codex"))
+        .args(&fixture.argv)
+        .current_dir(project.path())
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(fixture.exit));
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), fixture.stdout);
+    assert_eq!(String::from_utf8(output.stderr).unwrap(), fixture.stderr);
+}
+
+#[test]
 fn both_binaries_replay_tools_list_fixture_over_stdio() {
     let fixture = JsonRpcFixture::load("tests/fixtures/mcp/tools-list.json").unwrap();
 

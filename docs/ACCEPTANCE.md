@@ -27,7 +27,7 @@ create project files nor launch a Codex or Claude worker.
   a worker-running command.
 - [x] Add reduced-schema parity fixtures for invalid worker specifications and
   provider-free loop status/stop lifecycle without executing a model provider.
-- [ ] Capture and implement the separate `dual status` shared-memory view
+- [x] Capture and implement the separate `dual status` shared-memory view
   without delegating to `npx ruflo@latest`.
 - [x] Pilot the native façade as an opt-in ruVocal MCP child using the accepted
   prefix-stripping and stdio JSON-RPC contract.

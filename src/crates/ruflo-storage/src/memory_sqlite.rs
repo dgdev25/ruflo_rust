@@ -194,6 +194,49 @@ impl SqliteMemoryStore {
         Ok(entries)
     }
 
+    /// Enumerate active memory entries for compatibility views such as
+    /// `memory list` and Codex dual-mode status. This deliberately remains a
+    /// SQLite projection; semantic ordering belongs to the RVF adapter wave.
+    pub fn list(
+        &self,
+        namespace: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<MemoryEntry>, RufloError> {
+        let limit = i64::try_from(limit.max(1)).unwrap_or(i64::MAX);
+        let mut entries = Vec::new();
+        if let Some(namespace) = namespace {
+            let mut statement = self
+                .connection
+                .prepare(
+                    "SELECT id, key, namespace, content, type, provenance_type FROM memory_entries \
+                     WHERE status = 'active' AND namespace = ?1 \
+                     ORDER BY updated_at DESC, id ASC LIMIT ?2",
+                )
+                .map_err(map_sqlite("memory.list"))?;
+            let rows = statement
+                .query_map(params![namespace, limit], row_to_entry)
+                .map_err(map_sqlite("memory.list"))?;
+            for row in rows {
+                entries.push(row.map_err(map_sqlite("memory.list"))?);
+            }
+        } else {
+            let mut statement = self
+                .connection
+                .prepare(
+                    "SELECT id, key, namespace, content, type, provenance_type FROM memory_entries \
+                     WHERE status = 'active' ORDER BY updated_at DESC, id ASC LIMIT ?1",
+                )
+                .map_err(map_sqlite("memory.list"))?;
+            let rows = statement
+                .query_map(params![limit], row_to_entry)
+                .map_err(map_sqlite("memory.list"))?;
+            for row in rows {
+                entries.push(row.map_err(map_sqlite("memory.list"))?);
+            }
+        }
+        Ok(entries)
+    }
+
     fn find(&self, namespace: &str, key: &str) -> Result<Option<MemoryEntry>, RufloError> {
         self.connection
             .query_row(

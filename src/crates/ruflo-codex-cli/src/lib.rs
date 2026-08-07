@@ -92,6 +92,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
     if borrowed.starts_with(&["loop", "stop"]) {
         return loop_stop(&args[2..]);
     }
+    if borrowed.starts_with(&["dual", "status"]) {
+        return dual_status(&args[2..]);
+    }
 
     match borrowed.as_slice() {
         ["--version"] | ["-v"] => {
@@ -204,6 +207,48 @@ fn loop_stop(args: &[String]) -> ExitCode {
     }
     println!("Stop requested: {}", stop_path.display());
     ExitCode::SUCCESS
+}
+
+fn dual_status(args: &[String]) -> ExitCode {
+    let namespace = option_value(args, &["--namespace"]).unwrap_or_else(|| "collaboration".into());
+    println!("\nDual-Mode Collaboration Status\n");
+    println!("Memory Entries\n");
+
+    let store = match ruflo_storage::SqliteMemoryStore::open_from_current_dir() {
+        Ok(store) => store,
+        Err(error) => {
+            eprintln!("error: failed to inspect shared memory: {error}");
+            return ExitCode::from(2);
+        }
+    };
+    let entries = match store.list(Some(&namespace), 20) {
+        Ok(entries) => entries,
+        Err(error) => {
+            eprintln!("error: failed to inspect shared memory: {error}");
+            return ExitCode::from(2);
+        }
+    };
+    if entries.is_empty() {
+        println!("[WARN] No entries found");
+        println!("[INFO] Store data: claude-flow memory store -k \"key\" --value \"data\"");
+    } else {
+        for entry in entries {
+            println!("{}\t{}\t{}", entry.key, entry.namespace, entry.content);
+        }
+        println!("\n[INFO] Showing shared-memory entries for namespace {namespace}");
+    }
+    println!();
+    ExitCode::SUCCESS
+}
+
+fn option_value(args: &[String], names: &[&str]) -> Option<String> {
+    args.iter().enumerate().find_map(|(index, value)| {
+        names
+            .iter()
+            .any(|name| value == name)
+            .then(|| args.get(index + 1).cloned())
+            .flatten()
+    })
 }
 
 #[derive(Debug)]
