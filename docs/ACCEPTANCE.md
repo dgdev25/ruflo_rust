@@ -29,8 +29,8 @@ create project files nor launch a Codex or Claude worker.
   lifecycle without executing a model provider.
 - [x] Pilot the native façade as an opt-in ruVocal MCP child using the accepted
   prefix-stripping and stdio JSON-RPC contract.
-- [ ] Publish a release promotion report only after consumer evidence and all
-  native runner checks are green.
+- [x] Publish the opt-in native MCP-child promotion report after consumer
+  evidence and all native runner checks are green.
 
 ## Observed oracle contract
 
