@@ -21,6 +21,7 @@ named compatibility evidence and focused verification.
 | 11. Stateless HTTP MCP | Complete | `740c6a4`; feature-gated shared dispatcher, authenticated stateless transport, and guard tests pass. |
 | 12. Platform hooks and release matrix | Complete | `c6e0b96`; native-runner CI matrix, tokenized hook fixtures, and local smoke tests pass. |
 | 13. Supply-chain, SBOM, reproducibility gates | Complete | `59d3994`; Cargo audit/deny, SPDX SBOM+digest generation, and locked policy checks pass. |
+| 14. Wave-promotion evidence gates | Complete | `dd365d7`; release manifests and verifier block incomplete evidence while accepting complete Wave 2 evidence. |
 
 ## Remaining execution order
 
@@ -105,7 +106,7 @@ named compatibility evidence and focused verification.
 - Generate a locked CycloneDX or SPDX SBOM with digest.
 - Fail on non-approved licenses, unapproved registries, or undocumented advisory exceptions.
 
-### 14. Wave-promotion evidence gates
+### 14. Wave-promotion evidence gates — complete
 
 - Block Wave 2/3 promotion unless named consumer fixtures, security tests, native platform results, migration tests, and dependency review all pass.
 - Require an ADR before selecting a new long-lived integration.
