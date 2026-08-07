@@ -21,7 +21,7 @@ default = []
 stateless-http = ["ruflo-mcp/stateless-http"]
 
 [workspace]
-members = ["src/crates/*", "src/bin/ruflo", "src/bin/claude-flow"]
+members = ["src/crates/*", "src/bin/ruflo", "src/bin/claude-flow", "src/bin/claude-flow-codex"]
 resolver = "2"
 
 [workspace.package]

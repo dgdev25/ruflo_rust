@@ -116,6 +116,7 @@ fn binary_package(binary: &str) -> &'static str {
     match binary {
         "ruflo" => "ruflo",
         "claude-flow" => "claude-flow",
+        "claude-flow-codex" => "claude-flow-codex",
         _ => panic!("no workspace package mapping registered for `{binary}`"),
     }
 }
@@ -161,6 +162,17 @@ fn both_binaries_match_version_fixture() {
 #[test]
 fn ruflo_matches_quiet_help_fixture() {
     assert_cli_fixture("ruflo", "tests/fixtures/cli/help.json");
+}
+
+#[test]
+fn codex_facade_replays_safe_oracle_workflows() {
+    for fixture in [
+        "tests/fixtures/codex/version.json",
+        "tests/fixtures/codex/dual-templates.json",
+        "tests/fixtures/codex/dual-run-empty.json",
+    ] {
+        assert_cli_fixture("claude-flow-codex", fixture);
+    }
 }
 
 #[test]

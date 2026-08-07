@@ -1,0 +1,19 @@
+{
+  "argv": ["dual", "run"],
+  "exit": 0,
+  "stdout": "═══════════════════════════════════════════════════════════════\n  DUAL-MODE COLLABORATIVE EXECUTION\n  Claude Code + Codex workers with shared memory\n═══════════════════════════════════════════════════════════════\n\nPlease specify --template <name>, a [template] argument, --worker <spec> (repeatable), or --config <path>\n\nTemplates:\n  feature  - Feature development (architect -> coder -> tester -> reviewer)\n  security - Security audit (scanner -> analyzer -> fixer)\n  refactor - Code refactoring (analyzer -> planner -> refactorer -> validator)\n\nCustom workers:\n  --worker \"claude:architect:Design the API\" --worker \"codex:coder:Implement it\"\n",
+  "stderr": "",
+  "environment": {},
+  "platform": {"family": "portable"},
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "installed:claude-flow-codex@3.0.1",
+    "source_command": ["dual", "run"],
+    "redactions": ["environment omitted"]
+  },
+  "recording": {
+    "recorded_at": "2026-08-07T18:45:00Z",
+    "recorded_by": "live-oracle acceptance capture",
+    "harness": "fixture-capture"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "argv": ["dual", "templates"],
+  "exit": 0,
+  "stdout": "\nAvailable Collaboration Templates:\n\nfeature - Feature Development Swarm\n  Pipeline: architect → coder → tester → reviewer\n  Platforms: Claude (architect, reviewer) + Codex (coder, tester)\n  Usage: npx claude-flow-codex dual run --template feature --task \"Add user auth\"\n\nsecurity - Security Audit Swarm\n  Pipeline: scanner → analyzer → fixer\n  Platforms: Codex (scanner, fixer) + Claude (analyzer)\n  Usage: npx claude-flow-codex dual run --template security --task \"src/auth/\"\n\nrefactor - Refactoring Swarm\n  Pipeline: analyzer → planner → refactorer → validator\n  Platforms: Claude (analyzer, planner) + Codex (refactorer, validator)\n  Usage: npx claude-flow-codex dual run --template refactor --task \"src/legacy/\"\n\nCustom configurations can be provided via --config <path.json>\n",
+  "stderr": "",
+  "environment": {},
+  "platform": {"family": "portable"},
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "installed:claude-flow-codex@3.0.1",
+    "source_command": ["dual", "templates"],
+    "redactions": ["environment omitted"]
+  },
+  "recording": {
+    "recorded_at": "2026-08-07T18:45:00Z",
+    "recorded_by": "live-oracle acceptance capture",
+    "harness": "fixture-capture"
+  }
+}

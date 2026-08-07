@@ -459,6 +459,14 @@ fn checked_in_cli_fixtures_parse() {
     assert!(help
         .stdout
         .contains("Ruflo - AI Agent Orchestration Platform"));
+
+    for path in [
+        "tests/fixtures/codex/version.json",
+        "tests/fixtures/codex/dual-templates.json",
+        "tests/fixtures/codex/dual-run-empty.json",
+    ] {
+        Fixture::load(path).unwrap();
+    }
 }
 
 #[test]

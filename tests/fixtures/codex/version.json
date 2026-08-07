@@ -1,0 +1,19 @@
+{
+  "argv": ["--version"],
+  "exit": 0,
+  "stdout": "3.0.1\n",
+  "stderr": "",
+  "environment": {},
+  "platform": {"family": "portable"},
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "installed:claude-flow-codex@3.0.1",
+    "source_command": ["--version"],
+    "redactions": ["environment omitted"]
+  },
+  "recording": {
+    "recorded_at": "2026-08-07T18:45:00Z",
+    "recorded_by": "live-oracle acceptance capture",
+    "harness": "fixture-capture"
+  }
+}

@@ -7,13 +7,13 @@ create project files nor launch a Codex or Claude worker.
 ## Acceptance ledger
 
 - [x] Inventory the live Codex integration and identify its native boundaries.
-- [x] Verify that the local oracle executable is available and capture its
-  safe command surface: `--version`, `dual templates`, `dual run` with no
-  worker configuration, and help output.
-- [ ] Add a native `claude-flow-codex` façade that exactly replays the safe
+- [x] Verify that the local oracle executable is available; capture replay
+  fixtures for `--version`, `dual templates`, and `dual run` with no worker
+  configuration, and record help output for the next command surface.
+- [x] Add a native `claude-flow-codex` façade that exactly replays the safe
   fixture contract.
-- [ ] Capture redacted source-oracle fixtures for each safe command and add
-  differential tests for the Rust façade.
+- [x] Capture redacted source-oracle fixtures for each replayed command and
+  add differential tests for the Rust façade.
 - [ ] Implement the native dual-run scheduler behind explicit policy and
   worktree boundaries; it must launch `codex exec` only when a caller invokes
   a worker-running command.
