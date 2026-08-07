@@ -5,6 +5,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use serde_json::Value;
 use tempfile::TempDir;
 
 fn run(command: &str, args: &[&str], cwd: &Path) {
@@ -66,6 +67,10 @@ fn clean_git_project() -> TempDir {
 #[test]
 fn opt_in_scheduler_uses_a_worktree_and_direct_codex_exec_arguments() {
     let project = clean_git_project();
+    let fixture: Value = serde_json::from_str(
+        &fs::read_to_string("tests/fixtures/codex/dual-run-codex-worker-launch.json").unwrap(),
+    )
+    .unwrap();
     let fixture_dir = tempfile::tempdir().unwrap();
     let args_file = fixture_dir.path().join("args.txt");
     let executable = fixture_dir.path().join("fake-codex");
@@ -76,19 +81,18 @@ fn opt_in_scheduler_uses_a_worktree_and_direct_codex_exec_arguments() {
     .unwrap();
     fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();
 
+    let args = fixture["argv"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|value| value.as_str().unwrap())
+        .collect::<Vec<_>>();
     let output = Command::new(binary())
         .current_dir(project.path())
         .env("RUFLO_CODEX_EXECUTABLE", &executable)
         .env("CODEX_ARGS_FILE", &args_file)
         .env("RUFLO_TEST_SECRET", "must-not-reach-child")
-        .args([
-            "dual",
-            "run",
-            "--worker",
-            "codex:coder:Write exactly one focused test",
-            "--namespace",
-            "native-scheduler",
-        ])
+        .args(args)
         .output()
         .unwrap();
 
@@ -100,17 +104,19 @@ fn opt_in_scheduler_uses_a_worktree_and_direct_codex_exec_arguments() {
     );
     let child_args = fs::read_to_string(&args_file).unwrap();
     let lines = child_args.lines().collect::<Vec<_>>();
-    assert_eq!(
-        lines[..4],
-        [
-            "exec",
-            "--sandbox",
-            "workspace-write",
-            "--skip-git-repo-check"
-        ]
-    );
-    assert!(child_args.contains("YOUR TASK:\nWrite exactly one focused test"));
-    assert!(child_args.contains("Shared Memory Namespace: native-scheduler"));
+    let expected_prefix = fixture["worker_launch"]["argv_prefix"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|value| value.as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(&lines[..expected_prefix.len()], expected_prefix);
+    for clause in fixture["worker_launch"]["prompt_contains"]
+        .as_array()
+        .unwrap()
+    {
+        assert!(child_args.contains(clause.as_str().unwrap()));
+    }
 
     let registry = project.path().join(".claude-flow/swarm/worktrees");
     let record = fs::read_dir(registry)

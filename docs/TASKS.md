@@ -22,7 +22,7 @@ named compatibility evidence and focused verification.
 | 12. Platform hooks and release matrix | Complete | `c6e0b96`; native-runner CI matrix, tokenized hook fixtures, and local smoke tests pass. |
 | 13. Supply-chain, SBOM, reproducibility gates | Complete | `59d3994`; Cargo audit/deny, SPDX SBOM+digest generation, and locked policy checks pass. |
 | 14. Wave-promotion evidence gates | Complete | `dd365d7`; release manifests and verifier block incomplete evidence while accepting complete Wave 2 evidence. |
-| 15. Native Codex dual-run scheduler | Complete | Direct-process scheduler test proves opt-in policy, isolated worktrees, bounded execution, native shared memory, and secret-safe child environment. |
+| 15. Native Codex dual-run scheduler | Complete | A safe live-TS fake-Codex capture plus direct-process scheduler test prove the launch vector, prompt clauses, opt-in policy, isolated worktrees, bounded execution, native shared memory, and secret-safe child environment. |
 
 ## Remaining execution order
 

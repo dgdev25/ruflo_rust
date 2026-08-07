@@ -65,7 +65,10 @@ The current native scheduler intentionally supports only `codex` worker specs.
 native process boundary has compatible fixtures and policy evidence.
 
 The installed `claude-flow-codex` 3.0.1 release observed on 2026-08-07 did not
-enforce the source tree's newer automation preflight and immediately attempted
-a real Codex worker. That non-deterministic invocation was terminated and is
-not a fixture. The source-defined opt-in policy plus native process-level tests
-are the authoritative safe contract for this release wave.
+enforce the source tree's newer automation preflight. Its one-worker workflow
+was therefore captured only with a harmless fake `codex` executable that
+records arguments and exits successfully; its Node daemon child was then
+terminated. The checked-in reduced-schema fixture and native process test prove
+the real launch vector and prompt clauses without invoking a model. The
+source-defined opt-in policy remains the authoritative safety contract for the
+native release wave.

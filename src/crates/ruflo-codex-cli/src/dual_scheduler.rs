@@ -552,7 +552,7 @@ fn wait_for_output(
 }
 
 fn collaborative_prompt(worker: &Worker, worktree: &Path, namespace: &str) -> String {
-    format!("You are a {} agent in a collaborative Ruflo swarm.\nPlatform: OpenAI Codex\nWorking Directory: {}\nShared Memory Namespace: {namespace}\n\nCOLLABORATION PROTOCOL:\n1. Search shared memory for context with `ruflo memory search --query <terms> --namespace {namespace}`.\n2. Complete your assigned task.\n3. Store a concise result with `ruflo memory store --key {}-result --value <summary> --namespace {namespace}`.\n\nYOUR TASK:\n{}", worker.role.to_ascii_uppercase(), worktree.display(), worker.id, worker.prompt)
+    format!("You are a {} agent in a collaborative dual-mode swarm.\nPlatform: OpenAI Codex\nWorking Directory: {}\nShared Memory Namespace: {namespace}\n\nCOLLABORATION PROTOCOL:\n1. Search shared memory for context: ruflo memory search --query \"<relevant terms>\" --namespace {namespace}\n2. Complete your assigned task\n3. Store your results: ruflo memory store --key \"{}-result\" --value \"<your summary>\" --namespace {namespace}\n\nYOUR TASK:\n{}\n\nRemember: Other agents depend on your results in shared memory. Be concise and store actionable outputs.", worker.role.to_ascii_uppercase(), worktree.display(), worker.id, worker.prompt)
 }
 
 fn git<const N: usize>(project_root: &Path, arguments: [&str; N]) -> Result<String, String> {

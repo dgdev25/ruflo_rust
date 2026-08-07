@@ -1,0 +1,37 @@
+{
+  "argv": [
+    "dual",
+    "run",
+    "--worker",
+    "codex:coder:Write exactly one focused test",
+    "--namespace",
+    "native-oracle"
+  ],
+  "exit": 0,
+  "stdout": "",
+  "stderr": "",
+  "environment": {},
+  "platform": {"family": "portable"},
+  "worker_launch": {
+    "executable": "codex",
+    "argv_prefix": ["exec", "--sandbox", "workspace-write", "--skip-git-repo-check"],
+    "prompt_contains": [
+      "You are a CODER agent in a collaborative dual-mode swarm.",
+      "Platform: OpenAI Codex",
+      "Shared Memory Namespace: native-oracle",
+      "YOUR TASK:\nWrite exactly one focused test",
+      "Remember: Other agents depend on your results in shared memory. Be concise and store actionable outputs."
+    ]
+  },
+  "provenance": {
+    "kind": "reduced-schema",
+    "source": "installed:claude-flow-codex@3.0.1",
+    "reduction": "Captured from a completed live TypeScript worker workflow on 2026-08-07 using a harmless fake `codex` executable that records argv and exits 0. The full stdout contains duration and child-runtime output that vary per run; the native process test therefore verifies the captured executable, argument prefix, and stable prompt clauses. Native Ruflo intentionally substitutes its `ruflo` executable for the legacy `npx ruflo@latest` instructions and supplies an isolated worktree path.",
+    "redactions": ["temporary project path", "duration", "Node/npm child diagnostics"]
+  },
+  "recording": {
+    "recorded_at": "2026-08-07T19:55:00Z",
+    "recorded_by": "live-oracle-fake-codex-capture",
+    "harness": "differential-cli"
+  }
+}
