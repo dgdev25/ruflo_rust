@@ -20,6 +20,7 @@ named compatibility evidence and focused verification.
 | 10. Native hook and plugin action boundary | Complete | `ba86b04`; declarative manifests, direct allowlisted execution, and injection/path/timeout/concurrency tests pass. |
 | 11. Stateless HTTP MCP | Complete | `740c6a4`; feature-gated shared dispatcher, authenticated stateless transport, and guard tests pass. |
 | 12. Platform hooks and release matrix | Complete | `c6e0b96`; native-runner CI matrix, tokenized hook fixtures, and local smoke tests pass. |
+| 13. Supply-chain, SBOM, reproducibility gates | Complete | `59d3994`; Cargo audit/deny, SPDX SBOM+digest generation, and locked policy checks pass. |
 
 ## Remaining execution order
 
@@ -98,7 +99,7 @@ named compatibility evidence and focused verification.
 - Verify aliases, JSON-RPC cleanliness, paths, locks, cancellation, hook rendering, signatures, and SBOM presence.
 - Add local POSIX and PowerShell release smoke scripts.
 
-### 13. Supply-chain, SBOM, reproducibility gates
+### 13. Supply-chain, SBOM, reproducibility gates — complete
 
 - Configure Cargo-deny license/source/advisory policy and `cargo audit`.
 - Generate a locked CycloneDX or SPDX SBOM with digest.
