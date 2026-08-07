@@ -14,6 +14,8 @@ create project files nor launch a Codex or Claude worker.
   fixture contract.
 - [x] Capture redacted source-oracle fixtures for each replayed command and
   add differential tests for the Rust façade.
+- [x] Close the P0 `tools/call` evidence gap with a replayed reduced-schema
+  fixture for deterministic `memory_search` dispatch.
 - [ ] Implement the native dual-run scheduler behind explicit policy and
   worktree boundaries; it must launch `codex exec` only when a caller invokes
   a worker-running command.

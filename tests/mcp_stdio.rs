@@ -43,6 +43,17 @@ fn tools_call_dispatches_from_the_same_registry() {
 }
 
 #[test]
+fn tools_call_matches_checked_in_fixture() {
+    let fixture = load_json("tests/fixtures/mcp/memory-search-call.json");
+    let output = run_stdio("ruflo", &[fixture["request"].to_string().as_str()], &[]);
+
+    assert!(output.status.success());
+    assert_stdout_is_jsonrpc_only(&output.stdout);
+    assert_eq!(single_frame(&output.stdout), fixture["response"]);
+    assert_eq!(String::from_utf8(output.stderr).unwrap(), "");
+}
+
+#[test]
 fn denied_tool_is_hidden_from_discovery_and_invocation() {
     let output = run_stdio(
         "ruflo",

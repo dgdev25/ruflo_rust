@@ -1,0 +1,43 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "compat-memory-search",
+    "method": "tools/call",
+    "params": {
+      "name": "memory_search",
+      "arguments": {
+        "query": "auth"
+      }
+    }
+  },
+  "response": {
+    "jsonrpc": "2.0",
+    "id": "compat-memory-search",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "no stored matches for `auth`"
+        }
+      ],
+      "structuredContent": {
+        "matches": [],
+        "query": "auth"
+      }
+    }
+  },
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "reduced-schema",
+    "source": "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/src/mcp-server.ts",
+    "reduction": "The TypeScript memory tool result depends on persisted memory and embeddings. This fixture fixes the deterministic empty-search request and response emitted by the native shared dispatcher, while tests separately cover not-found and invalid-argument errors.",
+    "redactions": []
+  },
+  "recording": {
+    "recorded_at": "2026-08-07T19:00:00Z",
+    "recorded_by": "native-compatibility-curation",
+    "harness": "mcp-stdio"
+  }
+}

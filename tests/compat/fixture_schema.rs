@@ -475,6 +475,13 @@ fn checked_in_json_rpc_fixture_parses() {
     let tools = JsonRpcFixture::load("tests/fixtures/mcp/tools-list.json").unwrap();
     assert_eq!(tools.request["method"], "tools/list");
     assert!(tools.response["result"]["tools"].is_array());
+
+    let memory_search = JsonRpcFixture::load("tests/fixtures/mcp/memory-search-call.json").unwrap();
+    assert_eq!(memory_search.request["method"], "tools/call");
+    assert_eq!(
+        memory_search.response["result"]["structuredContent"]["query"],
+        "auth"
+    );
 }
 
 #[test]
