@@ -51,14 +51,6 @@ pub fn assert_cli_fixture(binary: &str, fixture_path: &str) {
     );
 }
 
-pub fn run_cli(binary: &str, args: &[&str]) -> std::process::Output {
-    let executable = executable_path(binary);
-    Command::new(executable)
-        .args(args)
-        .output()
-        .unwrap_or_else(|error| panic!("failed to execute `{binary}`: {error}"))
-}
-
 pub fn assert_json_rpc_fixture(request: &Value, response: &Value, fixture_path: &str) {
     let fixture = JsonRpcFixture::load(fixture_path).unwrap_or_else(|error| panic!("{error}"));
     assert_eq!(
@@ -172,22 +164,46 @@ fn ruflo_matches_quiet_help_fixture() {
 }
 
 #[test]
-fn both_binaries_expose_stable_mcp_start_placeholder() {
+fn both_binaries_replay_tools_list_fixture_over_stdio() {
+    let fixture = JsonRpcFixture::load("tests/fixtures/mcp/tools-list.json").unwrap();
+
     for binary in ["ruflo", "claude-flow"] {
-        let output = run_cli(binary, &["mcp", "start"]);
+        let executable = executable_path(binary);
+        let mut command = Command::new(executable);
+        command.args(["mcp", "start"]);
+        command.stdin(Stdio::piped());
+        command.stdout(Stdio::piped());
+        command.stderr(Stdio::piped());
+
+        let mut child = command
+            .spawn()
+            .unwrap_or_else(|error| panic!("failed to spawn `{binary} mcp start`: {error}"));
+        child
+            .stdin
+            .as_mut()
+            .unwrap()
+            .write_all(format!("{}\n", fixture.request).as_bytes())
+            .unwrap();
+
+        let output = child.wait_with_output().unwrap();
         assert_eq!(
             output.status.code(),
-            Some(2),
+            Some(0),
             "unexpected exit code for `{binary} mcp start`"
         );
+
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        assert!(stdout
+            .lines()
+            .all(|line| serde_json::from_str::<Value>(line).is_ok()));
         assert_eq!(
-            String::from_utf8(output.stdout).unwrap(),
-            "",
-            "unexpected stdout for `{binary} mcp start`"
+            serde_json::from_str::<Value>(stdout.trim_end()).unwrap(),
+            fixture.response,
+            "unexpected tools/list response for `{binary} mcp start`"
         );
         assert_eq!(
             String::from_utf8(output.stderr).unwrap(),
-            "error: native MCP stdio dispatcher is not implemented yet (capability=mcp.start, wave=1, migration=enable the native MCP dispatcher)\n",
+            "",
             "unexpected stderr for `{binary} mcp start`"
         );
     }

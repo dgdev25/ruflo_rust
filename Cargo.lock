@@ -14,6 +14,7 @@ name = "fixture-capture-harness"
 version = "0.1.0"
 dependencies = [
  "ruflo-config",
+ "ruflo-mcp",
  "ruflo-types",
  "serde",
  "serde_json",
@@ -60,6 +61,8 @@ dependencies = [
 name = "ruflo-cli"
 version = "3.34.0"
 dependencies = [
+ "ruflo-config",
+ "ruflo-mcp",
  "ruflo-types",
 ]
 
@@ -69,6 +72,16 @@ version = "0.1.0"
 dependencies = [
  "ruflo-types",
  "serde",
+]
+
+[[package]]
+name = "ruflo-mcp"
+version = "0.1.0"
+dependencies = [
+ "ruflo-config",
+ "ruflo-types",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -1,16 +1,17 @@
 [package]
-name = "ruflo-cli"
-version = "3.34.0"
+name = "ruflo-mcp"
+version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish = false
-description = "Shared native CLI dispatcher for the Ruflo and claude-flow wrappers."
+description = "Native Ruflo stdio MCP dispatcher with shared registry and policy enforcement."
 
 [lib]
 path = "src/lib.rs"
 
 [dependencies]
 ruflo-config = { path = "../ruflo-config" }
-ruflo-mcp = { path = "../ruflo-mcp" }
 ruflo-types = { path = "../ruflo-types" }
+serde = { workspace = true }
+serde_json = { workspace = true }

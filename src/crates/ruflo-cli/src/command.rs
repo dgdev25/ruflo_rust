@@ -4,11 +4,7 @@ use std::ffi::OsString;
 pub enum ParsedCommand {
     Version,
     Help,
-    McpStartPlaceholder {
-        capability: &'static str,
-        wave: u8,
-        migration: &'static str,
-    },
+    McpStart,
 }
 
 pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, String> {
@@ -22,11 +18,7 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
     match normalized.as_slice() {
         ["--version"] | ["-V"] => Ok(ParsedCommand::Version),
         ["--help"] | ["-h"] | ["--quiet", "--help"] | ["-Q", "--help"] => Ok(ParsedCommand::Help),
-        ["mcp", "start"] => Ok(ParsedCommand::McpStartPlaceholder {
-            capability: "mcp.start",
-            wave: 1,
-            migration: "enable the native MCP dispatcher",
-        }),
+        ["mcp", "start"] => Ok(ParsedCommand::McpStart),
         [] => Err("no command provided".to_string()),
         _ => Err(format!(
             "unsupported native CLI invocation: {}",

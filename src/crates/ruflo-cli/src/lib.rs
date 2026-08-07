@@ -91,7 +91,7 @@ Run "ruflo <command> --help" for command help
 Created with ❤️ by ruv.io
 "#;
 
-const PLACEHOLDER_ERROR_EXIT: u8 = 2;
+const ERROR_EXIT: u8 = 2;
 
 pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
     match command::parse(argv) {
@@ -103,27 +103,34 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             print!("{HELP}");
             ExitCode::SUCCESS
         }
-        Ok(ParsedCommand::McpStartPlaceholder {
-            capability,
-            wave,
-            migration,
-        }) => {
-            let error = ruflo_types::RufloError::unsupported(ruflo_types::Capability::unsupported(
-                capability, wave, migration,
-            ));
-            if let ruflo_types::RufloError::UnsupportedInWave { capability } = error {
-                eprintln!(
-                    "error: native MCP stdio dispatcher is not implemented yet (capability={}, wave={}, migration={})",
-                    capability.name,
-                    capability.wave,
-                    capability.migration.as_deref().unwrap_or_default()
-                );
+        Ok(ParsedCommand::McpStart) => {
+            let config = match ruflo_config::EffectiveConfig::load() {
+                Ok(config) => config,
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    return ExitCode::from(ERROR_EXIT);
+                }
+            };
+
+            let dispatcher = match ruflo_mcp::Dispatcher::from_config(config) {
+                Ok(dispatcher) => dispatcher,
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    return ExitCode::from(ERROR_EXIT);
+                }
+            };
+
+            match ruflo_mcp::serve_stdio(dispatcher) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    ExitCode::from(ERROR_EXIT)
+                }
             }
-            ExitCode::from(PLACEHOLDER_ERROR_EXIT)
         }
         Err(error) => {
             eprintln!("error: {error}");
-            ExitCode::from(PLACEHOLDER_ERROR_EXIT)
+            ExitCode::from(ERROR_EXIT)
         }
     }
 }
