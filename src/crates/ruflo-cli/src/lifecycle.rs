@@ -73,6 +73,12 @@ pub struct AgentPoolRecord {
     pub current_size: usize,
     pub auto_scale: bool,
 }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentLogEntry {
+    pub timestamp_ms: u128,
+    pub level: String,
+    pub message: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -502,6 +508,7 @@ pub fn spawn_agent(project_root: &Path, agent_type: &str, name: &str) -> io::Res
         path,
         serde_json::to_vec_pretty(&record).expect("agent record is serializable"),
     )?;
+    append_agent_log(project_root, &id, "info", "agent spawned")?;
     Ok(record)
 }
 
@@ -537,7 +544,56 @@ pub fn stop_agent(project_root: &Path, agent_id: &str) -> io::Result<AgentRecord
             .join(format!("{}.json", agent.id)),
         serde_json::to_vec_pretty(&agent).expect("agent record is serializable"),
     )?;
+    append_agent_log(project_root, &agent.id, "info", "agent stopped")?;
     Ok(agent)
+}
+
+pub fn agent_logs(
+    project_root: &Path,
+    agent_id: &str,
+    tail: usize,
+    level: &str,
+) -> io::Result<Vec<AgentLogEntry>> {
+    get_agent(project_root, agent_id)?;
+    let path = project_root
+        .join(".swarm/logs")
+        .join(format!("{}.jsonl", safe_identifier(agent_id)?));
+    let mut entries = if path.exists() {
+        fs::read_to_string(path)?
+            .lines()
+            .map(|line| serde_json::from_str(line).map_err(io::Error::other))
+            .collect::<io::Result<Vec<AgentLogEntry>>>()?
+    } else {
+        Vec::new()
+    };
+    entries.retain(|entry| entry.level == level || level == "debug");
+    entries.reverse();
+    entries.truncate(tail);
+    Ok(entries)
+}
+
+fn append_agent_log(
+    project_root: &Path,
+    agent_id: &str,
+    level: &str,
+    message: &str,
+) -> io::Result<()> {
+    let directory = project_root.join(".swarm/logs");
+    fs::create_dir_all(&directory)?;
+    let mut file = fs::OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(directory.join(format!("{agent_id}.jsonl")))?;
+    writeln!(
+        file,
+        "{}",
+        serde_json::to_string(&AgentLogEntry {
+            timestamp_ms: unique_millis(),
+            level: level.into(),
+            message: message.into()
+        })
+        .expect("log serializable")
+    )
 }
 
 pub fn agent_metrics(project_root: &Path, period: &str) -> io::Result<AgentMetrics> {
@@ -629,6 +685,7 @@ pub fn initialize(project_root: &Path) -> io::Result<()> {
         ".swarm/agents",
         ".swarm/tasks",
         ".swarm/memory",
+        ".swarm/logs",
         ".agents",
     ] {
         fs::create_dir_all(project_root.join(relative))?;

@@ -99,6 +99,20 @@ fn agent_pool_and_health_are_project_scoped() {
 }
 
 #[test]
+fn agent_logs_persist_lifecycle_events() {
+    let temp = tempfile::tempdir().unwrap();
+    lifecycle::initialize(temp.path()).unwrap();
+    lifecycle::spawn_agent(temp.path(), "coder", "coder-1").unwrap();
+    lifecycle::stop_agent(temp.path(), "coder-1").unwrap();
+    assert_eq!(
+        lifecycle::agent_logs(temp.path(), "coder-1", 10, "info")
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[test]
 fn tasks_are_durable_project_scoped_records() {
     let temp = tempfile::tempdir().unwrap();
     lifecycle::initialize(temp.path()).unwrap();

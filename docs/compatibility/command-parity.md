@@ -71,7 +71,7 @@ tested in Rust.
 
 | Family | Original subcommands |
 | --- | --- |
-| `agent` | `spawn`, `list` (`ls`), `status`, `stop` (`kill`), `metrics`, `pool`, and `health` have initial durable native implementations; `logs`, `wasm-status`, `wasm-create`, `wasm-prompt`, `wasm-gallery`, and `publish` remain pending, as do differential V3 fixtures for all agent operations |
+| `agent` | `spawn`, `list` (`ls`), `status`, `stop` (`kill`), `metrics`, `pool`, `health`, and `logs` have initial durable native implementations; `wasm-status`, `wasm-create`, `wasm-prompt`, `wasm-gallery`, and `publish` remain pending, as do differential V3 fixtures for all agent operations |
 | `swarm` | `init`, `start`, `status`, `stop` have initial durable native implementations. `start` uses the existing policy-gated native Codex scheduler without API keys; `scale`, `coordinate`, `compress-message`, `pheromone`, and `join` remain pending, as do source fixtures for all subcommands |
 | `task` | `create` (`new`, `add`), `list` (`ls`), `status` (`info`, `get`), `cancel` (`abort`, `stop`), `assign`, `retry` (`rerun`) — initial durable records and aliases implemented; not complete until source fixtures and live-dispatch evidence agree |
 | `session` | `list` (`ls`), `save` (`create`, `checkpoint`), `restore` (`load`), `delete` (`rm`, `remove`), `export`, `import`, and `current` have initial native durable implementations; they remain incomplete until source fixtures, optional state-selection flags, and MCP-contract parity agree |

@@ -305,6 +305,19 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             }
             Err(error) => task_error(error),
         },
+        Ok(ParsedCommand::AgentLogs {
+            agent_id,
+            tail,
+            level,
+        }) => match lifecycle::agent_logs(&current_directory(), &agent_id, tail, &level) {
+            Ok(entries) => {
+                for entry in entries {
+                    println!("{}\t{}\t{}", entry.timestamp_ms, entry.level, entry.message);
+                }
+                ExitCode::SUCCESS
+            }
+            Err(error) => task_error(error),
+        },
         Ok(ParsedCommand::TaskCreate {
             task_type,
             description,

@@ -66,6 +66,11 @@ pub enum ParsedCommand {
         agent_id: Option<String>,
         detailed: bool,
     },
+    AgentLogs {
+        agent_id: String,
+        tail: usize,
+        level: String,
+    },
     TaskCreate {
         task_type: String,
         description: String,
@@ -173,6 +178,27 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             detailed: args
                 .iter()
                 .any(|argument| argument == "--detailed" || argument == "-d"),
+        });
+    }
+    if normalized.len() >= 2 && normalized[0] == "agent" && normalized[1] == "logs" {
+        let agent_id = normalized
+            .get(2)
+            .filter(|value| !value.starts_with('-'))
+            .map(|value| value.to_string())
+            .or_else(|| option_value(&args, "--id", "-i"))
+            .ok_or("agent ID is required. Use --id or -i")?;
+        let tail = option_value(&args, "--tail", "-n")
+            .unwrap_or_else(|| "50".into())
+            .parse()
+            .map_err(|_| "agent log tail must be a positive integer")?;
+        let level = option_value(&args, "--level", "-l").unwrap_or_else(|| "info".into());
+        if tail == 0 || !matches!(level.as_str(), "debug" | "info" | "warn" | "error") {
+            return Err("agent logs requires a positive tail and a valid level".into());
+        }
+        return Ok(ParsedCommand::AgentLogs {
+            agent_id,
+            tail,
+            level,
         });
     }
     if normalized.len() >= 2 && normalized[0] == "swarm" && normalized[1] == "init" {
