@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-08-07)
+Implemented (2026-08-07)
 
 ## Context
 
@@ -17,6 +17,7 @@ Preserve legacy persistence through a port with fixture-led migration to adapter
 - Existing user data is protected by a reversible path.
 - RVF becomes an interoperability boundary only where consumer evidence proves it.
 - Migration logic and fixtures add implementation work before default enablement.
+- Native Task 8 now provides project-root validation, project-scoped locking, owner-only backups, marker files, and rollback metadata for legacy persistence migration.
 
 ## Alternatives
 
