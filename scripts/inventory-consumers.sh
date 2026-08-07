@@ -76,7 +76,6 @@ check_matrix() {
     invocation="$(printf '%s' "$c3" | trim)"
     contract="$(printf '%s' "$c4" | trim)"
     fixture="$(printf '%s' "$c5" | trim)"
-    fixture="$(strip_markdown_ticks "$fixture")"
     blocker="$(printf '%s' "$c6" | trim)"
     wave="$(printf '%s' "$c7" | trim)"
     status="$(printf '%s' "$c8" | trim)"
@@ -107,14 +106,23 @@ check_matrix() {
       error_count=$((error_count + 1))
     fi
 
-    if [[ "$fixture" != "-" && -n "$fixture" ]] && ! validate_path "$fixture"; then
-      echo "matrix row $row_count fixture path does not exist: $fixture" >&2
-      error_count=$((error_count + 1))
+    if [[ "$fixture" != "-" && -n "$fixture" ]]; then
+      IFS=';' read -r -a fixture_paths <<<"$fixture"
+      for path in "${fixture_paths[@]}"; do
+        path="$(printf '%s' "$path" | trim)"
+        path="$(strip_markdown_ticks "$path")"
+        [[ -n "$path" ]] || continue
+        if ! validate_path "$path"; then
+          echo "matrix row $row_count fixture path does not exist: $path" >&2
+          error_count=$((error_count + 1))
+        fi
+      done
     fi
 
     IFS=';' read -r -a evidence_paths <<<"$evidence"
     for path in "${evidence_paths[@]}"; do
       path="$(printf '%s' "$path" | trim)"
+      path="$(strip_markdown_ticks "$path")"
       [[ -n "$path" ]] || continue
       if ! validate_path "$path"; then
         echo "matrix row $row_count evidence path does not exist: $path" >&2
