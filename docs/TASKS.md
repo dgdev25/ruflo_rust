@@ -19,6 +19,7 @@ named compatibility evidence and focused verification.
 | 9. RVF adapter facade | Complete | `8d54f45`; public immutable RuVector pin and AgentDB/Agentic Flow interop tests pass; unavailable typed unknown-segment round trip is explicitly tracked with upstream evidence. |
 | 10. Native hook and plugin action boundary | Complete | `ba86b04`; declarative manifests, direct allowlisted execution, and injection/path/timeout/concurrency tests pass. |
 | 11. Stateless HTTP MCP | Complete | `740c6a4`; feature-gated shared dispatcher, authenticated stateless transport, and guard tests pass. |
+| 12. Platform hooks and release matrix | Complete | `c6e0b96`; native-runner CI matrix, tokenized hook fixtures, and local smoke tests pass. |
 
 ## Remaining execution order
 
@@ -91,7 +92,7 @@ named compatibility evidence and focused verification.
 - Require authenticated identity with issuer/audience/expiry/per-tool authorization; apply size/rate/timeout/concurrency limits.
 - Verify no server session ID, explicit handles, identical policy denials, and `401` without identity.
 
-### 12. Platform hooks and release matrix
+### 12. Platform hooks and release matrix — complete
 
 - Test Linux x86_64/aarch64, macOS x86_64/aarch64, and Windows x86_64 on native runners.
 - Verify aliases, JSON-RPC cleanliness, paths, locks, cancellation, hook rendering, signatures, and SBOM presence.
