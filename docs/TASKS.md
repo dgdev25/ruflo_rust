@@ -18,6 +18,7 @@ named compatibility evidence and focused verification.
 | 8. Persistence ports and migration safety | Complete | `9ab4c98`; rollback, locking, root validation, and backup permission tests pass. |
 | 9. RVF adapter facade | Complete | `8d54f45`; public immutable RuVector pin and AgentDB/Agentic Flow interop tests pass; unavailable typed unknown-segment round trip is explicitly tracked with upstream evidence. |
 | 10. Native hook and plugin action boundary | Complete | `ba86b04`; declarative manifests, direct allowlisted execution, and injection/path/timeout/concurrency tests pass. |
+| 11. Stateless HTTP MCP | Complete | `740c6a4`; feature-gated shared dispatcher, authenticated stateless transport, and guard tests pass. |
 
 ## Remaining execution order
 
@@ -83,7 +84,7 @@ named compatibility evidence and focused verification.
 - Reject JavaScript executable plugins with `UnsupportedInWave`.
 - Verify injection, path escape, timeout, concurrency, and allowlist behavior.
 
-### 11. Stateless HTTP MCP — Wave 2, feature-gated
+### 11. Stateless HTTP MCP — Wave 2, feature-gated — complete
 
 - Reuse the stdio dispatcher and exact tool schemas; do not create a second MCP implementation.
 - Implement only after confirming the chosen Rust MCP SDK supports the required stateless API.
