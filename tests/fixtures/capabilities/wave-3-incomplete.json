@@ -1,0 +1,74 @@
+{
+  "capabilities": [
+    {
+      "name": "storage.rvf.exchange",
+      "wave": 3,
+      "status": "supported"
+    },
+    {
+      "name": "memory.federation",
+      "wave": 3,
+      "status": "supported"
+    }
+  ],
+  "release": {
+    "waves": [
+      {
+        "wave": 3,
+        "criteria_doc": "docs/compatibility/wave-3-entry-criteria.md",
+        "consumer_fixtures": [
+          {
+            "name": "platform-hooks-posix",
+            "path": "tests/fixtures/consumers/platform-hooks/posix.json"
+          }
+        ],
+        "security_tests": [
+          {
+            "name": "stateless-http-authz",
+            "path": "tests/mcp_stateless_http.rs"
+          }
+        ],
+        "native_platform_evidence": [
+          {
+            "name": "platform-support-doc",
+            "path": "docs/release/platform-support.md"
+          }
+        ],
+        "migration_tests": [],
+        "rvf_tests": [],
+        "supply_chain_review": {
+          "audits": [
+            {
+              "name": "audit-supply-chain",
+              "path": "scripts/audit-supply-chain.sh"
+            }
+          ],
+          "sboms": [
+            {
+              "name": "generate-sbom",
+              "path": "scripts/generate-sbom.sh"
+            }
+          ],
+          "dependency_reviews": [
+            {
+              "name": "supply-chain-policy",
+              "path": "docs/security/supply-chain-policy.md"
+            }
+          ]
+        },
+        "long_lived_integrations": [
+          "rvf-bridge",
+          "federated-memory"
+        ],
+        "adrs": [
+          {
+            "id": "0004",
+            "integration": "rvf-bridge",
+            "status": "Implemented",
+            "path": "docs/adr/0004-migrate-persistence-through-fixture-led-rvf-ports.md"
+          }
+        ]
+      }
+    ]
+  }
+}

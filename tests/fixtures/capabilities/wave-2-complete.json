@@ -1,0 +1,112 @@
+{
+  "capabilities": [
+    {
+      "name": "workflow.run",
+      "wave": 2,
+      "status": "supported"
+    },
+    {
+      "name": "auth.token.exchange",
+      "wave": 2,
+      "status": "supported"
+    },
+    {
+      "name": "mcp.start",
+      "wave": 1,
+      "status": "supported"
+    }
+  ],
+  "release": {
+    "waves": [
+      {
+        "wave": 2,
+        "criteria_doc": "docs/compatibility/wave-2-entry-criteria.md",
+        "consumer_fixtures": [
+          {
+            "name": "platform-hooks-posix",
+            "path": "tests/fixtures/consumers/platform-hooks/posix.json"
+          },
+          {
+            "name": "platform-hooks-windows",
+            "path": "tests/fixtures/consumers/platform-hooks/windows.json"
+          },
+          {
+            "name": "mcp-tools-list",
+            "path": "tests/fixtures/mcp/tools-list.json"
+          }
+        ],
+        "security_tests": [
+          {
+            "name": "stateless-http-authz",
+            "path": "tests/mcp_stateless_http.rs"
+          },
+          {
+            "name": "supply-chain-policy",
+            "path": "docs/security/supply-chain-policy.md"
+          }
+        ],
+        "native_platform_evidence": [
+          {
+            "name": "platform-support-doc",
+            "path": "docs/release/platform-support.md"
+          },
+          {
+            "name": "compatibility-workflow",
+            "path": ".github/workflows/compatibility.yml"
+          },
+          {
+            "name": "platform-hooks-test",
+            "path": "tests/platform_hooks.rs"
+          },
+          {
+            "name": "release-smoke-script",
+            "path": "scripts/release-smoke.sh"
+          }
+        ],
+        "migration_tests": [
+          {
+            "name": "persistence-migration",
+            "path": "tests/persistence_migration.rs"
+          }
+        ],
+        "rvf_tests": [
+          {
+            "name": "rvf-interop",
+            "path": "tests/rvf_interop.rs"
+          }
+        ],
+        "supply_chain_review": {
+          "audits": [
+            {
+              "name": "audit-supply-chain",
+              "path": "scripts/audit-supply-chain.sh"
+            }
+          ],
+          "sboms": [
+            {
+              "name": "generate-sbom",
+              "path": "scripts/generate-sbom.sh"
+            }
+          ],
+          "dependency_reviews": [
+            {
+              "name": "supply-chain-policy",
+              "path": "docs/security/supply-chain-policy.md"
+            }
+          ]
+        },
+        "long_lived_integrations": [
+          "remote-mcp"
+        ],
+        "adrs": [
+          {
+            "id": "0006",
+            "integration": "remote-mcp",
+            "status": "Accepted",
+            "path": "docs/adr/0006-secure-remote-mcp-and-persistence-boundaries.md"
+          }
+        ]
+      }
+    ]
+  }
+}

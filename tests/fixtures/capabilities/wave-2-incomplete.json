@@ -1,0 +1,61 @@
+{
+  "capabilities": [
+    {
+      "name": "workflow.run",
+      "wave": 2,
+      "status": "supported"
+    },
+    {
+      "name": "auth.token.exchange",
+      "wave": 2,
+      "status": "supported"
+    }
+  ],
+  "release": {
+    "waves": [
+      {
+        "wave": 2,
+        "criteria_doc": "docs/compatibility/wave-2-entry-criteria.md",
+        "consumer_fixtures": [
+          {
+            "name": "platform-hooks-posix",
+            "path": "tests/fixtures/consumers/platform-hooks/posix.json"
+          }
+        ],
+        "security_tests": [],
+        "native_platform_evidence": [
+          {
+            "name": "platform-support-doc",
+            "path": "docs/release/platform-support.md"
+          }
+        ],
+        "migration_tests": [
+          {
+            "name": "persistence-migration",
+            "path": "tests/persistence_migration.rs"
+          }
+        ],
+        "rvf_tests": [
+          {
+            "name": "rvf-interop",
+            "path": "tests/rvf_interop.rs"
+          }
+        ],
+        "supply_chain_review": {
+          "audits": [
+            {
+              "name": "audit-supply-chain",
+              "path": "scripts/audit-supply-chain.sh"
+            }
+          ],
+          "sboms": [],
+          "dependency_reviews": []
+        },
+        "long_lived_integrations": [
+          "remote-mcp"
+        ],
+        "adrs": []
+      }
+    ]
+  }
+}
