@@ -1,0 +1,19 @@
+{
+  "argv": ["dual", "run", "--worker", "invalid-spec"],
+  "exit": 1,
+  "stdout": "═══════════════════════════════════════════════════════════════\n  DUAL-MODE COLLABORATIVE EXECUTION\n  Claude Code + Codex workers with shared memory\n═══════════════════════════════════════════════════════════════\n\n",
+  "stderr": "Error: Invalid --worker spec \"invalid-spec\". Expected \"<platform>:<role>:<prompt>\" (platform = claude|codex).\n",
+  "environment": {},
+  "platform": {"family": "portable"},
+  "provenance": {
+    "kind": "reduced-schema",
+    "source": "installed:claude-flow-codex@3.0.1",
+    "reduction": "The live oracle emits this banner and first error line, then appends Node/Commander stack frames containing installation paths and runtime versions. This fixture retains the portable process contract and removes only those volatile stack frames. The oracle was run from automation-enabled/.agents/config.toml so validation precedes worker execution.",
+    "redactions": ["Node stack trace", "installed package paths", "Node version"]
+  },
+  "recording": {
+    "recorded_at": "2026-08-07T19:27:00Z",
+    "recorded_by": "live-oracle-capture",
+    "harness": "differential-cli"
+  }
+}

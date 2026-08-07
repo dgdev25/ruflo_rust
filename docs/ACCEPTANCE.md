@@ -25,8 +25,10 @@ create project files nor launch a Codex or Claude worker.
 - [ ] Implement the native dual-run scheduler behind explicit policy and
   worktree boundaries; it must launch `codex exec` only when a caller invokes
   a worker-running command.
-- [ ] Add parity fixtures for invalid worker specifications, status, and loop
-  lifecycle without executing a model provider.
+- [x] Add reduced-schema parity fixtures for invalid worker specifications and
+  provider-free loop status/stop lifecycle without executing a model provider.
+- [ ] Capture and implement the separate `dual status` shared-memory view
+  without delegating to `npx ruflo@latest`.
 - [x] Pilot the native façade as an opt-in ruVocal MCP child using the accepted
   prefix-stripping and stdio JSON-RPC contract.
 - [x] Publish the opt-in native MCP-child promotion report after consumer

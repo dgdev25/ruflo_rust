@@ -1,0 +1,19 @@
+{
+  "argv": ["loop", "status", "--path", "<PROJECT>", "--name", "QA Loop", "--json"],
+  "exit": 0,
+  "stdout": "No loop state found at <PROJECT>/.codex/loop/qa-loop.json\n",
+  "stderr": "",
+  "environment": {},
+  "platform": {"family": "portable"},
+  "provenance": {
+    "kind": "reduced-schema",
+    "source": "installed:claude-flow-codex@3.0.1",
+    "reduction": "The live oracle resolves the supplied project path into stdout. The fixture replaces only that temporary absolute path with <PROJECT>; command, exit code, state filename, and stream behavior were captured unchanged.",
+    "redactions": ["temporary project path"]
+  },
+  "recording": {
+    "recorded_at": "2026-08-07T19:25:52Z",
+    "recorded_by": "live-oracle-capture",
+    "harness": "differential-cli"
+  }
+}

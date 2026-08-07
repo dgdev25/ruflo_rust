@@ -1,0 +1,19 @@
+{
+  "argv": ["loop", "stop", "--path", "<PROJECT>", "--name", "QA Loop"],
+  "exit": 0,
+  "stdout": "Stop requested: <PROJECT>/.codex/loop/qa-loop.stop\n",
+  "stderr": "",
+  "environment": {},
+  "platform": {"family": "portable"},
+  "provenance": {
+    "kind": "reduced-schema",
+    "source": "installed:claude-flow-codex@3.0.1",
+    "reduction": "The live oracle resolves the supplied project path into stdout and writes a timestamped stop marker. The fixture replaces only the temporary absolute path; the native test additionally proves the stop marker exists rather than comparing its timestamp payload.",
+    "redactions": ["temporary project path", "stop marker timestamp"]
+  },
+  "recording": {
+    "recorded_at": "2026-08-07T19:25:52Z",
+    "recorded_by": "live-oracle-capture",
+    "harness": "differential-cli"
+  }
+}

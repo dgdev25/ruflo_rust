@@ -177,6 +177,53 @@ fn codex_facade_replays_safe_oracle_workflows() {
 }
 
 #[test]
+fn codex_facade_replays_provider_free_loop_lifecycle_fixtures() {
+    let project = tempfile::tempdir().unwrap();
+    let project_path = project.path().display().to_string();
+
+    for fixture_path in [
+        "tests/fixtures/codex/loop-empty-status.json",
+        "tests/fixtures/codex/loop-stop.json",
+    ] {
+        let fixture = CliFixture::load(fixture_path).unwrap();
+        let args = fixture
+            .argv
+            .iter()
+            .map(|argument| argument.replace("<PROJECT>", &project_path))
+            .collect::<Vec<_>>();
+        let output = Command::new(executable_path("claude-flow-codex"))
+            .args(args)
+            .output()
+            .unwrap();
+
+        assert_eq!(output.status.code(), Some(fixture.exit));
+        assert_eq!(
+            String::from_utf8(output.stdout)
+                .unwrap()
+                .replace(&project_path, "<PROJECT>"),
+            fixture.stdout,
+            "stdout mismatch for {fixture_path}"
+        );
+        assert_eq!(String::from_utf8(output.stderr).unwrap(), fixture.stderr);
+    }
+
+    assert!(project.path().join(".codex/loop/qa-loop.stop").exists());
+}
+
+#[test]
+fn codex_facade_replays_reduced_invalid_worker_contract() {
+    let fixture = CliFixture::load("tests/fixtures/codex/invalid-worker-spec.json").unwrap();
+    let output = Command::new(executable_path("claude-flow-codex"))
+        .args(&fixture.argv)
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(fixture.exit));
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), fixture.stdout);
+    assert_eq!(String::from_utf8(output.stderr).unwrap(), fixture.stderr);
+}
+
+#[test]
 fn both_binaries_replay_tools_list_fixture_over_stdio() {
     let fixture = JsonRpcFixture::load("tests/fixtures/mcp/tools-list.json").unwrap();
 

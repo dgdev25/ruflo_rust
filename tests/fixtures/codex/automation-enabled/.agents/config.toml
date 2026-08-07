@@ -1,0 +1,3 @@
+[swarm.automation]
+enabled = true
+worktree_isolation = false
