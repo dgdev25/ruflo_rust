@@ -38,6 +38,11 @@ Finally, after macOS tests passed, release artifact staging failed because
 Apple runners provide `shasum` rather than GNU `sha256sum`. The POSIX staging
 step now selects `sha256sum` when present and otherwise uses `shasum -a 256`.
 
+The remaining Windows release smoke check found one SBOM correctly, but
+PowerShell represents a single pipeline result as a scalar without `.Count`.
+The script now wraps the discovery result in `@(...)`, making zero, one, and
+many SBOM artifacts behave consistently.
+
 ## Verification
 
 - `cargo fmt --all -- --check`

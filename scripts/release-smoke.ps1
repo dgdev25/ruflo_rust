@@ -32,7 +32,7 @@ if ($ArtifactDir) {
         throw "missing expected signature '$signature'"
     }
 
-    $sboms = Get-ChildItem -LiteralPath $ArtifactDir -File -Filter "*.sbom.*.json"
+    $sboms = @(Get-ChildItem -LiteralPath $ArtifactDir -File -Filter "*.sbom.*.json")
     if ($sboms.Count -eq 0) {
         throw "missing expected SBOM artifact in '$ArtifactDir'"
     }
