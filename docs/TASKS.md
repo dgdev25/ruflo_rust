@@ -41,8 +41,10 @@ named compatibility evidence and focused verification.
   incomplete pending source-oracle fixtures and live worker execution.
 - Agent lifecycle increment: native `spawn`, `list`/`ls`, `status`,
   `stop`/`kill`, period-validated `metrics`, durable pool configuration, and
-  project-scoped health now use durable agent records. V3 logs, WASM, and
-  publish operations plus all differential
+  project-scoped health and activity logs now use durable agent records. Logs
+  preserve the V3 minimum-level and time-window filter semantics; `--follow`
+  is accepted on the one-shot V3-compatible command surface. WASM and publish
+  operations plus all differential
   output and MCP fixtures remain open.
 - Swarm lifecycle increment: native `init`, `status`, `start`, and `stop`
   persist `.swarm/state.json`, derive counts from durable task/agent records,

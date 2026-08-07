@@ -309,7 +309,15 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             agent_id,
             tail,
             level,
-        }) => match lifecycle::agent_logs(&current_directory(), &agent_id, tail, &level) {
+            follow: _,
+            since,
+        }) => match lifecycle::agent_logs(
+            &current_directory(),
+            &agent_id,
+            tail,
+            &level,
+            since.as_deref(),
+        ) {
             Ok(entries) => {
                 for entry in entries {
                     println!("{}\t{}\t{}", entry.timestamp_ms, entry.level, entry.message);

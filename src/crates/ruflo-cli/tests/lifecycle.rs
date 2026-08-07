@@ -105,11 +105,47 @@ fn agent_logs_persist_lifecycle_events() {
     lifecycle::spawn_agent(temp.path(), "coder", "coder-1").unwrap();
     lifecycle::stop_agent(temp.path(), "coder-1").unwrap();
     assert_eq!(
-        lifecycle::agent_logs(temp.path(), "coder-1", 10, "info")
+        lifecycle::agent_logs(temp.path(), "coder-1", 10, "info", None)
             .unwrap()
             .len(),
         2
     );
+}
+
+#[test]
+fn agent_logs_apply_v3_minimum_level_and_since_filters() {
+    let temp = tempfile::tempdir().unwrap();
+    lifecycle::initialize(temp.path()).unwrap();
+    lifecycle::spawn_agent(temp.path(), "coder", "coder-1").unwrap();
+    fs::write(
+        temp.path().join(".swarm/logs/coder-1.jsonl"),
+        concat!(
+            r#"{"timestamp_ms":1,"level":"debug","message":"old debug"}"#,
+            "\n",
+            r#"{"timestamp_ms":1,"level":"info","message":"old info"}"#,
+            "\n",
+            r#"{"timestamp_ms":1,"level":"warn","message":"warn"}"#,
+            "\n",
+            r#"{"timestamp_ms":1,"level":"error","message":"error"}"#,
+            "\n",
+        ),
+    )
+    .unwrap();
+
+    let warnings = lifecycle::agent_logs(temp.path(), "coder-1", 10, "warn", None).unwrap();
+    assert_eq!(
+        warnings
+            .iter()
+            .map(|entry| entry.level.as_str())
+            .collect::<Vec<_>>(),
+        ["error", "warn"]
+    );
+    assert!(
+        lifecycle::agent_logs(temp.path(), "coder-1", 10, "debug", Some("30m"))
+            .unwrap()
+            .is_empty()
+    );
+    assert!(lifecycle::agent_logs(temp.path(), "coder-1", 10, "info", Some("zero")).is_err());
 }
 
 #[test]

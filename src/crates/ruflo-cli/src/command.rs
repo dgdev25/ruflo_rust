@@ -70,6 +70,8 @@ pub enum ParsedCommand {
         agent_id: String,
         tail: usize,
         level: String,
+        follow: bool,
+        since: Option<String>,
     },
     TaskCreate {
         task_type: String,
@@ -199,6 +201,12 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             agent_id,
             tail,
             level,
+            // V3 exposes this flag but the command currently obtains one MCP
+            // result rather than opening a separate streaming transport.
+            follow: args
+                .iter()
+                .any(|argument| argument == "--follow" || argument == "-f"),
+            since: option_value(&args, "--since", "--since"),
         });
     }
     if normalized.len() >= 2 && normalized[0] == "swarm" && normalized[1] == "init" {
@@ -461,6 +469,17 @@ mod tests {
         assert!(matches!(
             parse(argv(&["agent", "metrics", "coder-1", "-p", "7d"])),
             Ok(ParsedCommand::AgentMetrics { agent_id: Some(agent_id), period }) if agent_id == "coder-1" && period == "7d"
+        ));
+    }
+
+    #[test]
+    fn agent_logs_preserves_v3_filter_options() {
+        assert!(matches!(
+            parse(argv(&[
+                "agent", "logs", "-i", "coder-1", "-n", "25", "-l", "warn", "-f", "--since", "30m"
+            ])),
+            Ok(ParsedCommand::AgentLogs { agent_id, tail: 25, level, follow: true, since: Some(since) })
+                if agent_id == "coder-1" && level == "warn" && since == "30m"
         ));
     }
 }

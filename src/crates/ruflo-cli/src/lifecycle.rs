@@ -553,8 +553,11 @@ pub fn agent_logs(
     agent_id: &str,
     tail: usize,
     level: &str,
+    since: Option<&str>,
 ) -> io::Result<Vec<AgentLogEntry>> {
     get_agent(project_root, agent_id)?;
+    let minimum_level = log_level_rank(level)?;
+    let since_ms = since.map(parse_since_ms).transpose()?;
     let path = project_root
         .join(".swarm/logs")
         .join(format!("{}.jsonl", safe_identifier(agent_id)?));
@@ -566,10 +569,56 @@ pub fn agent_logs(
     } else {
         Vec::new()
     };
-    entries.retain(|entry| entry.level == level || level == "debug");
+    entries.retain(|entry| {
+        log_level_rank(&entry.level).is_ok_and(|rank| rank >= minimum_level)
+            && since_ms.is_none_or(|threshold| entry.timestamp_ms >= threshold)
+    });
     entries.reverse();
     entries.truncate(tail);
     Ok(entries)
+}
+
+fn log_level_rank(level: &str) -> io::Result<u8> {
+    match level {
+        "debug" => Ok(0),
+        "info" => Ok(1),
+        "warn" => Ok(2),
+        "error" => Ok(3),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "log level must be debug, info, warn, or error",
+        )),
+    }
+}
+
+fn parse_since_ms(value: &str) -> io::Result<u128> {
+    let (amount, unit) = value.split_at(value.len().saturating_sub(1));
+    let amount = amount.parse::<u128>().map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "log since must be a positive duration such as 30m or 1h",
+        )
+    })?;
+    let multiplier = match unit {
+        "s" => 1_000,
+        "m" => 60_000,
+        "h" => 3_600_000,
+        "d" => 86_400_000,
+        "w" => 604_800_000,
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "log since must use s, m, h, d, or w units",
+            ));
+        }
+    };
+    if amount == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "log since must be a positive duration",
+        ));
+    }
+    Ok(unique_millis().saturating_sub(amount.saturating_mul(multiplier)))
 }
 
 fn append_agent_log(
