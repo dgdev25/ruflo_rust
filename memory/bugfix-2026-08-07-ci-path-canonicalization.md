@@ -34,6 +34,10 @@ migration suite: the backup path is derived from a canonical persisted path,
 but its parent project root was compared without canonicalization. Its
 containment assertion now compares canonical roots.
 
+Finally, after macOS tests passed, release artifact staging failed because
+Apple runners provide `shasum` rather than GNU `sha256sum`. The POSIX staging
+step now selects `sha256sum` when present and otherwise uses `shasum -a 256`.
+
 ## Verification
 
 - `cargo fmt --all -- --check`
