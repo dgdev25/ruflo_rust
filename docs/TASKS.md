@@ -10,6 +10,7 @@ named compatibility evidence and focused verification.
 | --- | --- | --- |
 | 1. Workspace and shared contract types | Complete | `86b422f`; workspace contract tests pass. |
 | 2. Differential fixture harness | Complete | `efb56e5`; fixture schema, approved pure-Rust capture, provenance, and redaction checks pass. |
+| 3. Consumer inventory and P0 contract matrix | Complete | `50935ee`; nine P0 rows are source-grounded and matrix validation passes. |
 
 ## Remaining execution order
 
@@ -20,7 +21,7 @@ named compatibility evidence and focused verification.
 - Make capture explicit, redacted, non-overwriting by default, and reject home paths and secrets.
 - Verify: `cargo test --test differential_cli` and `bash scripts/verify-fixtures.sh`.
 
-### 3. Consumer inventory and P0 contract matrix
+### 3. Consumer inventory and P0 contract matrix — complete
 
 - Inventory every rUvNet CLI, MCP, plugin, persistence, RVF/RVFA, and platform-hook consumer.
 - Record consumer, invocation, fixture, owner, compatibility wave, and blocker/status.
