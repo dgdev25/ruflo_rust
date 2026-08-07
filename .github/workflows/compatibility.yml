@@ -12,6 +12,9 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       CARGO_DENY_VERSION: 0.20.2
+      # Keep the advisory clone outside the restored Rust target cache. cargo
+      # audit must initialize the clone destination itself on a fresh runner.
+      RUFLO_AUDIT_DB_DIR: ${{ runner.temp }}/ruflo-advisory-db
     steps:
       - uses: actions/checkout@v4
 

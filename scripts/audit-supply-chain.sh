@@ -205,7 +205,10 @@ fi
 
 if require_cmd cargo; then
   audit_db_dir="${RUFLO_AUDIT_DB_DIR:-$workspace_root/target/supply-chain/advisory-db}"
-  mkdir -p "$audit_db_dir"
+  # cargo-audit initializes this exact directory as a git clone. Creating the
+  # clone destination first makes first-run audits fail, particularly when a
+  # build cache later restores the empty directory.
+  mkdir -p "$(dirname "$audit_db_dir")"
   audit_args=(cargo audit --db "$audit_db_dir" --deny warnings)
   if [[ "${RUFLO_AUDIT_OFFLINE:-0}" == "1" ]]; then
     audit_args+=(--no-fetch --stale)
