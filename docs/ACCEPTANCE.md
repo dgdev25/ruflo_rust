@@ -22,9 +22,9 @@ create project files nor launch a Codex or Claude worker.
   for AgentDB stable ordering, compaction, and Agentic Flow reopening.
 - [x] Close the P0 durable-memory gap with fixture-proven SQLite-compatible
   `memory_store`/retrieve/keyword-search persistence at `.swarm/memory.db`.
-- [ ] Implement the native dual-run scheduler behind explicit policy and
-  worktree boundaries; it must launch `codex exec` only when a caller invokes
-  a worker-running command.
+- [x] Implement the native Codex-only `dual run` scheduler behind explicit
+  automation policy and isolated-worktree boundaries; it launches `codex exec`
+  only after a caller supplies a `codex` worker invocation.
 - [x] Add reduced-schema parity fixtures for invalid worker specifications and
   provider-free loop status/stop/dry-run lifecycle without executing a model
   provider.
@@ -48,3 +48,24 @@ read-only workers).
 This boundary keeps the pure-Rust rebuild free of provider credentials: the
 native scheduler owns validation, policy, state, and cancellation; Codex CLI
 remains the explicitly invoked local worker executable.
+
+## Native scheduler boundary
+
+The scheduler reads `[swarm.automation]` from `.agents/config.toml` (or
+`.codex/config.toml`) and is disabled unless `enabled = true`. It creates a
+registered Git worktree per worker, records the shared task context in native
+SQLite memory, caps requested concurrency and timeout to the project policy,
+and calls the local Codex CLI through a direct process argument vector:
+`codex exec --sandbox <read-only|workspace-write> --skip-git-repo-check
+<prompt>`. It does not invoke a shell, forward secret-like environment
+variables, or require an API key.
+
+The current native scheduler intentionally supports only `codex` worker specs.
+`claude` workers return an explicit error until their independently governed
+native process boundary has compatible fixtures and policy evidence.
+
+The installed `claude-flow-codex` 3.0.1 release observed on 2026-08-07 did not
+enforce the source tree's newer automation preflight and immediately attempted
+a real Codex worker. That non-deterministic invocation was terminated and is
+not a fixture. The source-defined opt-in policy plus native process-level tests
+are the authoritative safe contract for this release wave.

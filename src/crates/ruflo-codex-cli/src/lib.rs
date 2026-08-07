@@ -4,6 +4,8 @@
 //! implemented here. They require the later native scheduler, policy,
 //! worktree, cancellation, and durable-receipt contract.
 
+mod dual_scheduler;
+
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -86,6 +88,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             print!("{DUAL_BANNER}");
             eprintln!("Error: {error}");
             return ExitCode::from(1);
+        }
+        if dual_scheduler::has_worker_invocation(&args[2..]) {
+            return dual_scheduler::run(&args[2..]);
         }
     }
 
