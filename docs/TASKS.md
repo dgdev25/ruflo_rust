@@ -13,6 +13,7 @@ named compatibility evidence and focused verification.
 | 3. Consumer inventory and P0 contract matrix | Complete | `50935ee`; nine P0 rows are source-grounded and matrix validation passes. |
 | 4. Native CLI façade and aliases | Complete | `03fc0d9`; both native aliases pass version/help and MCP placeholder contract tests. |
 | 5. Capability/configuration/policy layer | Complete | `6ed4b55`; precedence, manifest, denial, and resource-limit tests pass. |
+| 6. Shared stdio MCP dispatcher | Complete | `1eb3994`; JSON-RPC protocol, dispatcher, errors, and denial tests pass. |
 
 ## Remaining execution order
 
@@ -44,7 +45,7 @@ named compatibility evidence and focused verification.
 - Enforce allow/deny, request size, execution duration, and concurrency before dispatch.
 - Verify a deny rule removes a tool from both discovery and invocation.
 
-### 6. Shared stdio MCP dispatcher
+### 6. Shared stdio MCP dispatcher — complete
 
 - Implement `tools/list` and `tools/call` on one dispatcher with stable error mapping and correlation IDs.
 - Use a Rust MCP library only where its stdio behavior satisfies fixtures.
