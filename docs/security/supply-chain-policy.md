@@ -16,6 +16,7 @@ Any other registry or git source is rejected.
 - `Apache-2.0`
 - `Apache-2.0 WITH LLVM-exception`
 - `BSD-1-Clause`
+- `BSD-2-Clause`
 - `BSD-3-Clause`
 - `BSL-1.0`
 - `MIT`
