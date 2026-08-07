@@ -44,15 +44,12 @@ jobs:
           - name: linux-x86_64
             runner: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
-            shell: bash
           - name: linux-aarch64
             runner: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-            shell: bash
           - name: macos-x86_64
             runner: macos-15-intel
             target: x86_64-apple-darwin
-            shell: bash
           - name: macos-aarch64
             runner: macos-14
             target: aarch64-apple-darwin
@@ -60,7 +57,6 @@ jobs:
           - name: windows-x86_64
             runner: windows-2025
             target: x86_64-pc-windows-msvc
-            shell: pwsh
 
     steps:
       - uses: actions/checkout@v4
@@ -75,15 +71,12 @@ jobs:
 
       - name: Run focused platform tests
         run: cargo test --test platform_hooks
-        shell: ${{ matrix.shell }}
 
       - name: Run workspace tests
         run: cargo test --workspace --all-targets
-        shell: ${{ matrix.shell }}
 
       - name: Build release binaries
         run: cargo build --release --package ruflo --bin ruflo --package claude-flow --bin claude-flow
-        shell: ${{ matrix.shell }}
 
       - name: Stage release smoke artifacts (POSIX)
         if: runner.os != 'Windows'
