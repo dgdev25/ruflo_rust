@@ -135,3 +135,30 @@ fn swarm_state_is_durable_and_status_is_derived_from_project_records() {
     assert!(lifecycle::initialize_swarm(temp.path(), "not-a-topology", 1, "development").is_err());
     assert!(lifecycle::initialize_swarm(temp.path(), "mesh", 101, "development").is_err());
 }
+
+#[test]
+fn sessions_snapshot_restore_export_import_and_delete_project_state() {
+    let temp = tempfile::tempdir().unwrap();
+    lifecycle::initialize(temp.path()).unwrap();
+    lifecycle::spawn_agent(temp.path(), "coder", "coder-1").unwrap();
+    lifecycle::create_task(temp.path(), "implementation", "Initial task", "normal").unwrap();
+    lifecycle::initialize_swarm(temp.path(), "hierarchical", 2, "development").unwrap();
+
+    let saved = lifecycle::save_session(temp.path(), "checkpoint", "native snapshot").unwrap();
+    let second = lifecycle::save_session(temp.path(), "checkpoint-2", "second snapshot").unwrap();
+    assert_ne!(saved.session_id, second.session_id);
+    assert_eq!(lifecycle::current_session(temp.path()).unwrap(), second);
+    assert_eq!(lifecycle::list_sessions(temp.path()).unwrap().len(), 2);
+
+    lifecycle::spawn_agent(temp.path(), "tester", "tester-1").unwrap();
+    lifecycle::restore_session(temp.path(), &saved.session_id).unwrap();
+    assert_eq!(lifecycle::list_agents(temp.path()).unwrap().len(), 1);
+    assert_eq!(lifecycle::list_tasks(temp.path()).unwrap().len(), 1);
+
+    let export = temp.path().join("session-export.json");
+    lifecycle::export_session(temp.path(), &saved.session_id, &export).unwrap();
+    let imported = lifecycle::import_session(temp.path(), &export, Some("imported")).unwrap();
+    assert_eq!(imported.name, "imported");
+    lifecycle::delete_session(temp.path(), &second.session_id).unwrap();
+    assert!(lifecycle::delete_session(temp.path(), "../../escape").is_err());
+}

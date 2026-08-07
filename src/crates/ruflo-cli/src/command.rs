@@ -19,6 +19,26 @@ pub enum ParsedCommand {
     SwarmStop {
         swarm_id: String,
     },
+    SessionSave {
+        name: String,
+        description: String,
+    },
+    SessionList,
+    SessionRestore {
+        session_id: String,
+    },
+    SessionDelete {
+        session_id: String,
+    },
+    SessionExport {
+        session_id: Option<String>,
+        output: String,
+    },
+    SessionImport {
+        input: String,
+        name: Option<String>,
+    },
+    SessionCurrent,
     AgentSpawn {
         agent_type: String,
         name: String,
@@ -103,6 +123,46 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
         });
     }
     if normalized.len() >= 2
+        && normalized[0] == "session"
+        && matches!(normalized[1], "save" | "create" | "checkpoint")
+    {
+        return Ok(ParsedCommand::SessionSave {
+            name: option_value(&args, "--name", "-n").unwrap_or_else(|| "native-session".into()),
+            description: option_value(&args, "--description", "-d").unwrap_or_default(),
+        });
+    }
+    if normalized.len() >= 3
+        && normalized[0] == "session"
+        && matches!(normalized[1], "restore" | "load")
+    {
+        return Ok(ParsedCommand::SessionRestore {
+            session_id: normalized[2].into(),
+        });
+    }
+    if normalized.len() >= 3
+        && normalized[0] == "session"
+        && matches!(normalized[1], "delete" | "rm" | "remove")
+    {
+        return Ok(ParsedCommand::SessionDelete {
+            session_id: normalized[2].into(),
+        });
+    }
+    if normalized.len() >= 2 && normalized[0] == "session" && normalized[1] == "export" {
+        let session_id = normalized
+            .get(2)
+            .filter(|value| !value.starts_with('-'))
+            .map(|value| value.to_string());
+        let output =
+            option_value(&args, "--output", "-o").ok_or("session export output is required")?;
+        return Ok(ParsedCommand::SessionExport { session_id, output });
+    }
+    if normalized.len() >= 3 && normalized[0] == "session" && normalized[1] == "import" {
+        return Ok(ParsedCommand::SessionImport {
+            input: normalized[2].into(),
+            name: option_value(&args, "--name", "-n"),
+        });
+    }
+    if normalized.len() >= 2
         && matches!(normalized[0], "task")
         && matches!(normalized[1], "create" | "new" | "add")
     {
@@ -166,6 +226,8 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
         ["init"] => Ok(ParsedCommand::Init),
         ["status"] | ["status", "--json"] => Ok(ParsedCommand::Status),
         ["swarm", "status"] => Ok(ParsedCommand::SwarmStatus),
+        ["session", "list"] | ["session", "ls"] => Ok(ParsedCommand::SessionList),
+        ["session", "current"] => Ok(ParsedCommand::SessionCurrent),
         ["agent", "list"] | ["agent", "ls"] => Ok(ParsedCommand::AgentList),
         ["task", "list"] | ["task", "ls"] => Ok(ParsedCommand::TaskList),
         ["mcp", "start"] => Ok(ParsedCommand::McpStart),
@@ -237,6 +299,30 @@ mod tests {
         assert!(matches!(
             parse(argv(&["swarm", "stop", "swarm-1"])),
             Ok(ParsedCommand::SwarmStop { swarm_id }) if swarm_id == "swarm-1"
+        ));
+    }
+
+    #[test]
+    fn session_aliases_cover_the_v3_persistence_surface() {
+        assert!(matches!(
+            parse(argv(&["session", "checkpoint", "-n", "checkpoint-1"])),
+            Ok(ParsedCommand::SessionSave { name, .. }) if name == "checkpoint-1"
+        ));
+        assert!(matches!(
+            parse(argv(&["session", "load", "session-1"])),
+            Ok(ParsedCommand::SessionRestore { session_id }) if session_id == "session-1"
+        ));
+        assert!(matches!(
+            parse(argv(&["session", "rm", "session-1"])),
+            Ok(ParsedCommand::SessionDelete { session_id }) if session_id == "session-1"
+        ));
+        assert!(matches!(
+            parse(argv(&["session", "export", "session-1", "-o", "backup.json"])),
+            Ok(ParsedCommand::SessionExport { session_id: Some(session_id), output }) if session_id == "session-1" && output == "backup.json"
+        ));
+        assert!(matches!(
+            parse(argv(&["session", "import", "backup.json", "-n", "restore"])),
+            Ok(ParsedCommand::SessionImport { name: Some(name), .. }) if name == "restore"
         ));
     }
 }

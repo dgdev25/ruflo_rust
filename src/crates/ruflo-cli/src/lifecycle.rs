@@ -36,6 +36,20 @@ pub struct SwarmStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionRecord {
+    pub session_id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    pub status: String,
+    pub saved_at_ms: u128,
+    pub agents: Vec<AgentRecord>,
+    pub tasks: Vec<TaskRecord>,
+    pub swarm: Option<SwarmRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentRecord {
     pub id: String,
     pub agent_type: String,
@@ -117,6 +131,131 @@ pub fn create_task(
         io::ErrorKind::AlreadyExists,
         "unable to allocate a unique task ID",
     ))
+}
+
+pub fn save_session(
+    project_root: &Path,
+    name: &str,
+    description: &str,
+) -> io::Result<SessionRecord> {
+    status(project_root)?;
+    if name.trim().is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "session name must not be empty",
+        ));
+    }
+    let record = SessionRecord {
+        session_id: next_session_id(project_root)?,
+        name: name.into(),
+        description: description.into(),
+        status: "saved".into(),
+        saved_at_ms: unique_millis(),
+        agents: list_agents(project_root)?,
+        tasks: list_tasks(project_root)?,
+        swarm: read_swarm(project_root)?,
+    };
+    write_session(project_root, &record)?;
+    fs::write(
+        project_root.join(".claude-flow/sessions/current.json"),
+        serde_json::to_vec_pretty(&record).expect("session serializable"),
+    )?;
+    Ok(record)
+}
+
+pub fn list_sessions(project_root: &Path) -> io::Result<Vec<SessionRecord>> {
+    status(project_root)?;
+    let mut sessions: Vec<SessionRecord> =
+        fs::read_dir(project_root.join(".claude-flow/sessions"))?
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name() != "current.json")
+            .filter(|entry| {
+                entry
+                    .path()
+                    .extension()
+                    .is_some_and(|extension| extension == "json")
+            })
+            .map(|entry| serde_json::from_slice(&fs::read(entry.path())?).map_err(io::Error::other))
+            .collect::<Result<_, _>>()?;
+    sessions.sort_by(|left, right| right.saved_at_ms.cmp(&left.saved_at_ms));
+    Ok(sessions)
+}
+
+pub fn current_session(project_root: &Path) -> io::Result<SessionRecord> {
+    status(project_root)?;
+    serde_json::from_slice(&fs::read(
+        project_root.join(".claude-flow/sessions/current.json"),
+    )?)
+    .map_err(io::Error::other)
+}
+
+pub fn restore_session(project_root: &Path, session_id: &str) -> io::Result<SessionRecord> {
+    status(project_root)?;
+    let record = read_session(project_root, session_id)?;
+    replace_records(
+        project_root.join(".swarm/agents"),
+        &record.agents,
+        |record| &record.id,
+    )?;
+    replace_records(project_root.join(".swarm/tasks"), &record.tasks, |record| {
+        &record.id
+    })?;
+    if let Some(swarm) = &record.swarm {
+        write_swarm(project_root, swarm)?;
+    }
+    fs::write(
+        project_root.join(".claude-flow/sessions/current.json"),
+        serde_json::to_vec_pretty(&record).expect("session serializable"),
+    )?;
+    Ok(record)
+}
+
+pub fn delete_session(project_root: &Path, session_id: &str) -> io::Result<()> {
+    status(project_root)?;
+    let session_id = safe_identifier(session_id)?;
+    let path = project_root
+        .join(".claude-flow/sessions")
+        .join(format!("{session_id}.json"));
+    fs::remove_file(path)
+}
+
+pub fn export_session(
+    project_root: &Path,
+    session_id: &str,
+    output: &Path,
+) -> io::Result<SessionRecord> {
+    let session = read_session(project_root, session_id)?;
+    let output = safe_project_path(project_root, output)?;
+    fs::write(
+        output,
+        serde_json::to_vec_pretty(&session).expect("session serializable"),
+    )?;
+    Ok(session)
+}
+
+pub fn import_session(
+    project_root: &Path,
+    input: &Path,
+    name: Option<&str>,
+) -> io::Result<SessionRecord> {
+    status(project_root)?;
+    let input = safe_project_path(project_root, input)?;
+    let mut session: SessionRecord =
+        serde_json::from_slice(&fs::read(input)?).map_err(io::Error::other)?;
+    session.session_id = next_session_id(project_root)?;
+    session.saved_at_ms = unique_millis();
+    session.status = "saved".into();
+    if let Some(name) = name {
+        if name.trim().is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "session name must not be empty",
+            ));
+        }
+        session.name = name.into();
+    }
+    write_session(project_root, &session)?;
+    Ok(session)
 }
 
 pub fn initialize_swarm(
@@ -408,6 +547,71 @@ fn write_if_absent(path: &Path, contents: &[u8]) -> io::Result<()> {
     fs::write(path, contents)
 }
 
+fn read_session(project_root: &Path, session_id: &str) -> io::Result<SessionRecord> {
+    let session_id = safe_identifier(session_id)?;
+    serde_json::from_slice(&fs::read(
+        project_root
+            .join(".claude-flow/sessions")
+            .join(format!("{session_id}.json")),
+    )?)
+    .map_err(io::Error::other)
+}
+
+fn write_session(project_root: &Path, session: &SessionRecord) -> io::Result<()> {
+    let session_id = safe_identifier(&session.session_id)?;
+    fs::write(
+        project_root
+            .join(".claude-flow/sessions")
+            .join(format!("{session_id}.json")),
+        serde_json::to_vec_pretty(session).expect("session serializable"),
+    )
+}
+
+fn replace_records<T, F>(directory: PathBuf, records: &[T], id: F) -> io::Result<()>
+where
+    T: Serialize,
+    F: Fn(&T) -> &String,
+{
+    for entry in fs::read_dir(&directory)? {
+        let entry = entry?;
+        if entry
+            .path()
+            .extension()
+            .is_some_and(|extension| extension == "json")
+        {
+            fs::remove_file(entry.path())?;
+        }
+    }
+    for record in records {
+        let record_id = safe_identifier(id(record))?;
+        fs::write(
+            directory.join(format!("{record_id}.json")),
+            serde_json::to_vec_pretty(record).expect("record serializable"),
+        )?;
+    }
+    Ok(())
+}
+
+fn safe_project_path(project_root: &Path, path: &Path) -> io::Result<PathBuf> {
+    let path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        project_root.join(path)
+    };
+    let parent = path
+        .parent()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path has no parent"))?;
+    let project_root = fs::canonicalize(project_root)?;
+    let parent = fs::canonicalize(parent)?;
+    if !parent.starts_with(&project_root) {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "session path must remain within project root",
+        ));
+    }
+    Ok(path)
+}
+
 fn read_swarm(project_root: &Path) -> io::Result<Option<SwarmRecord>> {
     let path = project_root.join(".swarm/state.json");
     if !path.is_file() {
@@ -468,6 +672,28 @@ fn unique_millis() -> u128 {
         .duration_since(std::time::UNIX_EPOCH)
         .expect("clock")
         .as_millis()
+}
+
+fn next_session_id(project_root: &Path) -> io::Result<String> {
+    let base = unique_millis();
+    for suffix in 0..1000_u32 {
+        let id = if suffix == 0 {
+            format!("session-{base}")
+        } else {
+            format!("session-{base}-{suffix}")
+        };
+        if !project_root
+            .join(".claude-flow/sessions")
+            .join(format!("{id}.json"))
+            .exists()
+        {
+            return Ok(id);
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        "unable to allocate a unique session ID",
+    ))
 }
 
 fn valid_topology(value: &str) -> io::Result<String> {

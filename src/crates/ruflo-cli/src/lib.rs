@@ -299,6 +299,90 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             }
             Err(error) => task_error(error),
         },
+        Ok(ParsedCommand::SessionSave { name, description }) => {
+            match lifecycle::save_session(&current_directory(), &name, &description) {
+                Ok(session) => {
+                    println!("Session {} saved ({})", session.session_id, session.name);
+                    ExitCode::SUCCESS
+                }
+                Err(error) => task_error(error),
+            }
+        }
+        Ok(ParsedCommand::SessionList) => match lifecycle::list_sessions(&current_directory()) {
+            Ok(sessions) => {
+                for session in sessions {
+                    println!(
+                        "{}\t{}\t{}",
+                        session.session_id, session.status, session.name
+                    );
+                }
+                ExitCode::SUCCESS
+            }
+            Err(error) => task_error(error),
+        },
+        Ok(ParsedCommand::SessionRestore { session_id }) => {
+            match lifecycle::restore_session(&current_directory(), &session_id) {
+                Ok(session) => {
+                    println!("Session {} restored", session.session_id);
+                    ExitCode::SUCCESS
+                }
+                Err(error) => task_error(error),
+            }
+        }
+        Ok(ParsedCommand::SessionDelete { session_id }) => {
+            match lifecycle::delete_session(&current_directory(), &session_id) {
+                Ok(()) => {
+                    println!("Session {session_id} deleted");
+                    ExitCode::SUCCESS
+                }
+                Err(error) => task_error(error),
+            }
+        }
+        Ok(ParsedCommand::SessionExport { session_id, output }) => {
+            let project_root = current_directory();
+            let session_id = match session_id {
+                Some(session_id) => session_id,
+                None => match lifecycle::current_session(&project_root) {
+                    Ok(session) => session.session_id,
+                    Err(error) => return task_error(error),
+                },
+            };
+            match lifecycle::export_session(
+                &project_root,
+                &session_id,
+                std::path::Path::new(&output),
+            ) {
+                Ok(_) => {
+                    println!("Session {session_id} exported to {output}");
+                    ExitCode::SUCCESS
+                }
+                Err(error) => task_error(error),
+            }
+        }
+        Ok(ParsedCommand::SessionImport { input, name }) => {
+            match lifecycle::import_session(
+                &current_directory(),
+                std::path::Path::new(&input),
+                name.as_deref(),
+            ) {
+                Ok(session) => {
+                    println!("Session {} imported ({})", session.session_id, session.name);
+                    ExitCode::SUCCESS
+                }
+                Err(error) => task_error(error),
+            }
+        }
+        Ok(ParsedCommand::SessionCurrent) => match lifecycle::current_session(&current_directory())
+        {
+            Ok(session) => {
+                println!(
+                    "{}\t{}\t{}",
+                    session.session_id, session.status, session.name
+                );
+                ExitCode::SUCCESS
+            }
+            Err(error) => task_error(error),
+        },
         Ok(ParsedCommand::TaskRetry {
             task_id,
             reset_state,

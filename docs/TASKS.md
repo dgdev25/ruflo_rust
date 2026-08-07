@@ -44,6 +44,11 @@ named compatibility evidence and focused verification.
   and hand `start` to the existing Codex-only, policy-gated scheduler. It is
   incomplete pending source-oracle fixtures, remaining swarm subcommands, and
   a live configured-Codex deployment receipt.
+- Session lifecycle increment: native `save`/`create`/`checkpoint`, `list`/`ls`,
+  `restore`/`load`, `delete`/`rm`/`remove`, `export`, `import`, and `current`
+  snapshot and restore durable agent/task/swarm records. Memory remains on the
+  existing storage boundary. This is incomplete pending source fixtures and
+  optional selection-flag/MCP parity.
 - Then migrate every remaining command family from the original registry,
   capturing source fixtures before implementation and exercising real local
   Codex swarm deployment before release.
