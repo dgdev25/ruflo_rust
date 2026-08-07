@@ -230,6 +230,204 @@ impl std::fmt::Display for FixtureParseError {
 
 impl std::error::Error for FixtureParseError {}
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContractMatrix {
+    rows: Vec<ContractMatrixRow>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContractMatrixRow {
+    pub priority: String,
+    pub consumer: String,
+    pub invocation: String,
+    pub contract: String,
+    pub fixture: Option<String>,
+    pub blocker: Option<String>,
+    pub wave: String,
+    pub status: String,
+    pub owner: String,
+    pub evidence: Vec<String>,
+}
+
+#[derive(Debug)]
+pub enum ContractMatrixLoadError {
+    Io {
+        path: String,
+        source: std::io::Error,
+    },
+    Validation(String),
+}
+
+impl ContractMatrix {
+    pub fn load(path: impl AsRef<Path>) -> Result<Self, ContractMatrixLoadError> {
+        let path = path.as_ref();
+        let raw = fs::read_to_string(path).map_err(|source| ContractMatrixLoadError::Io {
+            path: path.display().to_string(),
+            source,
+        })?;
+
+        let mut headers: Option<Vec<String>> = None;
+        let mut rows = Vec::new();
+
+        for line in raw.lines() {
+            let trimmed = line.trim();
+            if !trimmed.starts_with('|') {
+                if headers.is_some() && !rows.is_empty() {
+                    break;
+                }
+                continue;
+            }
+
+            let cells = parse_markdown_row(trimmed);
+            if cells.is_empty() {
+                continue;
+            }
+
+            if headers.is_none() {
+                if cells
+                    .iter()
+                    .any(|cell| cell.eq_ignore_ascii_case("priority"))
+                {
+                    headers = Some(cells);
+                }
+                continue;
+            }
+
+            if is_separator_row(&cells) {
+                continue;
+            }
+
+            let header = headers.as_ref().expect("header checked above");
+            if cells.len() != header.len() {
+                return Err(ContractMatrixLoadError::Validation(format!(
+                    "matrix row has {} columns but header has {}",
+                    cells.len(),
+                    header.len()
+                )));
+            }
+
+            rows.push(ContractMatrixRow::from_cells(header, &cells)?);
+        }
+
+        if rows.is_empty() {
+            return Err(ContractMatrixLoadError::Validation(
+                "no contract matrix rows found".to_string(),
+            ));
+        }
+
+        Ok(Self { rows })
+    }
+
+    pub fn p0_rows(&self) -> impl Iterator<Item = &ContractMatrixRow> {
+        self.rows.iter().filter(|row| row.priority == "P0")
+    }
+}
+
+impl ContractMatrixRow {
+    fn from_cells(headers: &[String], cells: &[String]) -> Result<Self, ContractMatrixLoadError> {
+        let get = |name: &str| -> Result<String, ContractMatrixLoadError> {
+            let index = headers
+                .iter()
+                .position(|header| header.eq_ignore_ascii_case(name))
+                .ok_or_else(|| {
+                    ContractMatrixLoadError::Validation(format!(
+                        "missing required matrix column `{name}`"
+                    ))
+                })?;
+            Ok(cells[index].clone())
+        };
+
+        let priority = get("priority")?;
+        let consumer = get("consumer")?;
+        let invocation = get("invocation")?;
+        let contract = get("contract")?;
+        let fixture = normalize_cell(&get("fixture")?);
+        let blocker = normalize_cell(&get("blocker")?);
+        let wave = get("wave")?;
+        let status = get("status")?;
+        let owner = get("owner")?;
+        let evidence = normalize_cell(&get("evidence")?)
+            .map(|value| {
+                value
+                    .split(';')
+                    .map(str::trim)
+                    .filter(|path| !path.is_empty())
+                    .map(ToOwned::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        for (field, value) in [
+            ("priority", &priority),
+            ("consumer", &consumer),
+            ("invocation", &invocation),
+            ("contract", &contract),
+            ("wave", &wave),
+            ("status", &status),
+            ("owner", &owner),
+        ] {
+            if value.trim().is_empty() || value.trim() == "-" {
+                return Err(ContractMatrixLoadError::Validation(format!(
+                    "matrix row field `{field}` must not be empty"
+                )));
+            }
+        }
+
+        if evidence.is_empty() {
+            return Err(ContractMatrixLoadError::Validation(
+                "matrix row must declare at least one evidence path".to_string(),
+            ));
+        }
+
+        Ok(Self {
+            priority,
+            consumer,
+            invocation,
+            contract,
+            fixture,
+            blocker,
+            wave,
+            status,
+            owner,
+            evidence,
+        })
+    }
+}
+
+impl std::fmt::Display for ContractMatrixLoadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Io { path, source } => write!(f, "failed to read matrix `{path}`: {source}"),
+            Self::Validation(message) => write!(f, "{message}"),
+        }
+    }
+}
+
+impl std::error::Error for ContractMatrixLoadError {}
+
+fn parse_markdown_row(line: &str) -> Vec<String> {
+    line.trim_matches('|')
+        .split('|')
+        .map(|cell| cell.trim().to_string())
+        .collect()
+}
+
+fn is_separator_row(cells: &[String]) -> bool {
+    cells.iter().all(|cell| {
+        let normalized = cell.replace(['-', ':'], "");
+        normalized.trim().is_empty()
+    })
+}
+
+fn normalize_cell(cell: &str) -> Option<String> {
+    let trimmed = cell.trim();
+    if trimmed.is_empty() || trimmed == "-" {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
 #[test]
 fn cli_fixture_requires_exit_stdout_and_stderr() {
     let parsed = Fixture::parse(
@@ -321,4 +519,29 @@ fn reduced_schema_fixture_must_explain_its_reduction() {
     assert!(error
         .to_string()
         .contains("reduced-schema fixtures must explain provenance.reduction"));
+}
+
+#[test]
+fn checked_in_contract_matrix_parses() {
+    let matrix = ContractMatrix::load("docs/compatibility/contract-matrix.md").unwrap();
+    assert!(matrix.p0_rows().count() >= 8);
+}
+
+#[test]
+fn every_p0_contract_has_a_consumer_fixture_or_explicit_blocker() {
+    let matrix = ContractMatrix::load("docs/compatibility/contract-matrix.md").unwrap();
+    assert!(matrix
+        .p0_rows()
+        .all(|row| row.fixture.is_some() || row.blocker.is_some()));
+}
+
+#[test]
+fn every_p0_contract_declares_wave_status_owner_and_evidence() {
+    let matrix = ContractMatrix::load("docs/compatibility/contract-matrix.md").unwrap();
+    assert!(matrix.p0_rows().all(|row| {
+        !row.wave.is_empty()
+            && !row.status.is_empty()
+            && !row.owner.is_empty()
+            && !row.evidence.is_empty()
+    }));
 }
