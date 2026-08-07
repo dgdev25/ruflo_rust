@@ -512,7 +512,7 @@ fn checked_in_cli_fixtures_parse() {
     assert_eq!(help.argv, vec!["--quiet", "--help"]);
     assert!(help
         .stdout
-        .contains("Ruflo - AI Agent Orchestration Platform"));
+        .contains("RuFlo V3 - AI Agent Orchestration Platform"));
 
     for path in [
         "tests/fixtures/codex/version.json",
@@ -566,10 +566,8 @@ fn checked_in_fixtures_require_provenance_and_recording_metadata() {
 
     let help = Fixture::load("tests/fixtures/cli/help.json").unwrap();
     assert_eq!(help.provenance.kind, FixtureKind::SourceOracle);
-    assert_eq!(
-        help.recording.recorded_by,
-        "scripts/capture-reference-contract.sh"
-    );
+    assert_eq!(help.recording.recorded_by, "live-oracle-capture");
+    assert_eq!(help.recording.harness, "differential-cli");
 
     let tools = JsonRpcFixture::load("tests/fixtures/mcp/tools-list.json").unwrap();
     assert_eq!(tools.provenance.kind, FixtureKind::ReducedSchema);

@@ -10,7 +10,7 @@ pub use command::ParsedCommand;
 const VERSION: &str = concat!("ruflo v", env!("CARGO_PKG_VERSION"), "\n");
 const HELP: &str = r#"
 ruflo v3.34.0
-Ruflo - AI Agent Orchestration Platform
+RuFlo V3 - AI Agent Orchestration Platform
 
 USAGE:
   ruflo <command> [subcommand] [options]

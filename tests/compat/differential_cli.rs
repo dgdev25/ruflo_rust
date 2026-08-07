@@ -160,8 +160,10 @@ fn both_binaries_match_version_fixture() {
 }
 
 #[test]
-fn ruflo_matches_quiet_help_fixture() {
-    assert_cli_fixture("ruflo", "tests/fixtures/cli/help.json");
+fn native_aliases_match_quiet_help_fixture() {
+    for binary in ["ruflo", "claude-flow"] {
+        assert_cli_fixture(binary, "tests/fixtures/cli/help.json");
+    }
 }
 
 #[test]
