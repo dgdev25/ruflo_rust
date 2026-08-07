@@ -1,6 +1,7 @@
 //! Shared native CLI entrypoint for thin Ruflo-compatible binaries.
 
 mod command;
+mod compressor;
 mod lifecycle;
 
 use std::ffi::OsString;
@@ -234,6 +235,24 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
                 Err(error) => task_error(error),
             }
         }
+        Ok(ParsedCommand::SwarmCompressMessage {
+            message,
+            budget_tokens,
+            mode,
+        }) => match message
+            .as_deref()
+            .ok_or_else(|| "No message provided. Use --message or --message-file.".to_string())
+            .and_then(|message| compressor::compress_message(message, budget_tokens, &mode))
+        {
+            Ok(result) => {
+                println!("{}", result.compressed);
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("error: {error}");
+                ExitCode::from(ERROR_EXIT)
+            }
+        },
         Ok(ParsedCommand::AgentSpawn { agent_type, name }) => {
             match lifecycle::spawn_agent(&current_directory(), &agent_type, &name) {
                 Ok(agent) => {

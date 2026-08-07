@@ -27,6 +27,11 @@ pub enum ParsedCommand {
     SwarmCoordinate {
         agents: usize,
     },
+    SwarmCompressMessage {
+        message: Option<String>,
+        budget_tokens: usize,
+        mode: String,
+    },
     SessionSave {
         name: String,
         description: String,
@@ -279,6 +284,23 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             return Err("coordination agent count must be between 1 and 15".into());
         }
         return Ok(ParsedCommand::SwarmCoordinate { agents });
+    }
+    if normalized.len() >= 2 && normalized[0] == "swarm" && normalized[1] == "compress-message" {
+        let budget_tokens = option_value(&args, "--budget-tokens", "-b")
+            .unwrap_or_else(|| "200".into())
+            .parse()
+            .map_err(|_| "budget tokens must be a positive integer")?;
+        let mode = option_value(&args, "--mode", "--mode").unwrap_or_else(|| "hybrid".into());
+        if budget_tokens == 0 || !matches!(mode.as_str(), "keyword" | "sentence" | "hybrid") {
+            return Err(
+                "budget must be positive and mode must be keyword, sentence, or hybrid".into(),
+            );
+        }
+        return Ok(ParsedCommand::SwarmCompressMessage {
+            message: option_value(&args, "--message", "-m"),
+            budget_tokens,
+            mode,
+        });
     }
     if normalized.len() >= 2
         && normalized[0] == "session"
