@@ -10,9 +10,12 @@ use crate::port::set_owner_only_permissions;
 
 static UNIQUE_COUNTER: AtomicU64 = AtomicU64::new(1);
 
+type Transform = dyn Fn(&[u8]) -> Result<Vec<u8>, RufloError> + Send + Sync;
+type Validator = dyn Fn(&[u8]) -> Result<(), RufloError> + Send + Sync;
+
 pub struct MigrationPlan {
-    transform: Box<dyn Fn(&[u8]) -> Result<Vec<u8>, RufloError> + Send + Sync>,
-    validate: Box<dyn Fn(&[u8]) -> Result<(), RufloError> + Send + Sync>,
+    transform: Box<Transform>,
+    validate: Box<Validator>,
 }
 
 impl MigrationPlan {

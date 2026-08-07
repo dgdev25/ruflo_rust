@@ -197,7 +197,13 @@ fn canonicalized_working_directory_stays_beneath_project_root() {
 
     assert_eq!(
         result.stdout.trim(),
-        nested.parent().unwrap().display().to_string()
+        nested
+            .parent()
+            .unwrap()
+            .canonicalize()
+            .unwrap()
+            .display()
+            .to_string()
     );
 }
 

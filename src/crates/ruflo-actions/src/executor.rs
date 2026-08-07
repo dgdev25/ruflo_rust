@@ -93,9 +93,7 @@ impl NativeActionExecutor {
             ));
         }
 
-        let invocation = match request.invocation {
-            ActionInvocation::Native(invocation) => invocation,
-        };
+        let ActionInvocation::Native(invocation) = request.invocation;
         let key = NativeActionKey::from_action(&invocation);
         if !self.allowlist.contains(&key) {
             return Err(RufloError::invalid_input(
@@ -226,6 +224,12 @@ impl NativeActionExecutorBuilder {
             inherited_environment: self.inherited_environment,
             active_executions: AtomicUsize::new(0),
         }
+    }
+}
+
+impl Default for NativeActionExecutorBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -89,21 +89,12 @@ pub struct PolicyConfig {
     pub deny: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 struct RawConfig {
     #[serde(default)]
     policy: RawPolicyConfig,
     #[serde(default)]
     limits: RawLimitsConfig,
-}
-
-impl Default for RawConfig {
-    fn default() -> Self {
-        Self {
-            policy: RawPolicyConfig::default(),
-            limits: RawLimitsConfig::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

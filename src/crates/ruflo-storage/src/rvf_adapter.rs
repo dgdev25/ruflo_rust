@@ -99,8 +99,8 @@ pub struct RvfStoreStatus {
 }
 
 pub enum RvfPersistencePort {
-    AgentDb(RvfVectorStore),
-    AgenticFlow(RvfSwarmStore),
+    AgentDb(Box<RvfVectorStore>),
+    AgenticFlow(Box<RvfSwarmStore>),
 }
 
 impl RvfPersistencePort {
@@ -110,7 +110,7 @@ impl RvfPersistencePort {
     ) -> Result<Self, RufloError> {
         let store = RvfVectorStore::create(path.as_ref(), config.into_upstream())
             .map_err(map_upstream_error)?;
-        Ok(Self::AgentDb(store))
+        Ok(Self::AgentDb(Box::new(store)))
     }
 
     pub fn open_agentdb(
@@ -119,19 +119,19 @@ impl RvfPersistencePort {
     ) -> Result<Self, RufloError> {
         let store = RvfVectorStore::open(path.as_ref(), config.into_upstream())
             .map_err(map_upstream_error)?;
-        Ok(Self::AgentDb(store))
+        Ok(Self::AgentDb(Box::new(store)))
     }
 
     pub fn create_agentic_flow(config: AgenticFlowFixtureConfig) -> Result<Self, RufloError> {
         let store =
             RvfSwarmStore::create(config.into_upstream()).map_err(map_upstream_swarm_error)?;
-        Ok(Self::AgenticFlow(store))
+        Ok(Self::AgenticFlow(Box::new(store)))
     }
 
     pub fn open_agentic_flow(config: AgenticFlowFixtureConfig) -> Result<Self, RufloError> {
         let store =
             RvfSwarmStore::open(config.into_upstream()).map_err(map_upstream_swarm_error)?;
-        Ok(Self::AgenticFlow(store))
+        Ok(Self::AgenticFlow(Box::new(store)))
     }
 
     pub fn ingest_agentdb(&mut self, records: &[AgentDbVectorRecord]) -> Result<u64, RufloError> {
