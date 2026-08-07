@@ -20,6 +20,8 @@ create project files nor launch a Codex or Claude worker.
   `memory_search` JSON-RPC fixture.
 - [x] Bind P0 migration/RVF adapter interop to checked-in synthetic scenarios
   for AgentDB stable ordering, compaction, and Agentic Flow reopening.
+- [x] Close the P0 durable-memory gap with fixture-proven SQLite-compatible
+  `memory_store`/retrieve/keyword-search persistence at `.swarm/memory.db`.
 - [ ] Implement the native dual-run scheduler behind explicit policy and
   worktree boundaries; it must launch `codex exec` only when a caller invokes
   a worker-running command.

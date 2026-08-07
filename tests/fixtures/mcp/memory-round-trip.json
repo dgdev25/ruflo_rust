@@ -1,0 +1,131 @@
+{
+  "frames": [
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": "store",
+        "method": "tools/call",
+        "params": {
+          "name": "memory_store",
+          "arguments": {
+            "key": "decision/auth",
+            "value": "Use JWT with rotating keys",
+            "namespace": "engineering",
+            "provenance_type": "tool_result"
+          }
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": "store",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "stored memory `decision/auth`"
+            }
+          ],
+          "structuredContent": {
+            "id": "mem-656e67696e656572696e67006465636973696f6e2f61757468",
+            "key": "decision/auth",
+            "namespace": "engineering",
+            "stored": true,
+            "backend": "sqlite-keyword-fallback"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": "retrieve",
+        "method": "tools/call",
+        "params": {
+          "name": "memory_retrieve",
+          "arguments": {
+            "key": "decision/auth",
+            "namespace": "engineering"
+          }
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": "retrieve",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "retrieved memory `decision/auth`"
+            }
+          ],
+          "structuredContent": {
+            "id": "mem-656e67696e656572696e67006465636973696f6e2f61757468",
+            "key": "decision/auth",
+            "namespace": "engineering",
+            "content": "Use JWT with rotating keys",
+            "type": "semantic",
+            "provenanceType": "tool_result",
+            "found": true
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": "search",
+        "method": "tools/call",
+        "params": {
+          "name": "memory_search",
+          "arguments": {
+            "query": "rotating",
+            "namespace": "engineering"
+          }
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": "search",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "found 1 stored matches for `rotating`"
+            }
+          ],
+          "structuredContent": {
+            "query": "rotating",
+            "matches": [
+              {
+                "id": "mem-656e67696e656572696e67006465636973696f6e2f61757468",
+                "key": "decision/auth",
+                "namespace": "engineering",
+                "content": "Use JWT with rotating keys",
+                "type": "semantic",
+                "provenanceType": "tool_result",
+                "found": true
+              }
+            ],
+            "backend": "sqlite-keyword-fallback"
+          }
+        }
+      }
+    }
+  ],
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "reduced-schema",
+    "source": "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli-core/src/mcp-tools/memory-defs.ts",
+    "reduction": "The live MCP tool contract permits durable SQLite-backed memory with semantic or keyword fallback. This native fixture fixes an isolated store/retrieve/search sequence against the compatible memory_entries table; embeddings are intentionally delegated to the RVF adapter wave.",
+    "redactions": [
+      "temporary project path omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-07T19:30:00Z",
+    "recorded_by": "native-compatibility-curation",
+    "harness": "mcp-stdio"
+  }
+}

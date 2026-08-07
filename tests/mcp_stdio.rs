@@ -45,12 +45,69 @@ fn tools_call_dispatches_from_the_same_registry() {
 #[test]
 fn tools_call_matches_checked_in_fixture() {
     let fixture = load_json("tests/fixtures/mcp/memory-search-call.json");
-    let output = run_stdio("ruflo", &[fixture["request"].to_string().as_str()], &[]);
+    let project = tempfile::TempDir::new().unwrap();
+    let output = run_stdio_in(
+        "ruflo",
+        &[fixture["request"].to_string().as_str()],
+        &[],
+        project.path(),
+    );
 
     assert!(output.status.success());
     assert_stdout_is_jsonrpc_only(&output.stdout);
     assert_eq!(single_frame(&output.stdout), fixture["response"]);
     assert_eq!(String::from_utf8(output.stderr).unwrap(), "");
+}
+
+#[test]
+fn memory_round_trip_matches_checked_in_fixture_and_creates_sqlite_store() {
+    let fixture = load_json("tests/fixtures/mcp/memory-round-trip.json");
+    let project = tempfile::TempDir::new().unwrap();
+    let requests = fixture["frames"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|frame| frame["request"].to_string())
+        .collect::<Vec<_>>();
+    let request_refs = requests.iter().map(String::as_str).collect::<Vec<_>>();
+    let output = run_stdio_in("ruflo", &request_refs, &[], project.path());
+
+    assert!(output.status.success());
+    assert_stdout_is_jsonrpc_only(&output.stdout);
+    let actual = stdout_frames(&output.stdout);
+    let expected = fixture["frames"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|frame| frame["response"].clone())
+        .collect::<Vec<_>>();
+    assert_eq!(actual, expected);
+    assert!(project.path().join(".swarm").join("memory.db").is_file());
+    assert_eq!(String::from_utf8(output.stderr).unwrap(), "");
+}
+
+#[test]
+fn memory_retrieve_survives_a_new_mcp_process() {
+    let fixture = load_json("tests/fixtures/mcp/memory-round-trip.json");
+    let frames = fixture["frames"].as_array().unwrap();
+    let project = tempfile::TempDir::new().unwrap();
+
+    let store = run_stdio_in(
+        "ruflo",
+        &[frames[0]["request"].to_string().as_str()],
+        &[],
+        project.path(),
+    );
+    assert!(store.status.success());
+
+    let retrieve = run_stdio_in(
+        "ruflo",
+        &[frames[1]["request"].to_string().as_str()],
+        &[],
+        project.path(),
+    );
+    assert!(retrieve.status.success());
+    assert_eq!(single_frame(&retrieve.stdout), frames[1]["response"]);
 }
 
 #[test]
@@ -89,7 +146,10 @@ fn denied_tool_is_hidden_from_discovery_and_invocation() {
         .iter()
         .map(|tool| tool["name"].as_str().unwrap())
         .collect::<Vec<_>>();
-    assert_eq!(tools, vec!["agent_spawn"]);
+    assert_eq!(
+        tools,
+        vec!["agent_spawn", "memory_store", "memory_retrieve"]
+    );
     assert_eq!(frames[1]["error"]["code"], -32001);
     assert_eq!(
         frames[1]["error"]["data"]["details"]["capability"],
@@ -177,9 +237,19 @@ fn assert_stdout_is_jsonrpc_only(stdout: &[u8]) {
 }
 
 fn run_stdio(binary: &str, input_lines: &[&str], env: &[(&str, &str)]) -> Output {
+    run_stdio_in(binary, input_lines, env, repo_root())
+}
+
+fn run_stdio_in(
+    binary: &str,
+    input_lines: &[&str],
+    env: &[(&str, &str)],
+    workdir: &Path,
+) -> Output {
     let executable = executable_path(binary);
     let mut command = Command::new(executable);
     command.arg("mcp").arg("start");
+    command.current_dir(workdir);
     command.stdin(Stdio::piped());
     command.stdout(Stdio::piped());
     command.stderr(Stdio::piped());

@@ -16,6 +16,11 @@ Task 9 implementation evidence as of 2026-08-07.
 - AgentDB reopen after facade-driven compaction is proven for the basic search path.
 - Agentic Flow reopen is proven only at the file/status level: `total_vectors` survives closing and reopening.
 
+The generic key/value memory compatibility path remains in `.swarm/memory.db`
+because existing Ruflo consumers rely on its SQLite `memory_entries` contract.
+The native MCP facade uses that table for exact retrieval and keyword fallback;
+the RVF adapters remain the vector/semantic persistence boundary.
+
 ## Explicit blockers
 
 - Unknown-segment preservation is not asserted here. The upstream runtime has tests for that behavior, but the currently available typed adapter APIs do not expose a way to create or round-trip an intentionally unknown segment without hand-encoding RVF bytes, which this task forbids.

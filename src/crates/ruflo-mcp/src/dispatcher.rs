@@ -219,8 +219,24 @@ fn build_registry() -> Vec<RegisteredTool> {
         },
         RegisteredTool {
             definition: ToolDefinition {
+                name: "memory_store",
+                description: "Store a persistent memory entry.",
+                capability: Capability::supported("memory.store", 1),
+            },
+            handler: memory_store,
+        },
+        RegisteredTool {
+            definition: ToolDefinition {
+                name: "memory_retrieve",
+                description: "Retrieve a persistent memory entry by key.",
+                capability: Capability::supported("memory.retrieve", 1),
+            },
+            handler: memory_retrieve,
+        },
+        RegisteredTool {
+            definition: ToolDefinition {
                 name: "memory_search",
-                description: "Find stored memories by meaning.",
+                description: "Find persistent memories with keyword fallback.",
                 capability: Capability::supported("memory.search", 1),
             },
             handler: memory_search,
@@ -242,16 +258,95 @@ fn agent_spawn(arguments: &Value) -> Result<ToolResult, RufloError> {
     ))
 }
 
+fn memory_store(arguments: &Value) -> Result<ToolResult, RufloError> {
+    let key = required_string(arguments, "key")?;
+    let content = required_value_content(arguments, "value")?;
+    let namespace =
+        optional_string(arguments, "namespace")?.unwrap_or_else(|| "default".to_string());
+    let memory_type = optional_string(arguments, "type")?.unwrap_or_else(|| "semantic".to_string());
+    let provenance_type =
+        optional_string(arguments, "provenance_type")?.unwrap_or_else(|| "unknown".to_string());
+    let tags_json = optional_tags(arguments)?;
+    let upsert = optional_bool(arguments, "upsert")?.unwrap_or(true);
+    let store = ruflo_storage::SqliteMemoryStore::open_from_current_dir()?;
+    let entry = store.store(&ruflo_storage::MemoryStoreInput {
+        key,
+        namespace,
+        content,
+        memory_type,
+        tags_json,
+        provenance_type,
+        upsert,
+    })?;
+    Ok(ToolResult::text(
+        format!("stored memory `{}`", entry.key),
+        Some(json!({
+            "id": entry.id,
+            "key": entry.key,
+            "namespace": entry.namespace,
+            "stored": true,
+            "backend": "sqlite-keyword-fallback"
+        })),
+    ))
+}
+
+fn memory_retrieve(arguments: &Value) -> Result<ToolResult, RufloError> {
+    let key = required_string(arguments, "key")?;
+    let namespace =
+        optional_string(arguments, "namespace")?.unwrap_or_else(|| "default".to_string());
+    let store = ruflo_storage::SqliteMemoryStore::open_from_current_dir()?;
+    let entry = store.retrieve(&namespace, &key)?;
+    match entry {
+        Some(entry) => Ok(ToolResult::text(
+            format!("retrieved memory `{}`", entry.key),
+            Some(memory_entry_json(entry)),
+        )),
+        None => Ok(ToolResult::text(
+            format!("memory `{key}` not found"),
+            Some(json!({ "key": key, "namespace": namespace, "found": false })),
+        )),
+    }
+}
+
 fn memory_search(arguments: &Value) -> Result<ToolResult, RufloError> {
     maybe_sleep(arguments)?;
     let query = required_string(arguments, "query")?;
+    let namespace = optional_string(arguments, "namespace")?;
+    let limit = optional_usize(arguments, "limit")?.unwrap_or(10);
+    let store = ruflo_storage::SqliteMemoryStore::open_from_current_dir()?;
+    let matches = store.search_keyword(namespace.as_deref(), &query, limit)?;
+    let structured_matches = matches
+        .into_iter()
+        .map(memory_entry_json)
+        .collect::<Vec<_>>();
+    let text = if structured_matches.is_empty() {
+        format!("no stored matches for `{query}`")
+    } else {
+        format!(
+            "found {} stored matches for `{query}`",
+            structured_matches.len()
+        )
+    };
     Ok(ToolResult::text(
-        format!("no stored matches for `{query}`"),
+        text,
         Some(json!({
             "query": query,
-            "matches": []
+            "matches": structured_matches,
+            "backend": "sqlite-keyword-fallback"
         })),
     ))
+}
+
+fn memory_entry_json(entry: ruflo_storage::MemoryEntry) -> Value {
+    json!({
+        "id": entry.id,
+        "key": entry.key,
+        "namespace": entry.namespace,
+        "content": entry.content,
+        "type": entry.memory_type,
+        "provenanceType": entry.provenance_type,
+        "found": true
+    })
 }
 
 fn maybe_sleep(arguments: &Value) -> Result<(), RufloError> {
@@ -285,6 +380,75 @@ fn optional_string(arguments: &Value, field: &'static str) -> Result<Option<Stri
             format!("field `{field}` must be a string"),
         )),
         None => Ok(None),
+    }
+}
+
+fn optional_bool(arguments: &Value, field: &'static str) -> Result<Option<bool>, RufloError> {
+    match arguments.get(field) {
+        Some(Value::Bool(value)) => Ok(Some(*value)),
+        Some(_) => Err(RufloError::invalid_input(
+            "tool.invalid_arguments",
+            format!("field `{field}` must be a boolean"),
+        )),
+        None => Ok(None),
+    }
+}
+
+fn optional_usize(arguments: &Value, field: &'static str) -> Result<Option<usize>, RufloError> {
+    match arguments.get(field) {
+        Some(Value::Number(value)) => value
+            .as_u64()
+            .and_then(|value| usize::try_from(value).ok())
+            .map(Some)
+            .ok_or_else(|| {
+                RufloError::invalid_input(
+                    "tool.invalid_arguments",
+                    format!("field `{field}` must be an unsigned integer"),
+                )
+            }),
+        Some(_) => Err(RufloError::invalid_input(
+            "tool.invalid_arguments",
+            format!("field `{field}` must be an unsigned integer"),
+        )),
+        None => Ok(None),
+    }
+}
+
+fn optional_tags(arguments: &Value) -> Result<Option<String>, RufloError> {
+    match arguments.get("tags") {
+        Some(Value::Array(tags)) if tags.iter().all(Value::is_string) => {
+            serde_json::to_string(tags)
+                .map(Some)
+                .map_err(|error| RufloError::UpstreamAdapter {
+                    message: format!("memory.tags: {error}"),
+                })
+        }
+        Some(Value::Array(_)) => Err(RufloError::invalid_input(
+            "tool.invalid_arguments",
+            "field `tags` must contain only strings",
+        )),
+        Some(_) => Err(RufloError::invalid_input(
+            "tool.invalid_arguments",
+            "field `tags` must be an array",
+        )),
+        None => Ok(None),
+    }
+}
+
+fn required_value_content(arguments: &Value, field: &'static str) -> Result<String, RufloError> {
+    match arguments.get(field) {
+        Some(Value::String(value)) if !value.trim().is_empty() => Ok(value.clone()),
+        Some(Value::String(_)) => Err(RufloError::invalid_input(
+            "tool.invalid_arguments",
+            format!("field `{field}` must not be empty"),
+        )),
+        Some(value) => serde_json::to_string(value).map_err(|error| RufloError::UpstreamAdapter {
+            message: format!("memory.value: {error}"),
+        }),
+        None => Err(RufloError::invalid_input(
+            "tool.invalid_arguments",
+            format!("missing required field `{field}`"),
+        )),
     }
 }
 

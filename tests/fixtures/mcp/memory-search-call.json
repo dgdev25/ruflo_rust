@@ -21,6 +21,7 @@
         }
       ],
       "structuredContent": {
+        "backend": "sqlite-keyword-fallback",
         "matches": [],
         "query": "auth"
       }

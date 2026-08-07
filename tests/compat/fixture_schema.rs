@@ -44,6 +44,21 @@ pub struct JsonRpcFixture {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JsonRpcSequenceFixture {
+    pub frames: Vec<JsonRpcFrame>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform: Option<FixturePlatform>,
+    pub provenance: FixtureProvenance,
+    pub recording: FixtureRecording,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JsonRpcFrame {
+    pub request: Value,
+    pub response: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum FixtureKind {
     SourceOracle,
@@ -122,6 +137,45 @@ impl JsonRpcFixture {
     fn validate(&self) -> Result<(), FixtureParseError> {
         self.provenance.validate(&[])?;
         self.recording.validate()
+    }
+}
+
+impl JsonRpcSequenceFixture {
+    pub fn load(path: impl AsRef<Path>) -> Result<Self, FixtureLoadError> {
+        let path = path.as_ref();
+        let raw = fs::read_to_string(path).map_err(|source| FixtureLoadError::Io {
+            path: path.display().to_string(),
+            source,
+        })?;
+        let fixture: Self = serde_json::from_str(&raw)
+            .map_err(FixtureParseError::Json)
+            .map_err(|source| FixtureLoadError::Parse {
+                path: path.display().to_string(),
+                source,
+            })?;
+        if fixture.frames.is_empty() {
+            return Err(FixtureLoadError::Parse {
+                path: path.display().to_string(),
+                source: FixtureParseError::Validation(
+                    "JSON-RPC sequence must contain at least one frame".to_string(),
+                ),
+            });
+        }
+        fixture
+            .provenance
+            .validate(&[])
+            .map_err(|source| FixtureLoadError::Parse {
+                path: path.display().to_string(),
+                source,
+            })?;
+        fixture
+            .recording
+            .validate()
+            .map_err(|source| FixtureLoadError::Parse {
+                path: path.display().to_string(),
+                source,
+            })?;
+        Ok(fixture)
     }
 }
 
@@ -485,6 +539,10 @@ fn checked_in_json_rpc_fixture_parses() {
 
     let denied = JsonRpcFixture::load("tests/fixtures/mcp/memory-search-denied.json").unwrap();
     assert_eq!(denied.response["error"]["code"], -32001);
+
+    let memory_round_trip =
+        JsonRpcSequenceFixture::load("tests/fixtures/mcp/memory-round-trip.json").unwrap();
+    assert_eq!(memory_round_trip.frames.len(), 3);
 }
 
 #[test]

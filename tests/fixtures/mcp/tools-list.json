@@ -19,8 +19,24 @@
           }
         },
         {
+          "name": "memory_store",
+          "description": "Store a persistent memory entry.",
+          "inputSchema": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        {
+          "name": "memory_retrieve",
+          "description": "Retrieve a persistent memory entry by key.",
+          "inputSchema": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        {
           "name": "memory_search",
-          "description": "Find stored memories by meaning.",
+          "description": "Find persistent memories with keyword fallback.",
           "inputSchema": {
             "type": "object",
             "additionalProperties": false

@@ -1,7 +1,9 @@
+mod memory_sqlite;
 mod migration;
 mod port;
 mod rvf_adapter;
 
+pub use memory_sqlite::{MemoryEntry, MemoryStoreInput, SqliteMemoryStore};
 pub use migration::{
     MigrationMetadata, MigrationOutcome, MigrationPlan, MigrationSession, RecoveryMetadata,
 };
