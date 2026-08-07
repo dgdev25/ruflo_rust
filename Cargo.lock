@@ -15,6 +15,7 @@ version = "0.1.0"
 dependencies = [
  "ruflo-config",
  "ruflo-mcp",
+ "ruflo-runtime",
  "ruflo-types",
  "serde",
  "serde_json",
@@ -82,6 +83,13 @@ dependencies = [
  "ruflo-types",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "ruflo-runtime"
+version = "0.1.0"
+dependencies = [
+ "ruflo-types",
 ]
 
 [[package]]

@@ -1,0 +1,14 @@
+[package]
+name = "ruflo-runtime"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "Native Ruflo runtime lifecycle domain with explicit handles and state machines."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+ruflo-types = { path = "../ruflo-types" }
