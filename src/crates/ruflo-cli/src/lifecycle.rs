@@ -19,6 +19,57 @@ pub struct AgentRecord {
     pub status: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TaskRecord {
+    pub id: String,
+    pub task_type: String,
+    pub description: String,
+    pub status: String,
+}
+
+pub fn create_task(
+    project_root: &Path,
+    task_type: &str,
+    description: &str,
+) -> io::Result<TaskRecord> {
+    status(project_root)?;
+    if description.trim().is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "task description must not be empty",
+        ));
+    }
+    let id = format!(
+        "task-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_millis()
+    );
+    let record = TaskRecord {
+        id: id.clone(),
+        task_type: safe_identifier(task_type)?,
+        description: description.into(),
+        status: "pending".into(),
+    };
+    fs::write(
+        project_root.join(".swarm/tasks").join(format!("{id}.json")),
+        serde_json::to_vec_pretty(&record).expect("task serializable"),
+    )?;
+    Ok(record)
+}
+
+pub fn list_tasks(project_root: &Path) -> io::Result<Vec<TaskRecord>> {
+    status(project_root)?;
+    let mut tasks: Vec<TaskRecord> = fs::read_dir(project_root.join(".swarm/tasks"))?
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "json"))
+        .map(|entry| serde_json::from_slice(&fs::read(entry.path())?).map_err(io::Error::other))
+        .collect::<Result<_, _>>()?;
+    tasks.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(tasks)
+}
+
 pub fn spawn_agent(project_root: &Path, agent_type: &str, name: &str) -> io::Result<AgentRecord> {
     status(project_root)?;
     let id = safe_identifier(name)?;

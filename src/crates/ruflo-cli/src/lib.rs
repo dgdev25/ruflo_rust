@@ -157,6 +157,31 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
                 ExitCode::from(ERROR_EXIT)
             }
         },
+        Ok(ParsedCommand::TaskCreate {
+            task_type,
+            description,
+        }) => match lifecycle::create_task(&current_directory(), &task_type, &description) {
+            Ok(task) => {
+                println!("Task {} created successfully ({})", task.id, task.task_type);
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("error: {error}");
+                ExitCode::from(ERROR_EXIT)
+            }
+        },
+        Ok(ParsedCommand::TaskList) => match lifecycle::list_tasks(&current_directory()) {
+            Ok(tasks) => {
+                for task in tasks {
+                    println!("{}\t{}\t{}", task.id, task.status, task.description);
+                }
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("error: {error}");
+                ExitCode::from(ERROR_EXIT)
+            }
+        },
         Ok(ParsedCommand::McpStart) => {
             let config = match ruflo_config::EffectiveConfig::load() {
                 Ok(config) => config,

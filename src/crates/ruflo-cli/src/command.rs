@@ -6,8 +6,16 @@ pub enum ParsedCommand {
     Help,
     Init,
     Status,
-    AgentSpawn { agent_type: String, name: String },
+    AgentSpawn {
+        agent_type: String,
+        name: String,
+    },
     AgentList,
+    TaskCreate {
+        task_type: String,
+        description: String,
+    },
+    TaskList,
     McpStart,
 }
 
@@ -25,12 +33,22 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             option_value(&args, "--name", "-n").unwrap_or_else(|| format!("{agent_type}-native"));
         return Ok(ParsedCommand::AgentSpawn { agent_type, name });
     }
+    if normalized.starts_with(&["task", "create"]) {
+        let task_type = option_value(&args, "--type", "-t").ok_or("task type is required")?;
+        let description =
+            option_value(&args, "--description", "-d").ok_or("task description is required")?;
+        return Ok(ParsedCommand::TaskCreate {
+            task_type,
+            description,
+        });
+    }
     match normalized.as_slice() {
         ["--version"] | ["-V"] => Ok(ParsedCommand::Version),
         ["--help"] | ["-h"] | ["--quiet", "--help"] | ["-Q", "--help"] => Ok(ParsedCommand::Help),
         ["init"] => Ok(ParsedCommand::Init),
         ["status"] | ["status", "--json"] => Ok(ParsedCommand::Status),
         ["agent", "list"] | ["agent", "ls"] => Ok(ParsedCommand::AgentList),
+        ["task", "list"] | ["task", "ls"] => Ok(ParsedCommand::TaskList),
         ["mcp", "start"] => Ok(ParsedCommand::McpStart),
         [] => Err("no command provided".to_string()),
         _ => Err(format!(

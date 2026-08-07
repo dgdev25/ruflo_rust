@@ -59,3 +59,17 @@ fn agents_are_durable_project_scoped_records() {
     assert!(lifecycle::spawn_agent(temp.path(), "coder", "coder-1").is_err());
     assert!(lifecycle::spawn_agent(temp.path(), "coder", "../../escape").is_err());
 }
+
+#[test]
+fn tasks_are_durable_project_scoped_records() {
+    let temp = tempfile::tempdir().unwrap();
+    lifecycle::initialize(temp.path()).unwrap();
+    let task = lifecycle::create_task(
+        temp.path(),
+        "implementation",
+        "Build the native task lifecycle",
+    )
+    .unwrap();
+    assert_eq!(task.status, "pending");
+    assert_eq!(lifecycle::list_tasks(temp.path()).unwrap(), vec![task]);
+}
