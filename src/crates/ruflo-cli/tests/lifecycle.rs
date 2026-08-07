@@ -107,3 +107,31 @@ fn task_lifecycle_enforces_assignment_cancellation_and_retry_contracts() {
     assert_eq!(retried.retry_count, 1);
     assert!(lifecycle::assign_task(temp.path(), &task.id, &["missing".into()], false).is_err());
 }
+
+#[test]
+fn swarm_state_is_durable_and_status_is_derived_from_project_records() {
+    let temp = tempfile::tempdir().unwrap();
+    lifecycle::initialize(temp.path()).unwrap();
+    lifecycle::spawn_agent(temp.path(), "coder", "coder-1").unwrap();
+    lifecycle::create_task(temp.path(), "implementation", "Build it", "normal").unwrap();
+
+    let swarm =
+        lifecycle::initialize_swarm(temp.path(), "hierarchical-mesh", 15, "development").unwrap();
+    assert!(temp.path().join(".swarm/state.json").is_file());
+    assert_eq!(swarm.status, "ready");
+
+    let running = lifecycle::start_swarm(temp.path(), "Build the Rust port", "testing").unwrap();
+    assert_eq!(running.status, "running");
+    assert_eq!(running.objective.as_deref(), Some("Build the Rust port"));
+    let status = lifecycle::swarm_status(temp.path()).unwrap();
+    assert_eq!(status.swarm, Some(running));
+    assert_eq!(status.agents_total, 1);
+    assert_eq!(status.tasks_total, 1);
+
+    let completed = lifecycle::finish_swarm(temp.path(), true).unwrap();
+    assert_eq!(completed.status, "completed");
+    let stopped = lifecycle::stop_swarm(temp.path(), &completed.id).unwrap();
+    assert_eq!(stopped.status, "stopped");
+    assert!(lifecycle::initialize_swarm(temp.path(), "not-a-topology", 1, "development").is_err());
+    assert!(lifecycle::initialize_swarm(temp.path(), "mesh", 101, "development").is_err());
+}

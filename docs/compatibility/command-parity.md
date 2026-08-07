@@ -33,7 +33,7 @@ For every row:
 | Wave | Original top-level command | Status |
 | --- | --- | --- |
 | Core lifecycle | `init`, `start`, `status` | `init` and `status` have an initial native lifecycle implementation; source parity fixtures and `start` remain pending |
-| Core agents | `agent`, `swarm`, `task`, `session` | `agent spawn`/`list` and an initial durable `task` create/list/status/assign/cancel/retry surface exist; source-oracle differential fixtures, lifecycle execution, and the remaining families are pending |
+| Core agents | `agent`, `swarm`, `task`, `session` | `agent spawn`/`list`, initial durable `task` lifecycle, and initial durable `swarm` init/status/start/stop exist. Swarm start delegates only to the policy-gated native Codex scheduler; source-oracle differential fixtures and remaining subcommands/families are pending |
 | Core state/transport | `memory`, `mcp`, `config`, `migrate`, `hooks`, `workflow` | Pending |
 | Runtime operations | `hive-mind`, `process`, `daemon`, `version`, `doctor`, `completions` | Pending |
 | Safety and intelligence | `neural`, `security`, `performance`, `policy`, `embeddings`, `guidance`, `route`, `analyze`, `progress`, `verify` | Pending |
@@ -61,6 +61,6 @@ tested in Rust.
 | Family | Original subcommands |
 | --- | --- |
 | `agent` | `spawn`, `list` (`ls`), `status`, `stop` (`kill`), `metrics`, `pool`, `health`, `logs`, `wasm-status`, `wasm-create`, `wasm-prompt`, `wasm-gallery`, `publish` |
-| `swarm` | `init`, `start`, `status`, `stop`, `scale`, `coordinate`, `compress-message`, `pheromone`, `join` |
+| `swarm` | `init`, `start`, `status`, `stop` have initial durable native implementations. `start` uses the existing policy-gated native Codex scheduler without API keys; `scale`, `coordinate`, `compress-message`, `pheromone`, and `join` remain pending, as do source fixtures for all subcommands |
 | `task` | `create` (`new`, `add`), `list` (`ls`), `status` (`info`, `get`), `cancel` (`abort`, `stop`), `assign`, `retry` (`rerun`) — initial durable records and aliases implemented; not complete until source fixtures and live-dispatch evidence agree |
 | `session` | `list` (`ls`), `save` (`create`, `checkpoint`), `restore` (`load`), `delete` (`rm`, `remove`), `export`, `import`, `current` |

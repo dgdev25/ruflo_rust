@@ -14,6 +14,28 @@ pub struct ProjectStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SwarmRecord {
+    pub id: String,
+    pub topology: String,
+    pub max_agents: usize,
+    pub strategy: String,
+    pub status: String,
+    #[serde(default)]
+    pub objective: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SwarmStatus {
+    pub swarm: Option<SwarmRecord>,
+    pub agents_total: usize,
+    pub agents_active: usize,
+    pub tasks_total: usize,
+    pub tasks_completed: usize,
+    pub tasks_running: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentRecord {
     pub id: String,
     pub agent_type: String,
@@ -95,6 +117,118 @@ pub fn create_task(
         io::ErrorKind::AlreadyExists,
         "unable to allocate a unique task ID",
     ))
+}
+
+pub fn initialize_swarm(
+    project_root: &Path,
+    topology: &str,
+    max_agents: usize,
+    strategy: &str,
+) -> io::Result<SwarmRecord> {
+    status(project_root)?;
+    if max_agents == 0 || max_agents > 100 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "max agents must be between 1 and 100",
+        ));
+    }
+    let record = SwarmRecord {
+        id: format!("swarm-{}", unique_millis()),
+        topology: valid_topology(topology)?,
+        max_agents,
+        strategy: valid_strategy(strategy)?,
+        status: "ready".into(),
+        objective: None,
+    };
+    write_swarm(project_root, &record)?;
+    Ok(record)
+}
+
+pub fn swarm_status(project_root: &Path) -> io::Result<SwarmStatus> {
+    status(project_root)?;
+    let swarm = read_swarm(project_root)?;
+    let agents = list_agents(project_root)?;
+    let tasks = list_tasks(project_root)?;
+    let agents_active = agents
+        .iter()
+        .filter(|agent| matches!(agent.status.as_str(), "active" | "running" | "busy"))
+        .count();
+    let tasks_completed = tasks
+        .iter()
+        .filter(|task| matches!(task.status.as_str(), "completed" | "done"))
+        .count();
+    let tasks_running = tasks
+        .iter()
+        .filter(|task| matches!(task.status.as_str(), "running" | "in_progress"))
+        .count();
+    Ok(SwarmStatus {
+        swarm,
+        agents_total: agents.len(),
+        agents_active,
+        tasks_total: tasks.len(),
+        tasks_completed,
+        tasks_running,
+    })
+}
+
+pub fn start_swarm(
+    project_root: &Path,
+    objective: &str,
+    strategy: &str,
+) -> io::Result<SwarmRecord> {
+    if objective.trim().is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "swarm objective must not be empty",
+        ));
+    }
+    let mut swarm = read_swarm(project_root)?.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "no swarm is initialized in this directory",
+        )
+    })?;
+    if swarm.status == "stopped" {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "stopped swarm cannot be started; initialize a new swarm",
+        ));
+    }
+    swarm.strategy = valid_strategy(strategy)?;
+    swarm.objective = Some(objective.into());
+    swarm.status = "running".into();
+    write_swarm(project_root, &swarm)?;
+    Ok(swarm)
+}
+
+pub fn finish_swarm(project_root: &Path, succeeded: bool) -> io::Result<SwarmRecord> {
+    let mut swarm = read_swarm(project_root)?.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "no swarm is initialized in this directory",
+        )
+    })?;
+    swarm.status = if succeeded { "completed" } else { "failed" }.into();
+    write_swarm(project_root, &swarm)?;
+    Ok(swarm)
+}
+
+pub fn stop_swarm(project_root: &Path, swarm_id: &str) -> io::Result<SwarmRecord> {
+    let mut swarm = read_swarm(project_root)?.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "no swarm is initialized in this directory",
+        )
+    })?;
+    if swarm.id != swarm_id {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("swarm `{swarm_id}` does not exist"),
+        ));
+    }
+    swarm.status = "stopped".into();
+    write_swarm(project_root, &swarm)?;
+    Ok(swarm)
 }
 
 pub fn list_tasks(project_root: &Path) -> io::Result<Vec<TaskRecord>> {
@@ -274,6 +408,23 @@ fn write_if_absent(path: &Path, contents: &[u8]) -> io::Result<()> {
     fs::write(path, contents)
 }
 
+fn read_swarm(project_root: &Path) -> io::Result<Option<SwarmRecord>> {
+    let path = project_root.join(".swarm/state.json");
+    if !path.is_file() {
+        return Ok(None);
+    }
+    serde_json::from_slice(&fs::read(path)?)
+        .map(Some)
+        .map_err(io::Error::other)
+}
+
+fn write_swarm(project_root: &Path, swarm: &SwarmRecord) -> io::Result<()> {
+    fs::write(
+        project_root.join(".swarm/state.json"),
+        serde_json::to_vec_pretty(swarm).expect("swarm serializable"),
+    )
+}
+
 fn read_task(project_root: &Path, task_id: &str) -> io::Result<TaskRecord> {
     let task_id = safe_identifier(task_id)?;
     let path = project_root
@@ -310,6 +461,35 @@ fn default_max_retries() -> u32 {
 
 fn default_timeout_ms() -> u64 {
     300_000
+}
+
+fn unique_millis() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_millis()
+}
+
+fn valid_topology(value: &str) -> io::Result<String> {
+    match value {
+        "hierarchical" | "mesh" | "ring" | "star" | "hybrid" | "hierarchical-mesh"
+        | "pheromone-adaptive" => Ok(value.into()),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "unsupported swarm topology",
+        )),
+    }
+}
+
+fn valid_strategy(value: &str) -> io::Result<String> {
+    match value {
+        "specialized" | "balanced" | "adaptive" | "research" | "development" | "testing"
+        | "optimization" | "maintenance" | "analysis" => Ok(value.into()),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "unsupported swarm strategy",
+        )),
+    }
 }
 
 fn valid_priority(value: &str) -> io::Result<String> {

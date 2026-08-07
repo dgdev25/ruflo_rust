@@ -12,6 +12,7 @@ path = "src/lib.rs"
 
 [dependencies]
 ruflo-config = { path = "../ruflo-config" }
+ruflo-codex-cli = { path = "../ruflo-codex-cli" }
 ruflo-mcp = { path = "../ruflo-mcp" }
 ruflo-types = { path = "../ruflo-types" }
 serde = { workspace = true }

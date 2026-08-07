@@ -6,6 +6,19 @@ pub enum ParsedCommand {
     Help,
     Init,
     Status,
+    SwarmInit {
+        topology: String,
+        max_agents: usize,
+        strategy: String,
+    },
+    SwarmStatus,
+    SwarmStart {
+        objective: String,
+        strategy: String,
+    },
+    SwarmStop {
+        swarm_id: String,
+    },
     AgentSpawn {
         agent_type: String,
         name: String,
@@ -49,6 +62,45 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
         let name =
             option_value(&args, "--name", "-n").unwrap_or_else(|| format!("{agent_type}-native"));
         return Ok(ParsedCommand::AgentSpawn { agent_type, name });
+    }
+    if normalized.len() >= 2 && normalized[0] == "swarm" && normalized[1] == "init" {
+        let topology = if args.iter().any(|argument| argument == "--v3-mode") {
+            "hierarchical-mesh".into()
+        } else {
+            option_value(&args, "--topology", "-t").unwrap_or_else(|| "hierarchical".into())
+        };
+        let max_agents = option_value(&args, "--max-agents", "-m")
+            .unwrap_or_else(|| "15".into())
+            .parse()
+            .map_err(|_| "max agents must be a positive integer")?;
+        let strategy =
+            option_value(&args, "--strategy", "-s").unwrap_or_else(|| "development".into());
+        return Ok(ParsedCommand::SwarmInit {
+            topology,
+            max_agents,
+            strategy,
+        });
+    }
+    if normalized.len() >= 2 && normalized[0] == "swarm" && normalized[1] == "start" {
+        let objective = option_value(&args, "--objective", "-o")
+            .or_else(|| {
+                normalized
+                    .get(2)
+                    .filter(|value| !value.starts_with('-'))
+                    .map(|value| value.to_string())
+            })
+            .ok_or("swarm objective is required")?;
+        let strategy =
+            option_value(&args, "--strategy", "-s").unwrap_or_else(|| "development".into());
+        return Ok(ParsedCommand::SwarmStart {
+            objective,
+            strategy,
+        });
+    }
+    if normalized.len() >= 3 && normalized[0] == "swarm" && normalized[1] == "stop" {
+        return Ok(ParsedCommand::SwarmStop {
+            swarm_id: normalized[2].into(),
+        });
     }
     if normalized.len() >= 2
         && matches!(normalized[0], "task")
@@ -113,6 +165,7 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
         ["--help"] | ["-h"] | ["--quiet", "--help"] | ["-Q", "--help"] => Ok(ParsedCommand::Help),
         ["init"] => Ok(ParsedCommand::Init),
         ["status"] | ["status", "--json"] => Ok(ParsedCommand::Status),
+        ["swarm", "status"] => Ok(ParsedCommand::SwarmStatus),
         ["agent", "list"] | ["agent", "ls"] => Ok(ParsedCommand::AgentList),
         ["task", "list"] | ["task", "ls"] => Ok(ParsedCommand::TaskList),
         ["mcp", "start"] => Ok(ParsedCommand::McpStart),
@@ -168,6 +221,22 @@ mod tests {
                 reset_state: true,
                 ..
             })
+        ));
+    }
+
+    #[test]
+    fn swarm_options_preserve_v3_defaults_and_objective_forms() {
+        assert!(matches!(
+            parse(argv(&["swarm", "init", "--v3-mode"])),
+            Ok(ParsedCommand::SwarmInit { topology, max_agents: 15, .. }) if topology == "hierarchical-mesh"
+        ));
+        assert!(matches!(
+            parse(argv(&["swarm", "start", "-o", "Build API", "-s", "testing"])),
+            Ok(ParsedCommand::SwarmStart { objective, strategy }) if objective == "Build API" && strategy == "testing"
+        ));
+        assert!(matches!(
+            parse(argv(&["swarm", "stop", "swarm-1"])),
+            Ok(ParsedCommand::SwarmStop { swarm_id }) if swarm_id == "swarm-1"
         ));
     }
 }

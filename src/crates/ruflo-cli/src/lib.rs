@@ -130,6 +130,79 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
                 ExitCode::from(ERROR_EXIT)
             }
         },
+        Ok(ParsedCommand::SwarmInit {
+            topology,
+            max_agents,
+            strategy,
+        }) => match lifecycle::initialize_swarm(
+            &current_directory(),
+            &topology,
+            max_agents,
+            &strategy,
+        ) {
+            Ok(swarm) => {
+                println!(
+                    "Swarm {} initialized successfully ({}, max {} agents)",
+                    swarm.id, swarm.topology, swarm.max_agents
+                );
+                ExitCode::SUCCESS
+            }
+            Err(error) => task_error(error),
+        },
+        Ok(ParsedCommand::SwarmStatus) => match lifecycle::swarm_status(&current_directory()) {
+            Ok(status) => match status.swarm {
+                Some(swarm) => {
+                    println!("Swarm {} [{}]", swarm.id, swarm.status);
+                    println!(
+                        "Topology: {} | Strategy: {}",
+                        swarm.topology, swarm.strategy
+                    );
+                    println!(
+                        "Agents: {}/{} active",
+                        status.agents_active, status.agents_total
+                    );
+                    println!(
+                        "Tasks: {}/{} completed, {} running",
+                        status.tasks_completed, status.tasks_total, status.tasks_running
+                    );
+                    ExitCode::SUCCESS
+                }
+                None => {
+                    println!("No active swarm");
+                    ExitCode::SUCCESS
+                }
+            },
+            Err(error) => task_error(error),
+        },
+        Ok(ParsedCommand::SwarmStart {
+            objective,
+            strategy,
+        }) => {
+            let project_root = current_directory();
+            match lifecycle::start_swarm(&project_root, &objective, &strategy) {
+                Ok(swarm) => {
+                    println!("Starting swarm {}: {}", swarm.id, objective);
+                    let workers = swarm_worker_plan(&swarm, &objective);
+                    let code = ruflo_codex_cli::run_workers(&workers);
+                    let succeeded = code == ExitCode::SUCCESS;
+                    if let Err(error) = lifecycle::finish_swarm(&project_root, succeeded) {
+                        eprintln!("error: failed to persist swarm completion: {error}");
+                        return ExitCode::from(ERROR_EXIT);
+                    }
+                    code
+                }
+                Err(error) => task_error(error),
+            }
+        }
+        Ok(ParsedCommand::SwarmStop { swarm_id }) => {
+            match lifecycle::stop_swarm(&current_directory(), &swarm_id) {
+                Ok(swarm) => {
+                    println!("Swarm {} stopped", swarm.id);
+                    ExitCode::SUCCESS
+                }
+                Err(error) => task_error(error),
+            }
+        }
         Ok(ParsedCommand::AgentSpawn { agent_type, name }) => {
             match lifecycle::spawn_agent(&current_directory(), &agent_type, &name) {
                 Ok(agent) => {
@@ -275,4 +348,60 @@ fn current_directory() -> std::path::PathBuf {
 fn task_error(error: std::io::Error) -> ExitCode {
     eprintln!("error: {error}");
     ExitCode::from(ERROR_EXIT)
+}
+
+fn swarm_worker_plan(swarm: &lifecycle::SwarmRecord, objective: &str) -> Vec<String> {
+    let roles: &[&str] = match swarm.strategy.as_str() {
+        "research" => &[
+            "coordinator",
+            "researcher",
+            "researcher",
+            "researcher",
+            "researcher",
+            "analyst",
+            "analyst",
+        ],
+        "testing" => &["tester", "tester", "tester", "tester", "tester", "reviewer"],
+        "optimization" => &["optimizer", "analyst", "analyst", "coder", "coder"],
+        "maintenance" => &["coordinator", "coder", "coder", "researcher"],
+        "analysis" => &["analyst", "analyst", "analyst", "reviewer"],
+        "adaptive" => &["coordinator", "researcher", "coder", "coder", "coder"],
+        "balanced" => &[
+            "coordinator",
+            "coder",
+            "coder",
+            "coder",
+            "coder",
+            "reviewer",
+        ],
+        "specialized" => &[
+            "coordinator",
+            "researcher",
+            "architect",
+            "coder",
+            "coder",
+            "tester",
+            "reviewer",
+        ],
+        _ => &[
+            "coordinator",
+            "architect",
+            "coder",
+            "coder",
+            "coder",
+            "tester",
+            "tester",
+            "reviewer",
+        ],
+    };
+    let mut args = vec![
+        "--parallel-workers".into(),
+        "--namespace".into(),
+        format!("swarm-{}", swarm.id),
+    ];
+    for role in roles.iter().take(swarm.max_agents) {
+        args.push("--worker".into());
+        args.push(format!("codex:{role}:{objective}"));
+    }
+    args
 }

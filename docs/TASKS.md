@@ -39,6 +39,11 @@ named compatibility evidence and focused verification.
   `retry`/`rerun` now persist project-scoped records and enforce initial
   source-aligned assignment/cancellation/retry invariants. This remains
   incomplete pending source-oracle fixtures and live worker execution.
+- Swarm lifecycle increment: native `init`, `status`, `start`, and `stop`
+  persist `.swarm/state.json`, derive counts from durable task/agent records,
+  and hand `start` to the existing Codex-only, policy-gated scheduler. It is
+  incomplete pending source-oracle fixtures, remaining swarm subcommands, and
+  a live configured-Codex deployment receipt.
 - Then migrate every remaining command family from the original registry,
   capturing source fixtures before implementation and exercising real local
   Codex swarm deployment before release.

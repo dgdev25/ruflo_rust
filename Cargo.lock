@@ -640,6 +640,7 @@ dependencies = [
 name = "ruflo-cli"
 version = "3.34.0"
 dependencies = [
+ "ruflo-codex-cli",
  "ruflo-config",
  "ruflo-mcp",
  "ruflo-types",

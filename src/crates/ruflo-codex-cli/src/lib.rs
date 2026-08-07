@@ -134,6 +134,13 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
     }
 }
 
+/// Execute an already-parsed native Codex worker plan from another Ruflo
+/// command family. The scheduler still enforces project automation policy,
+/// worktree isolation, and the direct `codex exec` launch contract.
+pub fn run_workers(args: &[String]) -> ExitCode {
+    dual_scheduler::run(args)
+}
+
 fn invalid_worker_spec(args: &[String]) -> Option<String> {
     let mut index = 0;
     while index < args.len() {
