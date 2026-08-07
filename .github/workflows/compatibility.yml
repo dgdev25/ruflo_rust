@@ -15,8 +15,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install supply-chain verifier toolchain
+        uses: dtolnay/rust-toolchain@1.88.0
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
