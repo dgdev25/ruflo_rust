@@ -1,6 +1,6 @@
 # Native Ruflo Rebuild — Design Specification
 
-**Status:** Proposed for user review  
+**Status:** Approved  
 **Date:** 2026-08-07  
 **Requirements:** REQ-001 through REQ-013 in [PRD](../../PRD.md)
 
@@ -71,7 +71,9 @@ Every release writes a machine-readable capability manifest. Deferred calls retu
 
 Plugin manifests and declarative assets are validated against a versioned native contract. Existing executable JavaScript plugin code is neither embedded nor silently interpreted. A consumer receives one of: native support, a documented migration contract, or a deterministic unsupported response.
 
-Tool policy is checked before discovery and invocation. The runtime supports allowlists, denylists, and curated profiles; a denial wins. HTTP is disabled by default. All transports validate input, constrain paths before process access, apply timeouts/cancellation, redact secrets in diagnostics, and emit structured audit events. This satisfies REQ-009 and REQ-010.
+Tool policy is checked before discovery and invocation. The runtime supports allowlists, denylists, and curated profiles; a denial wins. HTTP is disabled by default; when enabled, it requires authenticated caller identity and server-side per-tool authorization that validates audience, issuer, expiry, and capability context. This satisfies REQ-009, REQ-010, and REQ-014.
+
+Hooks and plugins execute only explicit, allowlisted native actions. Arguments are structured and validated, the working directory and environment are bounded, and untrusted text is never interpolated into a shell command. Per-tool request-body, concurrency, execution-time, and rate limits apply before work begins. Persisted state, migration backups, and audit records use owner-only filesystem permissions, integrity validation, and configurable encryption-key handling; diagnostics never expose secrets. This satisfies REQ-015, REQ-016, and REQ-017.
 
 ## 6. Technology and dependency policy
 
@@ -85,11 +87,11 @@ The stateless HTTP implementation remains feature-gated until the selected Rust 
 
 The compatibility suite contains golden CLI fixtures, MCP schemas and round trips, curated persistence fixtures, and real rUvNet consumer tests. Paired MCP operations are tested end-to-end so a write through one tool is discoverable through its paired reader.
 
-The release matrix runs on each target architecture/operating system with native runners. Required gates are formatting, linting, unit and integration tests, differential fixtures, RVF/RVFA interoperability tests, lockfile audit, licence/source policy checks, SBOM generation, reproducible-artifact checks, and platform smoke tests for paths, locks, process signals, hooks, and stdout discipline. This satisfies REQ-002, REQ-003, REQ-005, REQ-007, and REQ-009.
+The release matrix runs on each target architecture/operating system with native runners. Required gates are formatting, linting, unit and integration tests, differential fixtures, RVF/RVFA interoperability tests, lockfile audit, licence/source policy checks, SBOM generation, reproducible-artifact checks, and platform smoke tests for paths, locks, process signals, hooks, stdout discipline, authorization denial, resource limits, and secret-safe diagnostics. This satisfies REQ-002, REQ-003, REQ-005, REQ-007, REQ-009, and REQ-014 through REQ-017.
 
 ## 8. Error handling and observability
 
-The domain defines stable categories: invalid input, unknown capability, unsupported wave, timeout/cancelled, lock conflict, migration failure, and upstream-adapter failure. The facade maps them consistently to CLI exit codes and MCP error objects. It attaches a correlation ID to every request and writes audit events without leaking secret values. A failed migration leaves its pre-migration backup and an actionable recovery instruction. This satisfies REQ-005, REQ-008, and REQ-009.
+The domain defines stable categories: invalid input, unauthenticated, unauthorized, unknown capability, unsupported wave, rate limited, timeout/cancelled, lock conflict, migration failure, and upstream-adapter failure. The facade maps them consistently to CLI exit codes and MCP error objects. It attaches a correlation ID to every request and writes audit events without leaking secret values. A failed migration leaves its pre-migration backup and an actionable recovery instruction. This satisfies REQ-005, REQ-008, REQ-009, and REQ-014 through REQ-017.
 
 ## 9. Reusable code and prior art
 
@@ -112,4 +114,5 @@ Reuse research and design critique ran through a Ruflo hierarchical swarm. The R
 - One dispatcher with stdio MCP in Wave 1 and stateless HTTP MCP in Wave 2.
 - RVF adapter integration with fixture-led legacy persistence migration.
 - Native plugin migration boundary with no embedded JavaScript execution.
-
+- Remote MCP identity and server-side capability authorization.
+- Native hook/plugin execution and resource-governance boundary.

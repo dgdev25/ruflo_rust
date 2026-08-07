@@ -38,6 +38,10 @@ Ruflo's current implementation exposes a broad CLI, MCP, memory, orchestration, 
 - REQ-011 (P1): The product shall provide a stateless HTTP MCP transport, disabled by default, using the shared compatibility dispatcher and explicit request handles for durable state.
 - REQ-012 (P1): The product shall publish a machine-readable capability manifest that identifies supported, migrated, and unsupported contracts per release.
 - REQ-013 (P2): The product shall add federation, advanced learning/security, appliance, and remaining plugin capabilities only after consumer-driven compatibility evidence is available.
+- REQ-014 (P0): When enabled, stateless HTTP MCP shall require authenticated caller identity, enforce per-tool authorization server-side, and reject requests with invalid audience, issuer, expiry, or capability context.
+- REQ-015 (P0): The product shall execute only allowlisted native hook/plugin actions with validated arguments, bounded environment and working-directory access, and no shell interpolation of untrusted input.
+- REQ-016 (P0): The product shall enforce configurable request-body, concurrency, execution-time, and rate limits before invoking expensive or mutating tools.
+- REQ-017 (P0): The product shall protect persisted state, migration backups, and audit records with owner-only filesystem permissions, integrity validation, and configurable encryption-key handling without logging secret material.
 
 ## Non-goals / out of scope
 
