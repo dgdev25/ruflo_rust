@@ -21,6 +21,11 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
+      # rust-cache reads the workspace MSRV and can switch the active toolchain;
+      # restore the verifier toolchain before building cargo-deny.
+      - name: Restore supply-chain verifier toolchain
+        uses: dtolnay/rust-toolchain@1.88.0
+
       - name: Install cargo-deny
         run: cargo install --locked --version "$CARGO_DENY_VERSION" cargo-deny
         shell: bash
