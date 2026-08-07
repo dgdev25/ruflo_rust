@@ -68,8 +68,42 @@ fn tasks_are_durable_project_scoped_records() {
         temp.path(),
         "implementation",
         "Build the native task lifecycle",
+        "high",
     )
     .unwrap();
     assert_eq!(task.status, "pending");
+    assert_eq!(task.priority, "high");
     assert_eq!(lifecycle::list_tasks(temp.path()).unwrap(), vec![task]);
+}
+
+#[test]
+fn task_lifecycle_enforces_assignment_cancellation_and_retry_contracts() {
+    let temp = tempfile::tempdir().unwrap();
+    lifecycle::initialize(temp.path()).unwrap();
+    lifecycle::spawn_agent(temp.path(), "coder", "coder-1").unwrap();
+    let task = lifecycle::create_task(temp.path(), "implementation", "Build it", "normal").unwrap();
+
+    let assigned =
+        lifecycle::assign_task(temp.path(), &task.id, &["coder-1".into()], false).unwrap();
+    assert_eq!(assigned.status, "assigned");
+    assert_eq!(assigned.assigned_agent_ids, ["coder-1"]);
+    assert_eq!(
+        lifecycle::get_task(temp.path(), &task.id).unwrap(),
+        assigned
+    );
+    assert!(lifecycle::cancel_task(temp.path(), &task.id, "operator stop").is_ok());
+    assert!(lifecycle::retry_task(temp.path(), &task.id, false).is_err());
+    let mut failed = lifecycle::get_task(temp.path(), &task.id).unwrap();
+    failed.status = "failed".into();
+    fs::write(
+        temp.path()
+            .join(".swarm/tasks")
+            .join(format!("{}.json", failed.id)),
+        serde_json::to_vec_pretty(&failed).unwrap(),
+    )
+    .unwrap();
+    let retried = lifecycle::retry_task(temp.path(), &task.id, false).unwrap();
+    assert_eq!(retried.status, "queued");
+    assert_eq!(retried.retry_count, 1);
+    assert!(lifecycle::assign_task(temp.path(), &task.id, &["missing".into()], false).is_err());
 }

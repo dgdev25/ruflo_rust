@@ -34,6 +34,11 @@ named compatibility evidence and focused verification.
   delivery ledger; do not count a command merely because it appears in help.
 - Implement the deployment-critical core first: lifecycle, agents, swarms,
   tasks, sessions, memory, and MCP.
+- Task lifecycle increment: native `create`/`new`/`add`, `list`/`ls`,
+  `status`/`info`/`get`, `assign`, `cancel`/`abort`/`stop`, and
+  `retry`/`rerun` now persist project-scoped records and enforce initial
+  source-aligned assignment/cancellation/retry invariants. This remains
+  incomplete pending source-oracle fixtures and live worker execution.
 - Then migrate every remaining command family from the original registry,
   capturing source fixtures before implementation and exercising real local
   Codex swarm deployment before release.

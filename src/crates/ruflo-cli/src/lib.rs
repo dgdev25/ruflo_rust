@@ -160,16 +160,20 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         Ok(ParsedCommand::TaskCreate {
             task_type,
             description,
-        }) => match lifecycle::create_task(&current_directory(), &task_type, &description) {
-            Ok(task) => {
-                println!("Task {} created successfully ({})", task.id, task.task_type);
-                ExitCode::SUCCESS
+            priority,
+        }) => {
+            match lifecycle::create_task(&current_directory(), &task_type, &description, &priority)
+            {
+                Ok(task) => {
+                    println!("Task {} created successfully ({})", task.id, task.task_type);
+                    ExitCode::SUCCESS
+                }
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    ExitCode::from(ERROR_EXIT)
+                }
             }
-            Err(error) => {
-                eprintln!("error: {error}");
-                ExitCode::from(ERROR_EXIT)
-            }
-        },
+        }
         Ok(ParsedCommand::TaskList) => match lifecycle::list_tasks(&current_directory()) {
             Ok(tasks) => {
                 for task in tasks {
@@ -181,6 +185,56 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
                 eprintln!("error: {error}");
                 ExitCode::from(ERROR_EXIT)
             }
+        },
+        Ok(ParsedCommand::TaskStatus { task_id }) => {
+            match lifecycle::get_task(&current_directory(), &task_id) {
+                Ok(task) => {
+                    println!(
+                        "{}\t{}\t{}\t{}",
+                        task.id, task.status, task.priority, task.description
+                    );
+                    ExitCode::SUCCESS
+                }
+                Err(error) => task_error(error),
+            }
+        }
+        Ok(ParsedCommand::TaskCancel { task_id, reason }) => {
+            match lifecycle::cancel_task(&current_directory(), &task_id, &reason) {
+                Ok(task) => {
+                    println!("Task {} cancelled", task.id);
+                    ExitCode::SUCCESS
+                }
+                Err(error) => task_error(error),
+            }
+        }
+        Ok(ParsedCommand::TaskAssign {
+            task_id,
+            agent_ids,
+            unassign,
+        }) => match lifecycle::assign_task(&current_directory(), &task_id, &agent_ids, unassign) {
+            Ok(task) => {
+                if unassign {
+                    println!("Task {} unassigned", task.id);
+                } else {
+                    println!(
+                        "Task {} assigned to {}",
+                        task.id,
+                        task.assigned_agent_ids.join(", ")
+                    );
+                }
+                ExitCode::SUCCESS
+            }
+            Err(error) => task_error(error),
+        },
+        Ok(ParsedCommand::TaskRetry {
+            task_id,
+            reset_state,
+        }) => match lifecycle::retry_task(&current_directory(), &task_id, reset_state) {
+            Ok(task) => {
+                println!("Task {} retried ({})", task.id, task.status);
+                ExitCode::SUCCESS
+            }
+            Err(error) => task_error(error),
         },
         Ok(ParsedCommand::McpStart) => {
             let config = match ruflo_config::EffectiveConfig::load() {
@@ -216,4 +270,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
 
 fn current_directory() -> std::path::PathBuf {
     std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+}
+
+fn task_error(error: std::io::Error) -> ExitCode {
+    eprintln!("error: {error}");
+    ExitCode::from(ERROR_EXIT)
 }

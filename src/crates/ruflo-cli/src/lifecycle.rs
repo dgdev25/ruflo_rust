@@ -1,5 +1,6 @@
 use std::fs;
 use std::io;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -20,17 +21,36 @@ pub struct AgentRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TaskRecord {
     pub id: String,
+    #[serde(rename = "type")]
     pub task_type: String,
     pub description: String,
+    #[serde(default = "normal_priority")]
+    pub priority: String,
     pub status: String,
+    #[serde(default)]
+    pub assigned_agent_ids: Vec<String>,
+    #[serde(default)]
+    pub dependencies: Vec<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub retry_count: u32,
+    #[serde(default = "default_max_retries")]
+    pub max_retries: u32,
+    #[serde(default = "default_timeout_ms")]
+    pub timeout_ms: u64,
+    #[serde(default)]
+    pub cancellation_reason: Option<String>,
 }
 
 pub fn create_task(
     project_root: &Path,
     task_type: &str,
     description: &str,
+    priority: &str,
 ) -> io::Result<TaskRecord> {
     status(project_root)?;
     if description.trim().is_empty() {
@@ -39,24 +59,42 @@ pub fn create_task(
             "task description must not be empty",
         ));
     }
-    let id = format!(
-        "task-{}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("clock")
-            .as_millis()
-    );
-    let record = TaskRecord {
-        id: id.clone(),
-        task_type: safe_identifier(task_type)?,
-        description: description.into(),
-        status: "pending".into(),
-    };
-    fs::write(
-        project_root.join(".swarm/tasks").join(format!("{id}.json")),
-        serde_json::to_vec_pretty(&record).expect("task serializable"),
-    )?;
-    Ok(record)
+    let priority = valid_priority(priority)?;
+    let base = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    for suffix in 0..1000_u32 {
+        let id = if suffix == 0 {
+            format!("task-{base}")
+        } else {
+            format!("task-{base}-{suffix}")
+        };
+        let record = TaskRecord {
+            id: id.clone(),
+            task_type: safe_identifier(task_type)?,
+            description: description.into(),
+            priority: priority.clone(),
+            status: "pending".into(),
+            assigned_agent_ids: Vec::new(),
+            dependencies: Vec::new(),
+            tags: Vec::new(),
+            retry_count: 0,
+            max_retries: default_max_retries(),
+            timeout_ms: default_timeout_ms(),
+            cancellation_reason: None,
+        };
+        let path = project_root.join(".swarm/tasks").join(format!("{id}.json"));
+        match write_new_json(&path, &record) {
+            Ok(()) => return Ok(record),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        "unable to allocate a unique task ID",
+    ))
 }
 
 pub fn list_tasks(project_root: &Path) -> io::Result<Vec<TaskRecord>> {
@@ -68,6 +106,88 @@ pub fn list_tasks(project_root: &Path) -> io::Result<Vec<TaskRecord>> {
         .collect::<Result<_, _>>()?;
     tasks.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(tasks)
+}
+
+pub fn get_task(project_root: &Path, task_id: &str) -> io::Result<TaskRecord> {
+    status(project_root)?;
+    read_task(project_root, task_id)
+}
+
+pub fn cancel_task(project_root: &Path, task_id: &str, reason: &str) -> io::Result<TaskRecord> {
+    let mut task = read_task(project_root, task_id)?;
+    if matches!(task.status.as_str(), "completed" | "failed") {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "cannot cancel finished tasks",
+        ));
+    }
+    task.status = "cancelled".into();
+    task.cancellation_reason = Some(reason.into());
+    write_task(project_root, &task)?;
+    Ok(task)
+}
+
+pub fn assign_task(
+    project_root: &Path,
+    task_id: &str,
+    agent_ids: &[String],
+    unassign: bool,
+) -> io::Result<TaskRecord> {
+    let mut task = read_task(project_root, task_id)?;
+    if !matches!(task.status.as_str(), "pending" | "queued") {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "can only assign queued or pending tasks",
+        ));
+    }
+    if unassign {
+        task.assigned_agent_ids.clear();
+        task.status = "pending".into();
+    } else {
+        for agent_id in agent_ids {
+            let agent_id = safe_identifier(agent_id)?;
+            if !project_root
+                .join(".swarm/agents")
+                .join(format!("{agent_id}.json"))
+                .is_file()
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("agent `{agent_id}` does not exist"),
+                ));
+            }
+        }
+        task.assigned_agent_ids = agent_ids.to_vec();
+        task.status = "assigned".into();
+    }
+    write_task(project_root, &task)?;
+    Ok(task)
+}
+
+pub fn retry_task(project_root: &Path, task_id: &str, reset_state: bool) -> io::Result<TaskRecord> {
+    let mut task = read_task(project_root, task_id)?;
+    if task.status != "failed" {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "can only retry failed tasks",
+        ));
+    }
+    if !reset_state && task.retry_count >= task.max_retries {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "task retry limit reached",
+        ));
+    }
+    if reset_state {
+        task.retry_count = 0;
+    } else {
+        task.retry_count += 1;
+    }
+    task.status = "queued".into();
+    task.assigned_agent_ids.clear();
+    task.cancellation_reason = None;
+    write_task(project_root, &task)?;
+    Ok(task)
 }
 
 pub fn spawn_agent(project_root: &Path, agent_type: &str, name: &str) -> io::Result<AgentRecord> {
@@ -152,6 +272,54 @@ fn write_if_absent(path: &Path, contents: &[u8]) -> io::Result<()> {
         return Ok(());
     }
     fs::write(path, contents)
+}
+
+fn read_task(project_root: &Path, task_id: &str) -> io::Result<TaskRecord> {
+    let task_id = safe_identifier(task_id)?;
+    let path = project_root
+        .join(".swarm/tasks")
+        .join(format!("{task_id}.json"));
+    serde_json::from_slice(&fs::read(path)?).map_err(io::Error::other)
+}
+
+fn write_task(project_root: &Path, task: &TaskRecord) -> io::Result<()> {
+    let task_id = safe_identifier(&task.id)?;
+    fs::write(
+        project_root
+            .join(".swarm/tasks")
+            .join(format!("{task_id}.json")),
+        serde_json::to_vec_pretty(task).expect("task serializable"),
+    )
+}
+
+fn write_new_json(path: &Path, record: &TaskRecord) -> io::Result<()> {
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)?;
+    file.write_all(&serde_json::to_vec_pretty(record).expect("task serializable"))
+}
+
+fn normal_priority() -> String {
+    "normal".into()
+}
+
+fn default_max_retries() -> u32 {
+    3
+}
+
+fn default_timeout_ms() -> u64 {
+    300_000
+}
+
+fn valid_priority(value: &str) -> io::Result<String> {
+    match value {
+        "critical" | "high" | "normal" | "low" => Ok(value.into()),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "priority must be critical, high, normal, or low",
+        )),
+    }
 }
 
 fn count_json(directory: PathBuf) -> io::Result<usize> {
