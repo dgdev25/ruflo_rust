@@ -2,12 +2,59 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
+
 const CONFIG: &str = "# Native Ruflo project configuration\nversion: 3\n";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectStatus {
     pub agents: usize,
     pub tasks: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentRecord {
+    pub id: String,
+    pub agent_type: String,
+    pub status: String,
+}
+
+pub fn spawn_agent(project_root: &Path, agent_type: &str, name: &str) -> io::Result<AgentRecord> {
+    status(project_root)?;
+    let id = safe_identifier(name)?;
+    let record = AgentRecord {
+        id: id.clone(),
+        agent_type: safe_identifier(agent_type)?,
+        status: "idle".into(),
+    };
+    let path = project_root
+        .join(".swarm/agents")
+        .join(format!("{id}.json"));
+    if path.exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            format!("agent `{id}` already exists"),
+        ));
+    }
+    fs::write(
+        path,
+        serde_json::to_vec_pretty(&record).expect("agent record is serializable"),
+    )?;
+    Ok(record)
+}
+
+pub fn list_agents(project_root: &Path) -> io::Result<Vec<AgentRecord>> {
+    status(project_root)?;
+    let mut agents: Vec<AgentRecord> = Vec::new();
+    for entry in fs::read_dir(project_root.join(".swarm/agents"))? {
+        let entry = entry?;
+        if entry.path().extension().is_some_and(|ext| ext == "json") {
+            agents
+                .push(serde_json::from_slice(&fs::read(entry.path())?).map_err(io::Error::other)?);
+        }
+    }
+    agents.sort_by(|left, right| left.id.cmp(&right.id));
+    Ok(agents)
 }
 
 pub fn initialize(project_root: &Path) -> io::Result<()> {
@@ -64,4 +111,18 @@ fn count_json(directory: PathBuf) -> io::Result<usize> {
         let entry = entry?;
         Ok(count + usize::from(entry.path().extension().is_some_and(|ext| ext == "json")))
     })
+}
+
+fn safe_identifier(value: &str) -> io::Result<String> {
+    if value.is_empty()
+        || !value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "identifier must contain only letters, digits, '-' or '_'",
+        ));
+    }
+    Ok(value.into())
 }

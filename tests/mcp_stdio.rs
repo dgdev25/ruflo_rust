@@ -22,12 +22,14 @@ fn tools_list_matches_checked_in_fixture() {
 
 #[test]
 fn tools_call_dispatches_from_the_same_registry() {
-    let output = run_stdio(
+    let project = tempfile::TempDir::new().unwrap();
+    let output = run_stdio_in(
         "ruflo",
         &[
             r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"memory_search","arguments":{"query":"auth"}}}"#,
         ],
         &[],
+        project.path(),
     );
 
     assert!(output.status.success());

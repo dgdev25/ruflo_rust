@@ -643,6 +643,8 @@ dependencies = [
  "ruflo-config",
  "ruflo-mcp",
  "ruflo-types",
+ "serde",
+ "serde_json",
  "tempfile",
 ]
 

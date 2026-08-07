@@ -33,7 +33,7 @@ For every row:
 | Wave | Original top-level command | Status |
 | --- | --- | --- |
 | Core lifecycle | `init`, `start`, `status` | `init` and `status` have an initial native lifecycle implementation; source parity fixtures and `start` remain pending |
-| Core agents | `agent`, `swarm`, `task`, `session` | Pending |
+| Core agents | `agent`, `swarm`, `task`, `session` | `agent spawn` and `agent list` have durable native project records; remaining subcommands and families are pending |
 | Core state/transport | `memory`, `mcp`, `config`, `migrate`, `hooks`, `workflow` | Pending |
 | Runtime operations | `hive-mind`, `process`, `daemon`, `version`, `doctor`, `completions` | Pending |
 | Safety and intelligence | `neural`, `security`, `performance`, `policy`, `embeddings`, `guidance`, `route`, `analyze`, `progress`, `verify` | Pending |

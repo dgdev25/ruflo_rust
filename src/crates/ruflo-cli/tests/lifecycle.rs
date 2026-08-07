@@ -45,3 +45,17 @@ fn status_requires_initialization_and_counts_native_records() {
     assert_eq!(status.agents, 1);
     assert_eq!(status.tasks, 1);
 }
+
+#[test]
+fn agents_are_durable_project_scoped_records() {
+    let temp = tempfile::tempdir().expect("temporary project");
+    lifecycle::initialize(temp.path()).expect("initialize project");
+    let agent = lifecycle::spawn_agent(temp.path(), "coder", "coder-1").expect("spawn agent");
+    assert_eq!(agent.status, "idle");
+    assert_eq!(
+        lifecycle::list_agents(temp.path()).expect("list agents"),
+        vec![agent]
+    );
+    assert!(lifecycle::spawn_agent(temp.path(), "coder", "coder-1").is_err());
+    assert!(lifecycle::spawn_agent(temp.path(), "coder", "../../escape").is_err());
+}

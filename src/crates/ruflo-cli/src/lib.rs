@@ -130,6 +130,33 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
                 ExitCode::from(ERROR_EXIT)
             }
         },
+        Ok(ParsedCommand::AgentSpawn { agent_type, name }) => {
+            match lifecycle::spawn_agent(&current_directory(), &agent_type, &name) {
+                Ok(agent) => {
+                    println!(
+                        "Agent {} spawned successfully ({})",
+                        agent.id, agent.agent_type
+                    );
+                    ExitCode::SUCCESS
+                }
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    ExitCode::from(ERROR_EXIT)
+                }
+            }
+        }
+        Ok(ParsedCommand::AgentList) => match lifecycle::list_agents(&current_directory()) {
+            Ok(agents) => {
+                for agent in agents {
+                    println!("{}\t{}\t{}", agent.id, agent.agent_type, agent.status);
+                }
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("error: {error}");
+                ExitCode::from(ERROR_EXIT)
+            }
+        },
         Ok(ParsedCommand::McpStart) => {
             let config = match ruflo_config::EffectiveConfig::load() {
                 Ok(config) => config,
