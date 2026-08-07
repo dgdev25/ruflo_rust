@@ -26,7 +26,8 @@ The fresh verification run then exposed an independent supply-chain issue:
 `scripts/audit-supply-chain.sh` created Cargo Audit's exact advisory-database
 clone destination before Cargo Audit could initialize it. The CI target cache
 could restore that empty directory. The script now creates only its parent,
-and CI uses a per-run temporary advisory database outside the target cache.
+and selects a unique advisory database per GitHub run to avoid a restored
+empty clone destination.
 
 ## Verification
 

@@ -204,7 +204,7 @@ PY
 fi
 
 if require_cmd cargo; then
-  audit_db_dir="${RUFLO_AUDIT_DB_DIR:-$workspace_root/target/supply-chain/advisory-db}"
+  audit_db_dir="${RUFLO_AUDIT_DB_DIR:-$workspace_root/target/supply-chain/advisory-db-${GITHUB_RUN_ID:-local}}"
   # cargo-audit initializes this exact directory as a git clone. Creating the
   # clone destination first makes first-run audits fail, particularly when a
   # build cache later restores the empty directory.
