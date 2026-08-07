@@ -28,6 +28,12 @@ Calls to `ruflo__memory_store` and `ruflo__memory_search` through the bridge's
 `/mcp` HTTP endpoint completed a durable native-memory round trip. No model
 provider or API key was used.
 
+The source bridge now has a focused dependency-free Node regression test:
+`npm run test:native-child`. It launches the real bridge with a fake native
+stdio child, verifies the direct fixed `mcp start` argument vector, verifies
+`ruflo__memory_store` is prefix-stripped before forwarding, and covers the
+kill switch below. The test does not require a model provider or API key.
+
 ## Rollback run
 
 The same entrypoint was restarted with:

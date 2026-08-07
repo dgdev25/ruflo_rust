@@ -13,6 +13,9 @@ general replacement release.
   binary. It discovered four `ruflo__*` tools, completed a namespaced
   `memory_store`/`memory_search` round trip through `/mcp`, and then proved
   that `ENABLE_RUFLO=false` removes every Ruflo group and starts no child.
+- Regression coverage: `ruflo/src/ruvocal/mcp-bridge/test-native-ruflo-child.js`
+  runs the actual bridge against a fake native stdio child and verifies the
+  fixed `mcp start` arguments, prefix stripping, and kill-switch behavior.
 - Release and supply-chain evidence: the repository's local locked verification
   suite (`fmt`, tests, Clippy, fixture, consumer-inventory, and supply-chain
   checks). GitHub Actions are intentionally absent from this repository.
