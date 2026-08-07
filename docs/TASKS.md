@@ -17,6 +17,7 @@ named compatibility evidence and focused verification.
 | 7. Runtime lifecycle handles | Complete | `2963195`; task cancellation and lifecycle invariants pass across the workspace suite. |
 | 8. Persistence ports and migration safety | Complete | `9ab4c98`; rollback, locking, root validation, and backup permission tests pass. |
 | 9. RVF adapter facade | Complete | `8d54f45`; public immutable RuVector pin and AgentDB/Agentic Flow interop tests pass; unavailable typed unknown-segment round trip is explicitly tracked with upstream evidence. |
+| 10. Native hook and plugin action boundary | Complete | `ba86b04`; declarative manifests, direct allowlisted execution, and injection/path/timeout/concurrency tests pass. |
 
 ## Remaining execution order
 
@@ -75,7 +76,7 @@ named compatibility evidence and focused verification.
 - Translate objects only; never hand-encode RVF, indexes, vectors, quantization, or witnesses.
 - Verify AgentDB/Agentic Flow fixture interop and stable search order; record any typed-API gap in the fixture evidence rather than hand-encoding RVF.
 
-### 10. Native hook and plugin action boundary
+### 10. Native hook and plugin action boundary — complete
 
 - Accept only versioned declarative manifests and enum-based native actions.
 - Canonicalize project-relative working directories and invoke only allowlisted binaries with structured arguments.
