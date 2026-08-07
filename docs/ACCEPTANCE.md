@@ -18,6 +18,8 @@ create project files nor launch a Codex or Claude worker.
   fixture for deterministic `memory_search` dispatch.
 - [x] Close the native P0 policy-denial evidence gap with a replayed denied
   `memory_search` JSON-RPC fixture.
+- [x] Bind P0 migration/RVF adapter interop to checked-in synthetic scenarios
+  for AgentDB stable ordering, compaction, and Agentic Flow reopening.
 - [ ] Implement the native dual-run scheduler behind explicit policy and
   worktree boundaries; it must launch `codex exec` only when a caller invokes
   a worker-running command.

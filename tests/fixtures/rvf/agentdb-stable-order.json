@@ -1,0 +1,12 @@
+{
+  "dimension": 2,
+  "ef_search": 32,
+  "records": [
+    { "id": 30, "vector": [1.0, 0.0] },
+    { "id": 10, "vector": [1.0, 0.0] },
+    { "id": 20, "vector": [1.0, 0.0] }
+  ],
+  "query": [1.0, 0.0],
+  "limit": 3,
+  "expected_ids": [10, 20, 30]
+}

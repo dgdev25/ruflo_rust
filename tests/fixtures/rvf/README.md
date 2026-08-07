@@ -6,9 +6,9 @@ Task 9 implementation evidence as of 2026-08-07.
 
 ## Verified inputs
 
-- `agentdb-compatible.rvf` is generated inside `tests/rvf_interop.rs` through `RvfPersistencePort::create_agentdb`, then reopened through the pinned upstream `rvf-adapter-agentdb` API.
-- `agentdb-compact.rvf` is generated inside `tests/rvf_interop.rs`, compacted through the same facade, then reopened to prove the query surface still works.
-- `agentic-flow/swarm.rvf` is generated inside `tests/rvf_interop.rs` through `RvfPersistencePort::create_agentic_flow`, then reopened through the pinned upstream `rvf-adapter-agentic-flow` API to prove the store itself persists.
+- `agentdb-stable-order.json` drives creation and reopening through the pinned upstream `rvf-adapter-agentdb` API.
+- `agentdb-compaction.json` drives compaction and reopen through the same facade.
+- `agentic-flow-reopen.json` drives creation and reopen through the pinned upstream `rvf-adapter-agentic-flow` API.
 
 ## Verified behavior
 

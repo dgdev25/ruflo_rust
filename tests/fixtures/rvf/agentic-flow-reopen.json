@@ -1,0 +1,10 @@
+{
+  "agent_id": "agent-007",
+  "dimension": 4,
+  "key": "handoff",
+  "value": "persisted",
+  "namespace": "shared",
+  "vector": [1.0, 0.5, 0.25, 0.125],
+  "expected_id": 1,
+  "expected_total_vectors": 1
+}

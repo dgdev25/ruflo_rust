@@ -1,0 +1,13 @@
+{
+  "dimension": 4,
+  "ef_search": 64,
+  "records": [
+    { "id": 1, "vector": [1.0, 0.0, 0.0, 0.0] },
+    { "id": 2, "vector": [0.0, 1.0, 0.0, 0.0] },
+    { "id": 3, "vector": [0.0, 0.0, 1.0, 0.0] }
+  ],
+  "query": [0.0, 1.0, 0.0, 0.0],
+  "limit": 3,
+  "expected_ids": [2],
+  "expected_reclaimed": 0
+}
