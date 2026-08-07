@@ -7,8 +7,9 @@ use ruflo_types::RufloError;
 use rusqlite::{params, Connection, OptionalExtension};
 
 /// Minimal, SQLite-compatible projection of Ruflo's public `memory_entries`
-/// contract.  Semantic embedding data remains owned by the RVF adapter wave;
-/// this store provides durable exact reads and keyword fallback search.
+/// contract. Semantic embedding data remains owned by the RVF AgentDB
+/// adapter; this store provides durable exact reads, listing, and the legacy
+/// keyword fallback used when semantic search is unavailable.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemoryEntry {
     pub id: String,
@@ -17,6 +18,7 @@ pub struct MemoryEntry {
     pub content: String,
     pub memory_type: String,
     pub provenance_type: String,
+    pub semantic_id: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,6 +98,7 @@ impl SqliteMemoryStore {
         connection
             .execute_batch(MEMORY_SCHEMA)
             .map_err(map_sqlite("memory.schema"))?;
+        ensure_semantic_id_column(&connection)?;
         Ok(Self {
             connection,
             database_path,
@@ -168,7 +171,7 @@ impl SqliteMemoryStore {
         let mut entries = Vec::new();
         if let Some(namespace) = namespace {
             let mut statement = self.connection.prepare(
-                "SELECT id, key, namespace, content, type, provenance_type FROM memory_entries \
+                "SELECT id, key, namespace, content, type, provenance_type, semantic_id FROM memory_entries \
                  WHERE status = 'active' AND namespace = ?1 AND lower(content) LIKE ?2 \
                  ORDER BY updated_at DESC, id ASC LIMIT ?3",
             ).map_err(map_sqlite("memory.search"))?;
@@ -180,7 +183,7 @@ impl SqliteMemoryStore {
             }
         } else {
             let mut statement = self.connection.prepare(
-                "SELECT id, key, namespace, content, type, provenance_type FROM memory_entries \
+                "SELECT id, key, namespace, content, type, provenance_type, semantic_id FROM memory_entries \
                  WHERE status = 'active' AND lower(content) LIKE ?1 \
                  ORDER BY updated_at DESC, id ASC LIMIT ?2",
             ).map_err(map_sqlite("memory.search"))?;
@@ -192,6 +195,46 @@ impl SqliteMemoryStore {
             }
         }
         Ok(entries)
+    }
+
+    /// Bind an entry to its existing AgentDB/RVF numeric vector identifier.
+    /// The metadata stays in SQLite; vector bytes and HNSW layout stay owned
+    /// by the upstream RVF adapter.
+    pub fn set_semantic_id(
+        &self,
+        namespace: &str,
+        key: &str,
+        semantic_id: u64,
+    ) -> Result<(), RufloError> {
+        let semantic_id = i64::try_from(semantic_id).map_err(|_| {
+            RufloError::invalid_input("memory.semantic_id", "semantic ID exceeds SQLite range")
+        })?;
+        let updated = self.connection.execute(
+            "UPDATE memory_entries SET semantic_id = ?1 WHERE namespace = ?2 AND key = ?3 AND status = 'active'",
+            params![semantic_id, namespace, key],
+        ).map_err(map_sqlite("memory.semantic_id"))?;
+        if updated == 0 {
+            return Err(RufloError::invalid_input(
+                "memory.not_found",
+                "cannot bind a vector to a missing memory entry",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn retrieve_semantic_id(
+        &self,
+        semantic_id: u64,
+    ) -> Result<Option<MemoryEntry>, RufloError> {
+        let semantic_id = i64::try_from(semantic_id).map_err(|_| {
+            RufloError::invalid_input("memory.semantic_id", "semantic ID exceeds SQLite range")
+        })?;
+        self.connection.query_row(
+            "SELECT id, key, namespace, content, type, provenance_type, semantic_id FROM memory_entries \
+             WHERE semantic_id = ?1 AND status = 'active'",
+            params![semantic_id],
+            row_to_entry,
+        ).optional().map_err(map_sqlite("memory.retrieve_semantic"))
     }
 
     /// Enumerate active memory entries for compatibility views such as
@@ -208,7 +251,7 @@ impl SqliteMemoryStore {
             let mut statement = self
                 .connection
                 .prepare(
-                    "SELECT id, key, namespace, content, type, provenance_type FROM memory_entries \
+                    "SELECT id, key, namespace, content, type, provenance_type, semantic_id FROM memory_entries \
                      WHERE status = 'active' AND namespace = ?1 \
                      ORDER BY updated_at DESC, id ASC LIMIT ?2",
                 )
@@ -223,7 +266,7 @@ impl SqliteMemoryStore {
             let mut statement = self
                 .connection
                 .prepare(
-                    "SELECT id, key, namespace, content, type, provenance_type FROM memory_entries \
+                    "SELECT id, key, namespace, content, type, provenance_type, semantic_id FROM memory_entries \
                      WHERE status = 'active' ORDER BY updated_at DESC, id ASC LIMIT ?1",
                 )
                 .map_err(map_sqlite("memory.list"))?;
@@ -240,7 +283,7 @@ impl SqliteMemoryStore {
     fn find(&self, namespace: &str, key: &str) -> Result<Option<MemoryEntry>, RufloError> {
         self.connection
             .query_row(
-                "SELECT id, key, namespace, content, type, provenance_type FROM memory_entries \
+                "SELECT id, key, namespace, content, type, provenance_type, semantic_id FROM memory_entries \
                  WHERE namespace = ?1 AND key = ?2 AND status = 'active'",
                 params![namespace, key],
                 row_to_entry,
@@ -262,6 +305,7 @@ CREATE TABLE IF NOT EXISTS memory_entries (
   embedding TEXT,
   embedding_model TEXT DEFAULT 'local',
   embedding_dimensions INTEGER,
+  semantic_id INTEGER UNIQUE,
   tags TEXT,
   metadata TEXT,
   owner_id TEXT,
@@ -279,6 +323,33 @@ CREATE INDEX IF NOT EXISTS idx_memory_key ON memory_entries(key);
 CREATE INDEX IF NOT EXISTS idx_memory_status ON memory_entries(status);
 "#;
 
+fn ensure_semantic_id_column(connection: &Connection) -> Result<(), RufloError> {
+    let mut statement = connection
+        .prepare("PRAGMA table_info(memory_entries)")
+        .map_err(map_sqlite("memory.schema"))?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(map_sqlite("memory.schema"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(map_sqlite("memory.schema"))?;
+    if !columns.iter().any(|column| column == "semantic_id") {
+        connection
+            .execute(
+                "ALTER TABLE memory_entries ADD COLUMN semantic_id INTEGER",
+                [],
+            )
+            .map_err(map_sqlite("memory.schema"))?;
+    }
+    connection
+        .execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_semantic_id \
+             ON memory_entries(semantic_id) WHERE semantic_id IS NOT NULL",
+            [],
+        )
+        .map_err(map_sqlite("memory.schema"))?;
+    Ok(())
+}
+
 fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemoryEntry> {
     Ok(MemoryEntry {
         id: row.get(0)?,
@@ -287,6 +358,7 @@ fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemoryEntry> {
         content: row.get(3)?,
         memory_type: row.get(4)?,
         provenance_type: row.get(5)?,
+        semantic_id: row.get::<_, Option<i64>>(6)?.map(|value| value as u64),
     })
 }
 

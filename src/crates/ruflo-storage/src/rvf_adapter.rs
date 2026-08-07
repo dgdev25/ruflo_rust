@@ -178,6 +178,20 @@ impl RvfPersistencePort {
         }
     }
 
+    /// Remove AgentDB vectors before replacing an upserted memory entry.
+    ///
+    /// Vector mutation stays delegated to the upstream RVF adapter; Ruflo
+    /// never edits an RVF file or HNSW index directly.
+    pub fn delete_agentdb(&mut self, ids: &[u64]) -> Result<u64, RufloError> {
+        match self {
+            Self::AgentDb(store) => store.delete_vectors(ids).map_err(map_upstream_error),
+            Self::AgenticFlow(_) => Err(RufloError::invalid_input(
+                "storage.rvf.backend",
+                "agentdb delete requires an AgentDB RVF backend",
+            )),
+        }
+    }
+
     pub fn compact_agentdb(&mut self) -> Result<u64, RufloError> {
         match self {
             Self::AgentDb(store) => store.compact().map_err(map_upstream_error),

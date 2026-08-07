@@ -684,6 +684,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ruflo-memory"
+version = "0.1.0"
+dependencies = [
+ "ruflo-storage",
+ "ruflo-types",
+ "tempfile",
+]
+
+[[package]]
 name = "ruflo-runtime"
 version = "0.1.0"
 dependencies = [

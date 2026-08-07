@@ -1,0 +1,15 @@
+[package]
+name = "ruflo-memory"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "Native Ruflo semantic-memory facade over SQLite metadata and RVF AgentDB indexing."
+
+[dependencies]
+ruflo-storage = { path = "../ruflo-storage" }
+ruflo-types = { path = "../ruflo-types" }
+
+[dev-dependencies]
+tempfile = { workspace = true }

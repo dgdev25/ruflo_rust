@@ -49,6 +49,11 @@ named compatibility evidence and focused verification.
   snapshot and restore durable agent/task/swarm records. Memory remains on the
   existing storage boundary. This is incomplete pending source fixtures and
   optional selection-flag/MCP parity.
+- Memory increment: `ruflo-memory` now composes existing SQLite metadata with
+  the upstream AgentDB/RVF adapter and verifies store, close/reopen, semantic
+  search, and vector upsert. It deliberately requires an injected real
+  embedding provider; production 384-dimension embedding selection, MCP
+  wiring, source fixtures, and command parity remain open.
 - Then migrate every remaining command family from the original registry,
   capturing source fixtures before implementation and exercising real local
   Codex swarm deployment before release.

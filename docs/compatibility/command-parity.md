@@ -34,7 +34,7 @@ For every row:
 | --- | --- | --- |
 | Core lifecycle | `init`, `start`, `status` | `init` and `status` have an initial native lifecycle implementation; source parity fixtures and `start` remain pending |
 | Core agents | `agent`, `swarm`, `task`, `session` | `agent spawn`/`list`, initial durable `task` lifecycle, `swarm` init/status/start/stop, and `session` save/list/restore/delete/export/import/current exist. Swarm start delegates only to the policy-gated native Codex scheduler; source-oracle differential fixtures and remaining subcommands/families are pending |
-| Core state/transport | `memory`, `mcp`, `config`, `migrate`, `hooks`, `workflow` | Pending |
+| Core state/transport | `memory`, `mcp`, `config`, `migrate`, `hooks`, `workflow` | `memory` has a tested native metadata-plus-RVF semantic facade, but production embedding selection, MCP wiring, and source-oracle fixtures remain pending; all other families are pending |
 | Runtime operations | `hive-mind`, `process`, `daemon`, `version`, `doctor`, `completions` | Pending |
 | Safety and intelligence | `neural`, `security`, `performance`, `policy`, `embeddings`, `guidance`, `route`, `analyze`, `progress`, `verify` | Pending |
 | rUv integration | `ruvector`, `transport`, `claims`, `issues`, `providers`, `plugins` | Pending |
@@ -51,6 +51,17 @@ shared memory, and run the standard stdio MCP endpoint.
 
 Later waves may use existing native rUv components at their stable boundaries;
 they must not reimplement RuVector, RVF, AgentDB, or Agentic Flow.
+
+### Memory boundary (implemented increment, not completion)
+
+`ruflo-memory` owns the unified command-facing service: exact records and
+listing use the existing SQLite-compatible `memory_entries` projection, while
+AgentDB's existing RVF adapter owns vector bytes, vector replacement, and
+semantic search. The facade has verified create/store/close/reopen/search and
+upsert lifecycle tests with an injected embedding provider. It deliberately
+does not substitute hash vectors for real embeddings, and therefore cannot be
+claimed compatible until a production 384-dimension provider is selected and
+wired through the MCP command contract.
 
 ## Captured core subcommand contracts
 
