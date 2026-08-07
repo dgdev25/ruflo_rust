@@ -15,6 +15,7 @@ named compatibility evidence and focused verification.
 | 5. Capability/configuration/policy layer | Complete | `6ed4b55`; precedence, manifest, denial, and resource-limit tests pass. |
 | 6. Shared stdio MCP dispatcher | Complete | `1eb3994`; JSON-RPC protocol, dispatcher, errors, and denial tests pass. |
 | 7. Runtime lifecycle handles | Complete | `2963195`; task cancellation and lifecycle invariants pass across the workspace suite. |
+| 8. Persistence ports and migration safety | Complete | `9ab4c98`; rollback, locking, root validation, and backup permission tests pass. |
 
 ## Remaining execution order
 
@@ -60,7 +61,7 @@ named compatibility evidence and focused verification.
 - Add topology analysis only once Wave 0 fixtures demand it.
 - Verify invalid transitions, duplicate cancellation, and unknown-ID errors.
 
-### 8. Persistence ports and safe legacy migration
+### 8. Persistence ports and safe legacy migration — complete
 
 - Provide open/migrate/backup/commit/rollback port semantics.
 - Use project-scoped locks, same-filesystem owner-only backups, markers, validation, atomic commit, and rollback metadata.
