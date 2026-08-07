@@ -24,6 +24,9 @@ pub enum ParsedCommand {
         target_agents: usize,
         agent_type: Option<String>,
     },
+    SwarmCoordinate {
+        agents: usize,
+    },
     SessionSave {
         name: String,
         description: String,
@@ -267,6 +270,16 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             agent_type: option_value(&args, "--type", "-t"),
         });
     }
+    if normalized.len() >= 2 && normalized[0] == "swarm" && normalized[1] == "coordinate" {
+        let agents = option_value(&args, "--agents", "--agents")
+            .unwrap_or_else(|| "15".into())
+            .parse()
+            .map_err(|_| "coordination agent count must be a positive integer")?;
+        if !(1..=15).contains(&agents) {
+            return Err("coordination agent count must be between 1 and 15".into());
+        }
+        return Ok(ParsedCommand::SwarmCoordinate { agents });
+    }
     if normalized.len() >= 2
         && normalized[0] == "session"
         && matches!(normalized[1], "save" | "create" | "checkpoint")
@@ -449,6 +462,10 @@ mod tests {
             parse(argv(&["swarm", "scale", "swarm-1", "-a", "3", "-t", "coder"])),
             Ok(ParsedCommand::SwarmScale { swarm_id, target_agents: 3, agent_type: Some(agent_type) })
                 if swarm_id == "swarm-1" && agent_type == "coder"
+        ));
+        assert!(matches!(
+            parse(argv(&["swarm", "coordinate", "--agents", "5"])),
+            Ok(ParsedCommand::SwarmCoordinate { agents: 5 })
         ));
     }
 

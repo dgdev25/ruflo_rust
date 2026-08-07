@@ -264,6 +264,19 @@ fn swarm_scale_durably_reconciles_the_native_agent_registry() {
 }
 
 #[test]
+fn v3_coordinate_persists_the_requested_role_slots() {
+    let temp = tempfile::tempdir().unwrap();
+    lifecycle::initialize(temp.path()).unwrap();
+    let swarm = lifecycle::coordinate_swarm(temp.path(), 3).unwrap();
+    assert_eq!(swarm.topology, "hierarchical-mesh");
+    assert_eq!(swarm.strategy, "specialized");
+    let agents = lifecycle::list_agents(temp.path()).unwrap();
+    assert_eq!(agents.len(), 3);
+    assert_eq!(agents[0].agent_type, "queen-coordinator");
+    assert!(lifecycle::coordinate_swarm(temp.path(), 16).is_err());
+}
+
+#[test]
 fn sessions_snapshot_restore_export_import_and_delete_project_state() {
     let temp = tempfile::tempdir().unwrap();
     lifecycle::initialize(temp.path()).unwrap();

@@ -463,6 +463,58 @@ pub fn scale_swarm(
     })
 }
 
+pub fn coordinate_swarm(project_root: &Path, agents: usize) -> io::Result<SwarmRecord> {
+    if !(1..=15).contains(&agents) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "coordination agent count must be between 1 and 15",
+        ));
+    }
+    status(project_root)?;
+    let roles = [
+        "queen-coordinator",
+        "security-architect",
+        "security-auditor",
+        "test-architect",
+        "core-architect",
+        "memory-specialist",
+        "swarm-specialist",
+        "integration-architect",
+        "performance-engineer",
+        "cli-developer",
+        "hooks-developer",
+        "mcp-specialist",
+        "project-coordinator",
+        "documentation-lead",
+        "devops-engineer",
+    ];
+    let mut swarm = read_swarm(project_root)?.unwrap_or(SwarmRecord {
+        id: format!("swarm-{}", unique_millis()),
+        topology: "hierarchical-mesh".into(),
+        max_agents: agents,
+        strategy: "specialized".into(),
+        status: "ready".into(),
+        objective: None,
+    });
+    if swarm.status == "stopped" {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "stopped swarm cannot coordinate",
+        ));
+    }
+    swarm.topology = "hierarchical-mesh".into();
+    swarm.strategy = "specialized".into();
+    swarm.max_agents = agents;
+    for (index, role) in roles.iter().take(agents).enumerate() {
+        let id = format!("v3-{:02}-{}", index + 1, role);
+        if get_agent(project_root, &id).is_err() {
+            spawn_agent(project_root, role, &id)?;
+        }
+    }
+    write_swarm(project_root, &swarm)?;
+    Ok(swarm)
+}
+
 pub fn list_tasks(project_root: &Path) -> io::Result<Vec<TaskRecord>> {
     status(project_root)?;
     let mut tasks: Vec<TaskRecord> = fs::read_dir(project_root.join(".swarm/tasks"))?

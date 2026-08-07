@@ -222,6 +222,18 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             }
             Err(error) => task_error(error),
         },
+        Ok(ParsedCommand::SwarmCoordinate { agents }) => {
+            match lifecycle::coordinate_swarm(&current_directory(), agents) {
+                Ok(swarm) => {
+                    println!(
+                        "V3 coordination initialized: {} agent slots ({})",
+                        agents, swarm.id
+                    );
+                    ExitCode::SUCCESS
+                }
+                Err(error) => task_error(error),
+            }
+        }
         Ok(ParsedCommand::AgentSpawn { agent_type, name }) => {
             match lifecycle::spawn_agent(&current_directory(), &agent_type, &name) {
                 Ok(agent) => {

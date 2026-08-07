@@ -49,9 +49,10 @@ named compatibility evidence and focused verification.
 - Swarm lifecycle increment: native `init`, `status`, `start`, `stop`, and
   `scale` persist `.swarm/state.json`, derive counts from durable task/agent
   records, and hand `start` to the existing Codex-only, policy-gated scheduler.
-  `scale` reconciles durable agent records without a second scheduler. It is
-  incomplete pending source-oracle fixtures, remaining swarm subcommands, and
-  a live configured-Codex deployment receipt.
+  `scale` reconciles durable agent records without a second scheduler;
+  `coordinate` persists the V3 ordered role slots. It is incomplete pending
+  source-oracle fixtures, remaining swarm subcommands, and a live
+  configured-Codex deployment receipt.
 - Session lifecycle increment: native `save`/`create`/`checkpoint`, `list`/`ls`,
   `restore`/`load`, `delete`/`rm`/`remove`, `export`, `import`, and `current`
   snapshot and restore durable agent/task/swarm records. Memory remains on the
