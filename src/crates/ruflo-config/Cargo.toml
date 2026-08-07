@@ -1,0 +1,15 @@
+[package]
+name = "ruflo-config"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "Configuration loading, capability manifests, and local policy enforcement for native Ruflo."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+ruflo-types = { path = "../ruflo-types" }
+serde = { workspace = true }
