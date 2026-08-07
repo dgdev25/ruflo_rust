@@ -51,10 +51,6 @@
             "path": "docs/release/platform-support.md"
           },
           {
-            "name": "compatibility-workflow",
-            "path": ".github/workflows/compatibility.yml"
-          },
-          {
             "name": "platform-hooks-test",
             "path": "tests/platform_hooks.rs"
           },

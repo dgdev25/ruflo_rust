@@ -6,7 +6,7 @@ Wave 2 capabilities may move from `unsupported` or `migrating` to `supported` on
 
 - Named consumer fixtures for every promoted contract.
 - Security coverage for the promoted transport and authentication boundaries.
-- Native platform evidence tied to checked-in platform tests, smoke scripts, and the compatibility workflow.
+- Native platform evidence tied to checked-in platform tests, smoke scripts, and recorded target-host runs.
 - Migration and RVF regression tests proving persistence and interchange behavior.
 - Supply-chain review evidence covering audit, SBOM generation, and maintained dependency policy.
 - ADR records for each newly selected long-lived integration.

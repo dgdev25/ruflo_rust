@@ -601,10 +601,13 @@ git commit -m "feat: add guarded stateless MCP transport"
 
 ### Task 12: Implement platform hook fixtures and native release matrix
 
+> Historical note (2026-08-07): the planned GitHub Actions workflow was
+> removed at repository-owner request. Target-host smoke scripts and recorded
+> release evidence remain the verification route.
+
 **Requirements:** REQ-002, REQ-007, REQ-009, REQ-015, REQ-016
 
 **Files:**
-- Create: `.github/workflows/compatibility.yml`
 - Create: `tests/platform_hooks.rs`
 - Create: `scripts/release-smoke.sh`
 - Create: `scripts/release-smoke.ps1`
@@ -639,13 +642,13 @@ Build all five target triples, execute native fixture tests on each supported na
 
 Run: `cargo test --test platform_hooks && bash scripts/release-smoke.sh --local`
 
-Expected: PASS locally; CI performs all platform-native checks.
+Expected: PASS locally; run the equivalent checks on each release target host.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add .github tests scripts docs/release
-git commit -m "ci: verify native Ruflo release matrix"
+git add tests scripts docs/release
+git commit -m "test: verify native Ruflo release matrix"
 ```
 
 ### Task 13: Add supply-chain, SBOM, and reproducibility gates
@@ -657,7 +660,6 @@ git commit -m "ci: verify native Ruflo release matrix"
 - Create: `scripts/audit-supply-chain.sh`
 - Create: `scripts/generate-sbom.sh`
 - Create: `docs/security/supply-chain-policy.md`
-- Modify: `.github/workflows/compatibility.yml`
 
 **Interfaces:**
 - Produces a passing `cargo audit`, `cargo deny`, and SBOM report for each release candidate.
