@@ -275,6 +275,36 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
                 Err(error) => task_error(error),
             }
         }
+        Ok(ParsedCommand::AgentPool {
+            size,
+            min,
+            max,
+            auto_scale,
+        }) => {
+            match lifecycle::configure_agent_pool(&current_directory(), size, min, max, auto_scale)
+            {
+                Ok(pool) => {
+                    println!(
+                        "pool\t{}\t{}\t{}\t{}",
+                        pool.current_size, pool.min_size, pool.max_size, pool.auto_scale
+                    );
+                    ExitCode::SUCCESS
+                }
+                Err(error) => task_error(error),
+            }
+        }
+        Ok(ParsedCommand::AgentHealth {
+            agent_id,
+            detailed: _,
+        }) => match lifecycle::agent_health(&current_directory(), agent_id.as_deref()) {
+            Ok(agents) => {
+                for (agent, health) in agents {
+                    println!("{}\t{}\t{}", agent.id, agent.agent_type, health);
+                }
+                ExitCode::SUCCESS
+            }
+            Err(error) => task_error(error),
+        },
         Ok(ParsedCommand::TaskCreate {
             task_type,
             description,

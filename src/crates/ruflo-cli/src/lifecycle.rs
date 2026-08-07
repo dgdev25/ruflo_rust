@@ -67,6 +67,15 @@ pub struct AgentMetrics {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AgentPoolRecord {
+    pub min_size: usize,
+    pub max_size: usize,
+    pub current_size: usize,
+    pub auto_scale: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TaskRecord {
     pub id: String,
     #[serde(rename = "type")]
@@ -555,6 +564,59 @@ pub fn agent_metrics(project_root: &Path, period: &str) -> io::Result<AgentMetri
             .filter(|agent| agent.status == "terminated")
             .count(),
     })
+}
+
+pub fn configure_agent_pool(
+    project_root: &Path,
+    size: Option<usize>,
+    min: usize,
+    max: usize,
+    auto_scale: bool,
+) -> io::Result<AgentPoolRecord> {
+    status(project_root)?;
+    if min == 0 || max == 0 || min > max || size.is_some_and(|value| value < min || value > max) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "agent pool requires 1 <= min <= size <= max",
+        ));
+    }
+    let current_size = size.unwrap_or_else(|| {
+        list_agents(project_root).map_or(min, |agents| agents.len().clamp(min, max))
+    });
+    let record = AgentPoolRecord {
+        min_size: min,
+        max_size: max,
+        current_size,
+        auto_scale,
+    };
+    fs::write(
+        project_root.join(".swarm/agent-pool.json"),
+        serde_json::to_vec_pretty(&record).expect("pool serializable"),
+    )?;
+    Ok(record)
+}
+
+pub fn agent_health(
+    project_root: &Path,
+    agent_id: Option<&str>,
+) -> io::Result<Vec<(AgentRecord, &'static str)>> {
+    let agents = match agent_id {
+        Some(id) => vec![get_agent(project_root, id)?],
+        None => list_agents(project_root)?,
+    };
+    Ok(agents
+        .into_iter()
+        .map(|agent| {
+            let health = if agent.status == "error" {
+                "unhealthy"
+            } else if agent.status == "terminated" {
+                "degraded"
+            } else {
+                "healthy"
+            };
+            (agent, health)
+        })
+        .collect())
 }
 
 pub fn initialize(project_root: &Path) -> io::Result<()> {

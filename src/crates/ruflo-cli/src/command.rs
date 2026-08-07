@@ -56,6 +56,16 @@ pub enum ParsedCommand {
         agent_id: Option<String>,
         period: String,
     },
+    AgentPool {
+        size: Option<usize>,
+        min: usize,
+        max: usize,
+        auto_scale: bool,
+    },
+    AgentHealth {
+        agent_id: Option<String>,
+        detailed: bool,
+    },
     TaskCreate {
         task_type: String,
         description: String,
@@ -128,6 +138,41 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
                 .filter(|value| !value.starts_with('-'))
                 .map(|value| value.to_string()),
             period: option_value(&args, "--period", "-p").unwrap_or_else(|| "24h".into()),
+        });
+    }
+    if normalized.len() >= 2 && normalized[0] == "agent" && normalized[1] == "pool" {
+        let min = option_value(&args, "--min", "--min")
+            .unwrap_or_else(|| "1".into())
+            .parse()
+            .map_err(|_| "agent pool min must be a positive integer")?;
+        let max = option_value(&args, "--max", "--max")
+            .unwrap_or_else(|| "10".into())
+            .parse()
+            .map_err(|_| "agent pool max must be a positive integer")?;
+        let size = option_value(&args, "--size", "-s")
+            .map(|value| {
+                value
+                    .parse()
+                    .map_err(|_| "agent pool size must be a positive integer")
+            })
+            .transpose()?;
+        return Ok(ParsedCommand::AgentPool {
+            size,
+            min,
+            max,
+            auto_scale: !args.iter().any(|argument| argument == "--no-auto-scale"),
+        });
+    }
+    if normalized.len() >= 2 && normalized[0] == "agent" && normalized[1] == "health" {
+        return Ok(ParsedCommand::AgentHealth {
+            agent_id: normalized
+                .get(2)
+                .filter(|value| !value.starts_with('-'))
+                .map(|value| value.to_string())
+                .or_else(|| option_value(&args, "--id", "-i")),
+            detailed: args
+                .iter()
+                .any(|argument| argument == "--detailed" || argument == "-d"),
         });
     }
     if normalized.len() >= 2 && normalized[0] == "swarm" && normalized[1] == "init" {

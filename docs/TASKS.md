@@ -40,8 +40,9 @@ named compatibility evidence and focused verification.
   source-aligned assignment/cancellation/retry invariants. This remains
   incomplete pending source-oracle fixtures and live worker execution.
 - Agent lifecycle increment: native `spawn`, `list`/`ls`, `status`,
-  `stop`/`kill`, and period-validated `metrics` now use durable agent records.
-  V3 pool, health, logs, WASM, and publish operations plus all differential
+  `stop`/`kill`, period-validated `metrics`, durable pool configuration, and
+  project-scoped health now use durable agent records. V3 logs, WASM, and
+  publish operations plus all differential
   output and MCP fixtures remain open.
 - Swarm lifecycle increment: native `init`, `status`, `start`, and `stop`
   persist `.swarm/state.json`, derive counts from durable task/agent records,

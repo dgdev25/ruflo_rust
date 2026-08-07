@@ -84,6 +84,21 @@ fn agent_status_stop_and_metrics_are_durable() {
 }
 
 #[test]
+fn agent_pool_and_health_are_project_scoped() {
+    let temp = tempfile::tempdir().unwrap();
+    lifecycle::initialize(temp.path()).unwrap();
+    lifecycle::spawn_agent(temp.path(), "coder", "coder-1").unwrap();
+    let pool = lifecycle::configure_agent_pool(temp.path(), Some(2), 1, 3, true).unwrap();
+    assert_eq!(pool.current_size, 2);
+    assert!(temp.path().join(".swarm/agent-pool.json").is_file());
+    assert_eq!(
+        lifecycle::agent_health(temp.path(), Some("coder-1")).unwrap()[0].1,
+        "healthy"
+    );
+    assert!(lifecycle::configure_agent_pool(temp.path(), Some(4), 1, 3, true).is_err());
+}
+
+#[test]
 fn tasks_are_durable_project_scoped_records() {
     let temp = tempfile::tempdir().unwrap();
     lifecycle::initialize(temp.path()).unwrap();
