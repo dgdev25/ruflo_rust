@@ -1,6 +1,8 @@
 use std::ffi::OsString;
 use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::{Mutex, OnceLock};
 
 use serde_json::Value;
 
@@ -9,13 +11,9 @@ use crate::fixture_schema::{CliFixture, Fixture, JsonRpcFixture};
 #[allow(dead_code)]
 pub fn assert_cli_fixture(binary: &str, fixture_path: &str) {
     let fixture = CliFixture::load(fixture_path).unwrap_or_else(|error| panic!("{error}"));
-    let executable = std::env::var_os(cargo_bin_var(binary)).unwrap_or_else(|| {
-        panic!(
-            "binary `{binary}` is not built for this test target yet; run this helper after Task 4 adds the native CLI binaries"
-        )
-    });
+    let executable = executable_path(binary);
 
-    let mut command = Command::new(executable);
+    let mut command = Command::new(&executable);
     command.args(fixture.argv.iter().map(OsString::from));
     command.stdin(Stdio::piped());
     command.stdout(Stdio::piped());
@@ -53,6 +51,14 @@ pub fn assert_cli_fixture(binary: &str, fixture_path: &str) {
     );
 }
 
+pub fn run_cli(binary: &str, args: &[&str]) -> std::process::Output {
+    let executable = executable_path(binary);
+    Command::new(executable)
+        .args(args)
+        .output()
+        .unwrap_or_else(|error| panic!("failed to execute `{binary}`: {error}"))
+}
+
 pub fn assert_json_rpc_fixture(request: &Value, response: &Value, fixture_path: &str) {
     let fixture = JsonRpcFixture::load(fixture_path).unwrap_or_else(|error| panic!("{error}"));
     assert_eq!(
@@ -68,6 +74,62 @@ pub fn assert_json_rpc_fixture(request: &Value, response: &Value, fixture_path: 
 #[allow(dead_code)]
 fn cargo_bin_var(binary: &str) -> String {
     format!("CARGO_BIN_EXE_{}", binary.replace('-', "_"))
+}
+
+fn executable_path(binary: &str) -> PathBuf {
+    if let Some(executable) = std::env::var_os(cargo_bin_var(binary)) {
+        return executable.into();
+    }
+
+    build_workspace_binary(binary);
+    target_debug_dir().join(format!("{binary}{}", std::env::consts::EXE_SUFFIX))
+}
+
+fn build_workspace_binary(binary: &str) {
+    static BUILT_BINARIES: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+    let mut built = BUILT_BINARIES
+        .get_or_init(|| Mutex::new(Vec::new()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+    if built.iter().any(|name| name == binary) {
+        return;
+    }
+
+    let status = Command::new(env!("CARGO"))
+        .current_dir(repo_root())
+        .args([
+            "build",
+            "--quiet",
+            "--package",
+            binary_package(binary),
+            "--bin",
+            binary,
+        ])
+        .status()
+        .unwrap_or_else(|error| panic!("failed to build `{binary}` for fixture replay: {error}"));
+
+    assert!(
+        status.success(),
+        "failed to build `{binary}` for fixture replay"
+    );
+    built.push(binary.to_string());
+}
+
+fn repo_root() -> &'static Path {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+}
+
+fn binary_package(binary: &str) -> &'static str {
+    match binary {
+        "ruflo" => "ruflo",
+        "claude-flow" => "claude-flow",
+        _ => panic!("no workspace package mapping registered for `{binary}`"),
+    }
+}
+
+fn target_debug_dir() -> PathBuf {
+    repo_root().join("target").join("debug")
 }
 
 #[test]
@@ -96,4 +158,37 @@ fn assert_json_rpc_fixture_replays_tools_list_contract() {
         &fixture.response,
         "tests/fixtures/mcp/tools-list.json",
     );
+}
+
+#[test]
+fn both_binaries_match_version_fixture() {
+    assert_cli_fixture("ruflo", "tests/fixtures/cli/version.json");
+    assert_cli_fixture("claude-flow", "tests/fixtures/cli/version.json");
+}
+
+#[test]
+fn ruflo_matches_quiet_help_fixture() {
+    assert_cli_fixture("ruflo", "tests/fixtures/cli/help.json");
+}
+
+#[test]
+fn both_binaries_expose_stable_mcp_start_placeholder() {
+    for binary in ["ruflo", "claude-flow"] {
+        let output = run_cli(binary, &["mcp", "start"]);
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "unexpected exit code for `{binary} mcp start`"
+        );
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap(),
+            "",
+            "unexpected stdout for `{binary} mcp start`"
+        );
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap(),
+            "error: native MCP stdio dispatcher is not implemented yet (capability=mcp.start, wave=1, migration=enable the native MCP dispatcher)\n",
+            "unexpected stderr for `{binary} mcp start`"
+        );
+    }
 }

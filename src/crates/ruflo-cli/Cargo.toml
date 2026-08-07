@@ -1,0 +1,14 @@
+[package]
+name = "ruflo-cli"
+version = "3.34.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "Shared native CLI dispatcher for the Ruflo and claude-flow wrappers."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+ruflo-types = { path = "../ruflo-types" }

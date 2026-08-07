@@ -1,13 +1,14 @@
 [package]
-name = "ruflo"
+name = "fixture-capture-harness"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.87"
 license = "MIT OR Apache-2.0"
 publish = false
 
-# The root package exists to host cross-crate contract tests under `tests/`.
-# Product source lives in the workspace member crates under `src/crates/`.
+# The root package exists to host cross-crate contract tests under `tests/`
+# and the fixture-capture utility binary. Product source lives in the
+# workspace member crates under `src/crates/`.
 autobins = false
 autoexamples = false
 autobenches = false
@@ -16,7 +17,7 @@ autobenches = false
 path = "src/root_harness.rs"
 
 [workspace]
-members = ["src/crates/*"]
+members = ["src/crates/*", "src/bin/ruflo", "src/bin/claude-flow"]
 resolver = "2"
 
 [workspace.package]

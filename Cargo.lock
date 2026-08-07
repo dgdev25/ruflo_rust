@@ -3,6 +3,22 @@
 version = 4
 
 [[package]]
+name = "claude-flow"
+version = "0.1.0"
+dependencies = [
+ "ruflo-cli",
+]
+
+[[package]]
+name = "fixture-capture-harness"
+version = "0.1.0"
+dependencies = [
+ "ruflo-types",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -36,9 +52,14 @@ dependencies = [
 name = "ruflo"
 version = "0.1.0"
 dependencies = [
+ "ruflo-cli",
+]
+
+[[package]]
+name = "ruflo-cli"
+version = "3.34.0"
+dependencies = [
  "ruflo-types",
- "serde",
- "serde_json",
 ]
 
 [[package]]
