@@ -27,7 +27,7 @@ jobs:
         uses: dtolnay/rust-toolchain@1.88.0
 
       - name: Install cargo-deny
-        run: cargo install --locked --version "$CARGO_DENY_VERSION" cargo-deny
+        run: cargo +1.88.0 install --locked --version "$CARGO_DENY_VERSION" cargo-deny
         shell: bash
 
       - name: Run supply-chain policy audit
