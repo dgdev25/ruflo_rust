@@ -1,0 +1,29 @@
+{
+  "argv": [
+    "--quiet",
+    "--help"
+  ],
+  "exit": 0,
+  "stdout": "\nruflo v3.34.0\nRuflo - AI Agent Orchestration Platform\n\nUSAGE:\n  ruflo <command> [subcommand] [options]\n\nPRIMARY COMMANDS:\n  init         Initialize RuFlo in the current directory\n  start        Start the RuFlo orchestration system\n  status       Show system status\n  agent        Agent management commands\n  swarm        Swarm coordination commands\n  memory       Memory management commands\n  task         Task management commands\n  session      Session management commands\n  mcp          MCP server management\n  hooks        Self-learning hooks system for intelligent workflow automation\n\nADVANCED COMMANDS:\n  neural       Neural pattern training, MoE, Flash Attention, pattern learning\n  security     Security scanning, CVE detection, threat modeling, AI defense\n  policy       Agentic policy engine \u2014 evaluate actions, manage rules/approvals, and verify the decision ledger (ADR-324)\n  performance  Performance profiling, benchmarking, optimization, metrics\n  embeddings   Vector embeddings, semantic search, similarity operations\n  hive-mind    Queen-led consensus-based multi-agent coordination\n  ruvector     RuVector PostgreSQL Bridge management\n  guidance     Guidance Control Plane - compile, retrieve, enforce, and optimize guidance rules\n  autopilot    Persistent swarm completion \u2014 keeps agents working until ALL tasks are done\n\nUTILITY COMMANDS:\n  config       Configuration management\n  doctor       System diagnostics and health checks\n  daemon       Manage background worker daemon (Node.js-based, auto-runs like shell helpers)\n  completions  Generate shell completion scripts\n  migrate      V2 to V3 migration tools\n  workflow     Workflow execution and management\n\nANALYSIS COMMANDS:\n  analyze      Code analysis, diff classification, graph boundaries, and change risk assessment\n  route        Intelligent task-to-agent routing using Q-Learning\n  progress     Check V3 implementation progress\n\nMANAGEMENT COMMANDS:\n  providers    Manage AI providers, models, and configurations\n  plugins      Plugin management with IPFS-based decentralized registry\n  deployment   Deployment management, environments, rollbacks\n  claims       Claims-based authorization, permissions, and access control\n  issues       Collaborative issue claims for human-agent workflows (ADR-016)\n  update       Manage @claude-flow package updates (ADR-025)\n  process      Background process management, daemon, and monitoring\n  appliance    Self-contained RVFA appliance management (build, inspect, verify, extract, run)\n  cleanup      Remove project artifacts created by claude-flow/ruflo\n\nGLOBAL OPTIONS:\n  -h, --help                Show help information\n  -V, --version             Show version number\n  -v, --verbose             Enable verbose output\n  -Q, --quiet               Suppress non-essential output\n  -c, --config              Path to configuration file\n      --format              Output format (text, json, table)\n      --no-color            Disable colored output\n  -i, --interactive         Enable interactive mode\n\nV3 FEATURES:\n  - 15-agent hierarchical mesh coordination\n  - AgentDB with HNSW indexing (150x-12,500x faster)\n  - Flash Attention (2.49x-7.47x speedup)\n  - Unified SwarmCoordinator engine\n  - Event-sourced state management\n  - Domain-Driven Design architecture\n\nEXAMPLES:\n  ruflo agent spawn -t coder              # Spawn a coder agent\n  ruflo swarm init --v3-mode              # Initialize V3 swarm\n  ruflo memory search -q \"auth patterns\"  # Semantic search\n  ruflo mcp start                         # Start MCP server\n\nRun \"ruflo <command> --help\" for command help\n\nCreated with \u2764\ufe0f by ruv.io\n",
+  "stderr": "",
+  "environment": {},
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli",
+    "source_command": [
+      "--quiet",
+      "--help"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-07T00:00:00Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

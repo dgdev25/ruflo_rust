@@ -1,0 +1,27 @@
+{
+  "argv": [
+    "--version"
+  ],
+  "exit": 0,
+  "stdout": "ruflo v3.34.0\n",
+  "stderr": "",
+  "environment": {},
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli",
+    "source_command": [
+      "--version"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-07T00:00:00Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

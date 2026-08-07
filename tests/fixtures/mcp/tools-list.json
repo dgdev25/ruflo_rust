@@ -1,0 +1,46 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "compat-tools-list",
+    "method": "tools/list",
+    "params": {}
+  },
+  "response": {
+    "jsonrpc": "2.0",
+    "id": "compat-tools-list",
+    "result": {
+      "tools": [
+        {
+          "name": "agent_spawn",
+          "description": "Spawn a Ruflo-tracked agent.",
+          "inputSchema": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        {
+          "name": "memory_search",
+          "description": "Find stored memories by meaning.",
+          "inputSchema": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        }
+      ]
+    }
+  },
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "reduced-schema",
+    "source": "manual compatibility fixture",
+    "reduction": "minimal synthetic tools/list fixture for schema and replay tests only; not a captured source contract",
+    "redactions": []
+  },
+  "recording": {
+    "recorded_at": "2026-08-07T00:00:00Z",
+    "recorded_by": "manual curation",
+    "harness": "fixture-schema"
+  }
+}
