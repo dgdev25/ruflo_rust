@@ -1,0 +1,11 @@
+[package]
+name = "ruflo-types"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Shared contract types (Capability, RufloError) for native Ruflo crates."
+publish = false
+
+[dependencies]
+serde = { workspace = true }
