@@ -11,6 +11,7 @@ named compatibility evidence and focused verification.
 | 1. Workspace and shared contract types | Complete | `86b422f`; workspace contract tests pass. |
 | 2. Differential fixture harness | Complete | `efb56e5`; fixture schema, approved pure-Rust capture, provenance, and redaction checks pass. |
 | 3. Consumer inventory and P0 contract matrix | Complete | `50935ee`; nine P0 rows are source-grounded and matrix validation passes. |
+| 4. Native CLI façade and aliases | Complete | `03fc0d9`; both native aliases pass version/help and MCP placeholder contract tests. |
 
 ## Remaining execution order
 
@@ -28,7 +29,7 @@ named compatibility evidence and focused verification.
 - P0 includes aliases, version/help, MCP discovery/calls, memory round trips, migrations, policy denials, and hooks.
 - Verify: matrix completeness test and `scripts/inventory-consumers.sh --check`.
 
-### 4. Native CLI façade and aliases
+### 4. Native CLI façade and aliases — complete
 
 - Create shared parser plus thin `ruflo` and `claude-flow` Rust binaries.
 - Match oracle fixtures for version/help/MCP start; initialize no models or adapters on version fast path.
