@@ -51,3 +51,16 @@ shared memory, and run the standard stdio MCP endpoint.
 
 Later waves may use existing native rUv components at their stable boundaries;
 they must not reimplement RuVector, RVF, AgentDB, or Agentic Flow.
+
+## Captured core subcommand contracts
+
+The following source-oracle help output was captured from `ruflo@3.34.0` on
+2026-08-07. Each entry remains pending until implemented and differentially
+tested in Rust.
+
+| Family | Original subcommands |
+| --- | --- |
+| `agent` | `spawn`, `list` (`ls`), `status`, `stop` (`kill`), `metrics`, `pool`, `health`, `logs`, `wasm-status`, `wasm-create`, `wasm-prompt`, `wasm-gallery`, `publish` |
+| `swarm` | `init`, `start`, `status`, `stop`, `scale`, `coordinate`, `compress-message`, `pheromone`, `join` |
+| `task` | `create` (`new`, `add`), `list` (`ls`), `status` (`info`, `get`), `cancel` (`abort`, `stop`), `assign`, `retry` (`rerun`) |
+| `session` | `list` (`ls`), `save` (`create`, `checkpoint`), `restore` (`load`), `delete` (`rm`, `remove`), `export`, `import`, `current` |
