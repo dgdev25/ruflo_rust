@@ -111,6 +111,59 @@ fn memory_retrieve_survives_a_new_mcp_process() {
 }
 
 #[test]
+fn ruvocal_opt_in_mcp_child_pilot_routes_namespaced_memory_tools() {
+    let fixture = load_json("tests/fixtures/consumers/ruvocal/mcp-child.json");
+    let project = tempfile::TempDir::new().unwrap();
+    let tool_name = fixture["namespaced_tool"].as_str().unwrap();
+    let routed_name = tool_name.strip_prefix("ruflo__").unwrap();
+    let requests = [
+        fixture["tools_list_request"].to_string(),
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": "ruvocal-store",
+            "method": "tools/call",
+            "params": {
+                "name": routed_name,
+                "arguments": fixture["store_arguments"]
+            }
+        })
+        .to_string(),
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": "ruvocal-search",
+            "method": "tools/call",
+            "params": {
+                "name": "memory_search",
+                "arguments": fixture["search_arguments"]
+            }
+        })
+        .to_string(),
+    ];
+    let request_refs = requests.iter().map(String::as_str).collect::<Vec<_>>();
+    let output = run_stdio_in("ruflo", &request_refs, &[], project.path());
+
+    assert!(output.status.success());
+    assert_stdout_is_jsonrpc_only(&output.stdout);
+    let frames = stdout_frames(&output.stdout);
+    let tool_names = frames[0]["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|tool| tool["name"].as_str())
+        .collect::<Vec<_>>();
+    assert!(tool_names.contains(&"memory_store"));
+    assert_eq!(frames[1]["result"]["structuredContent"]["stored"], true);
+    assert_eq!(
+        frames[2]["result"]["structuredContent"]["matches"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(String::from_utf8(output.stderr).unwrap(), "");
+}
+
+#[test]
 fn denied_tools_match_checked_in_fixture() {
     let fixture = load_json("tests/fixtures/mcp/memory-search-denied.json");
     let output = run_stdio(

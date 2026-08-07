@@ -1,0 +1,32 @@
+{
+  "namespaced_tool": "ruflo__memory_store",
+  "tools_list_request": {
+    "jsonrpc": "2.0",
+    "id": "ruvocal-list",
+    "method": "tools/list",
+    "params": {}
+  },
+  "store_arguments": {
+    "key": "pilot/ruvocal",
+    "value": "Native Ruflo child accepted by ruVocal framing",
+    "namespace": "consumer-pilot",
+    "provenance_type": "system_observation"
+  },
+  "search_arguments": {
+    "query": "accepted",
+    "namespace": "consumer-pilot"
+  },
+  "provenance": {
+    "kind": "reduced-schema",
+    "source": "/mnt/datadisk/repos/rUvnet/RuVector/ui/ruvocal/docs/adr/ADR-033-RUVECTOR-RUFLO-MCP-INTEGRATION.md",
+    "reduction": "The checked-out ruVocal source contains the accepted child-process protocol and stdio kernel but no bridge entrypoint. This opt-in fixture reproduces that documented prefix stripping and newline-delimited tools/list/tools/call child contract against the native ruflo binary.",
+    "redactions": [
+      "temporary project path omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-07T20:00:00Z",
+    "recorded_by": "native-consumer-pilot",
+    "harness": "mcp-stdio"
+  }
+}

@@ -27,7 +27,8 @@ create project files nor launch a Codex or Claude worker.
   a worker-running command.
 - [ ] Add parity fixtures for invalid worker specifications, status, and loop
   lifecycle without executing a model provider.
-- [ ] Pilot the native façade as an opt-in rUvNet consumer command/MCP child.
+- [x] Pilot the native façade as an opt-in ruVocal MCP child using the accepted
+  prefix-stripping and stdio JSON-RPC contract.
 - [ ] Publish a release promotion report only after consumer evidence and all
   native runner checks are green.
 
