@@ -24,8 +24,21 @@ named compatibility evidence and focused verification.
 | 14. Wave-promotion evidence gates | Complete | `dd365d7`; release manifests and verifier block incomplete evidence while accepting complete Wave 2 evidence. |
 | 15. Native Codex dual-run scheduler | Complete | A safe live-TS fake-Codex capture plus direct-process scheduler test prove the launch vector, prompt clauses, opt-in policy, isolated worktrees, bounded execution, native shared memory, and secret-safe child environment. |
 | 16. ruVocal bridge-entrypoint staging | Complete | The actual bridge ran the native child via `RUFLO_MCP_COMMAND`; namespaced discovery, durable memory round trip, and `ENABLE_RUFLO=false` rollback were verified. Its source now has a focused regression test for fixed native arguments, prefix stripping, and the kill switch. |
+| 17. Full original CLI parity | In progress | The original V3 registry has been frozen in `docs/compatibility/command-parity.md`. Native `init` and `status` now create/read project state; every remaining command and subcommand requires source fixtures, native implementation, and end-to-end evidence before it can be marked complete. |
 
 ## Remaining execution order
+
+### 17. Full original CLI parity — in progress
+
+- Treat `docs/compatibility/command-parity.md` as the authoritative native
+  delivery ledger; do not count a command merely because it appears in help.
+- Implement the deployment-critical core first: lifecycle, agents, swarms,
+  tasks, sessions, memory, and MCP.
+- Then migrate every remaining command family from the original registry,
+  capturing source fixtures before implementation and exercising real local
+  Codex swarm deployment before release.
+- Verify: the registry coverage test has no pending rows and all command-level
+  differential fixtures pass on both executable aliases.
 
 ### 2. Differential compatibility fixture harness — complete
 

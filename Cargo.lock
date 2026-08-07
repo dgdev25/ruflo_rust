@@ -643,6 +643,7 @@ dependencies = [
  "ruflo-config",
  "ruflo-mcp",
  "ruflo-types",
+ "tempfile",
 ]
 
 [[package]]

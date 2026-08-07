@@ -1,6 +1,7 @@
 //! Shared native CLI entrypoint for thin Ruflo-compatible binaries.
 
 mod command;
+mod lifecycle;
 
 use std::ffi::OsString;
 use std::process::ExitCode;
@@ -103,6 +104,32 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             print!("{HELP}");
             ExitCode::SUCCESS
         }
+        Ok(ParsedCommand::Init) => match lifecycle::initialize(&current_directory()) {
+            Ok(()) => {
+                println!("RuFlo V3 initialized successfully!");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("error: failed to initialize RuFlo: {error}");
+                ExitCode::from(ERROR_EXIT)
+            }
+        },
+        Ok(ParsedCommand::Status) => match lifecycle::status(&current_directory()) {
+            Ok(status) => {
+                println!("RuFlo V3 [STOPPED]");
+                println!("Agents: {}", status.agents);
+                println!("Tasks: {}", status.tasks);
+                ExitCode::SUCCESS
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                eprintln!("[ERROR] {error}");
+                ExitCode::from(1)
+            }
+            Err(error) => {
+                eprintln!("error: failed to read RuFlo status: {error}");
+                ExitCode::from(ERROR_EXIT)
+            }
+        },
         Ok(ParsedCommand::McpStart) => {
             let config = match ruflo_config::EffectiveConfig::load() {
                 Ok(config) => config,
@@ -133,4 +160,8 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             ExitCode::from(ERROR_EXIT)
         }
     }
+}
+
+fn current_directory() -> std::path::PathBuf {
+    std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
 }

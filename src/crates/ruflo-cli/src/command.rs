@@ -4,6 +4,8 @@ use std::ffi::OsString;
 pub enum ParsedCommand {
     Version,
     Help,
+    Init,
+    Status,
     McpStart,
 }
 
@@ -18,6 +20,8 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
     match normalized.as_slice() {
         ["--version"] | ["-V"] => Ok(ParsedCommand::Version),
         ["--help"] | ["-h"] | ["--quiet", "--help"] | ["-Q", "--help"] => Ok(ParsedCommand::Help),
+        ["init"] => Ok(ParsedCommand::Init),
+        ["status"] | ["status", "--json"] => Ok(ParsedCommand::Status),
         ["mcp", "start"] => Ok(ParsedCommand::McpStart),
         [] => Err("no command provided".to_string()),
         _ => Err(format!(
