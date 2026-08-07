@@ -2,7 +2,19 @@
 
 ## Status
 
-Accepted (2026-08-07)
+Implemented
+
+## Date
+
+2026-08-07
+
+## Updated
+
+2026-08-07
+
+## Implementation note
+
+Task 10 added the native declarative action manifest and bounded executor in `ruflo-actions`.
 
 ## Context
 

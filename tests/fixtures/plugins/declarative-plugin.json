@@ -1,0 +1,27 @@
+{
+  "plugin_type": "declarative",
+  "version": 1,
+  "name": "declarative-plugin",
+  "actions": [
+    {
+      "id": "echo-args",
+      "action": {
+        "kind": "echo",
+        "arguments": []
+      }
+    },
+    {
+      "id": "print-working-directory",
+      "action": {
+        "kind": "print_working_directory"
+      }
+    },
+    {
+      "id": "sleep-briefly",
+      "action": {
+        "kind": "sleep",
+        "duration_ms": 1
+      }
+    }
+  ]
+}

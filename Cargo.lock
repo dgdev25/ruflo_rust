@@ -168,6 +168,7 @@ checksum = "28dea519a9695b9977216879a3ebfddf92f1c08c05d984f8996aecd6ecdc811d"
 name = "fixture-capture-harness"
 version = "0.1.0"
 dependencies = [
+ "ruflo-actions",
  "ruflo-config",
  "ruflo-mcp",
  "ruflo-runtime",
@@ -297,6 +298,14 @@ name = "ruflo"
 version = "0.1.0"
 dependencies = [
  "ruflo-cli",
+]
+
+[[package]]
+name = "ruflo-actions"
+version = "0.1.0"
+dependencies = [
+ "ruflo-types",
+ "serde",
 ]
 
 [[package]]
