@@ -230,6 +230,51 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
                 ExitCode::from(ERROR_EXIT)
             }
         },
+        Ok(ParsedCommand::AgentStatus { agent_id }) => {
+            match lifecycle::get_agent(&current_directory(), &agent_id) {
+                Ok(agent) => {
+                    println!("{}\t{}\t{}", agent.id, agent.agent_type, agent.status);
+                    ExitCode::SUCCESS
+                }
+                Err(error) => task_error(error),
+            }
+        }
+        Ok(ParsedCommand::AgentStop {
+            agent_id,
+            force,
+            timeout_seconds,
+        }) => match lifecycle::stop_agent(&current_directory(), &agent_id) {
+            Ok(agent) => {
+                let mode = if force { "forced" } else { "graceful" };
+                println!(
+                    "Agent {} stopped successfully ({mode}, {timeout_seconds}s)",
+                    agent.id
+                );
+                ExitCode::SUCCESS
+            }
+            Err(error) => task_error(error),
+        },
+        Ok(ParsedCommand::AgentMetrics { agent_id, period }) => {
+            if let Some(agent_id) = agent_id {
+                if let Err(error) = lifecycle::get_agent(&current_directory(), &agent_id) {
+                    return task_error(error);
+                }
+            }
+            match lifecycle::agent_metrics(&current_directory(), &period) {
+                Ok(metrics) => {
+                    println!(
+                        "period={}\ttotal={}\tactive={}\tidle={}\tterminated={}",
+                        metrics.period,
+                        metrics.total_agents,
+                        metrics.active_agents,
+                        metrics.idle_agents,
+                        metrics.terminated_agents
+                    );
+                    ExitCode::SUCCESS
+                }
+                Err(error) => task_error(error),
+            }
+        }
         Ok(ParsedCommand::TaskCreate {
             task_type,
             description,

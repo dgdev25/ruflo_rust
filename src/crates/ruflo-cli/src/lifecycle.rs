@@ -56,6 +56,15 @@ pub struct AgentRecord {
     pub status: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentMetrics {
+    pub period: String,
+    pub total_agents: usize,
+    pub active_agents: usize,
+    pub idle_agents: usize,
+    pub terminated_agents: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskRecord {
@@ -499,6 +508,53 @@ pub fn list_agents(project_root: &Path) -> io::Result<Vec<AgentRecord>> {
     }
     agents.sort_by(|left, right| left.id.cmp(&right.id));
     Ok(agents)
+}
+
+pub fn get_agent(project_root: &Path, agent_id: &str) -> io::Result<AgentRecord> {
+    status(project_root)?;
+    let agent_id = safe_identifier(agent_id)?;
+    let path = project_root
+        .join(".swarm/agents")
+        .join(format!("{agent_id}.json"));
+    serde_json::from_slice(&fs::read(path)?).map_err(io::Error::other)
+}
+
+pub fn stop_agent(project_root: &Path, agent_id: &str) -> io::Result<AgentRecord> {
+    let mut agent = get_agent(project_root, agent_id)?;
+    agent.status = "terminated".into();
+    fs::write(
+        project_root
+            .join(".swarm/agents")
+            .join(format!("{}.json", agent.id)),
+        serde_json::to_vec_pretty(&agent).expect("agent record is serializable"),
+    )?;
+    Ok(agent)
+}
+
+pub fn agent_metrics(project_root: &Path, period: &str) -> io::Result<AgentMetrics> {
+    match period {
+        "1h" | "24h" | "7d" | "30d" => {}
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "agent metrics period must be one of 1h, 24h, 7d, or 30d",
+            ));
+        }
+    }
+    let agents = list_agents(project_root)?;
+    Ok(AgentMetrics {
+        period: period.into(),
+        total_agents: agents.len(),
+        active_agents: agents
+            .iter()
+            .filter(|agent| matches!(agent.status.as_str(), "active" | "busy"))
+            .count(),
+        idle_agents: agents.iter().filter(|agent| agent.status == "idle").count(),
+        terminated_agents: agents
+            .iter()
+            .filter(|agent| agent.status == "terminated")
+            .count(),
+    })
 }
 
 pub fn initialize(project_root: &Path) -> io::Result<()> {

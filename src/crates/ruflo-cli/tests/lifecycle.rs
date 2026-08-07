@@ -61,6 +61,29 @@ fn agents_are_durable_project_scoped_records() {
 }
 
 #[test]
+fn agent_status_stop_and_metrics_are_durable() {
+    let temp = tempfile::tempdir().expect("temporary project");
+    lifecycle::initialize(temp.path()).expect("initialize project");
+    lifecycle::spawn_agent(temp.path(), "coder", "coder-1").expect("spawn agent");
+    assert_eq!(
+        lifecycle::get_agent(temp.path(), "coder-1")
+            .expect("status")
+            .status,
+        "idle"
+    );
+    let stopped = lifecycle::stop_agent(temp.path(), "coder-1").expect("stop agent");
+    assert_eq!(stopped.status, "terminated");
+    assert_eq!(
+        lifecycle::agent_metrics(temp.path(), "7d")
+            .expect("metrics")
+            .terminated_agents,
+        1
+    );
+    assert!(lifecycle::agent_metrics(temp.path(), "forever").is_err());
+    assert!(lifecycle::get_agent(temp.path(), "../../escape").is_err());
+}
+
+#[test]
 fn tasks_are_durable_project_scoped_records() {
     let temp = tempfile::tempdir().unwrap();
     lifecycle::initialize(temp.path()).unwrap();

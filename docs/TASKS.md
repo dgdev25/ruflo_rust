@@ -39,6 +39,10 @@ named compatibility evidence and focused verification.
   `retry`/`rerun` now persist project-scoped records and enforce initial
   source-aligned assignment/cancellation/retry invariants. This remains
   incomplete pending source-oracle fixtures and live worker execution.
+- Agent lifecycle increment: native `spawn`, `list`/`ls`, `status`,
+  `stop`/`kill`, and period-validated `metrics` now use durable agent records.
+  V3 pool, health, logs, WASM, and publish operations plus all differential
+  output and MCP fixtures remain open.
 - Swarm lifecycle increment: native `init`, `status`, `start`, and `stop`
   persist `.swarm/state.json`, derive counts from durable task/agent records,
   and hand `start` to the existing Codex-only, policy-gated scheduler. It is

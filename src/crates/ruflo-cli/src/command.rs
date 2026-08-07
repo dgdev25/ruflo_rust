@@ -44,6 +44,18 @@ pub enum ParsedCommand {
         name: String,
     },
     AgentList,
+    AgentStatus {
+        agent_id: String,
+    },
+    AgentStop {
+        agent_id: String,
+        force: bool,
+        timeout_seconds: u64,
+    },
+    AgentMetrics {
+        agent_id: Option<String>,
+        period: String,
+    },
     TaskCreate {
         task_type: String,
         description: String,
@@ -82,6 +94,41 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
         let name =
             option_value(&args, "--name", "-n").unwrap_or_else(|| format!("{agent_type}-native"));
         return Ok(ParsedCommand::AgentSpawn { agent_type, name });
+    }
+    if normalized.len() >= 2 && normalized[0] == "agent" && normalized[1] == "status" {
+        let agent_id = normalized
+            .get(2)
+            .filter(|value| !value.starts_with('-'))
+            .map(|value| value.to_string())
+            .or_else(|| option_value(&args, "--id", "--id"))
+            .ok_or("agent ID is required")?;
+        return Ok(ParsedCommand::AgentStatus { agent_id });
+    }
+    if normalized.len() >= 3 && normalized[0] == "agent" && matches!(normalized[1], "stop" | "kill")
+    {
+        let timeout_seconds = option_value(&args, "--timeout", "--timeout")
+            .unwrap_or_else(|| "30".into())
+            .parse()
+            .map_err(|_| "agent stop timeout must be a positive integer")?;
+        if timeout_seconds == 0 {
+            return Err("agent stop timeout must be a positive integer".into());
+        }
+        return Ok(ParsedCommand::AgentStop {
+            agent_id: normalized[2].into(),
+            force: args
+                .iter()
+                .any(|argument| argument == "--force" || argument == "-f"),
+            timeout_seconds,
+        });
+    }
+    if normalized.len() >= 2 && normalized[0] == "agent" && normalized[1] == "metrics" {
+        return Ok(ParsedCommand::AgentMetrics {
+            agent_id: normalized
+                .get(2)
+                .filter(|value| !value.starts_with('-'))
+                .map(|value| value.to_string()),
+            period: option_value(&args, "--period", "-p").unwrap_or_else(|| "24h".into()),
+        });
     }
     if normalized.len() >= 2 && normalized[0] == "swarm" && normalized[1] == "init" {
         let topology = if args.iter().any(|argument| argument == "--v3-mode") {
@@ -323,6 +370,26 @@ mod tests {
         assert!(matches!(
             parse(argv(&["session", "import", "backup.json", "-n", "restore"])),
             Ok(ParsedCommand::SessionImport { name: Some(name), .. }) if name == "restore"
+        ));
+    }
+
+    #[test]
+    fn agent_lifecycle_aliases_and_v3_options_parse() {
+        assert!(matches!(
+            parse(argv(&["agent", "status", "--id", "coder-1"])),
+            Ok(ParsedCommand::AgentStatus { agent_id }) if agent_id == "coder-1"
+        ));
+        assert!(matches!(
+            parse(argv(&["agent", "kill", "coder-1", "-f", "--timeout", "45"])),
+            Ok(ParsedCommand::AgentStop {
+                force: true,
+                timeout_seconds: 45,
+                ..
+            })
+        ));
+        assert!(matches!(
+            parse(argv(&["agent", "metrics", "coder-1", "-p", "7d"])),
+            Ok(ParsedCommand::AgentMetrics { agent_id: Some(agent_id), period }) if agent_id == "coder-1" && period == "7d"
         ));
     }
 }
