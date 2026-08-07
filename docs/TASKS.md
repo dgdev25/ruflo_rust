@@ -12,6 +12,7 @@ named compatibility evidence and focused verification.
 | 2. Differential fixture harness | Complete | `efb56e5`; fixture schema, approved pure-Rust capture, provenance, and redaction checks pass. |
 | 3. Consumer inventory and P0 contract matrix | Complete | `50935ee`; nine P0 rows are source-grounded and matrix validation passes. |
 | 4. Native CLI façade and aliases | Complete | `03fc0d9`; both native aliases pass version/help and MCP placeholder contract tests. |
+| 5. Capability/configuration/policy layer | Complete | `6ed4b55`; precedence, manifest, denial, and resource-limit tests pass. |
 
 ## Remaining execution order
 
@@ -36,7 +37,7 @@ named compatibility evidence and focused verification.
 - Send errors to stderr with stable nonzero exits.
 - Verify both aliases against differential CLI fixtures.
 
-### 5. Capability/configuration/policy layer
+### 5. Capability/configuration/policy layer — complete
 
 - Implement precedence: CLI > environment > project config > defaults.
 - Generate a supported/migrating/unsupported capability manifest.
