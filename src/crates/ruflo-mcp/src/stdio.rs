@@ -37,8 +37,9 @@ where
         }
 
         let frame = line.trim_end_matches(&['\r', '\n'][..]).to_string();
+        let request_context = RequestContext::local(frame.len());
         let response = match serde_json::from_str::<Value>(&frame) {
-            Ok(request) => handle_request(&dispatcher, &request, frame.len()),
+            Ok(request) => handle_request(&dispatcher, &request, request_context),
             Err(error) => {
                 let _ = writeln!(diagnostics, "mcp parse error: {error}");
                 json!({
@@ -66,9 +67,13 @@ where
     Ok(())
 }
 
-fn handle_request(dispatcher: &Dispatcher, request: &Value, request_bytes: usize) -> Value {
+fn handle_request(
+    dispatcher: &Dispatcher,
+    request: &Value,
+    request_context: RequestContext,
+) -> Value {
     let id = request.get("id").cloned().unwrap_or(Value::Null);
-    match request_to_response(dispatcher, request, request_bytes) {
+    match request_to_response(dispatcher, request, request_context) {
         Ok(result) => json!({
             "jsonrpc": "2.0",
             "id": id,
@@ -85,7 +90,7 @@ fn handle_request(dispatcher: &Dispatcher, request: &Value, request_bytes: usize
 fn request_to_response(
     dispatcher: &Dispatcher,
     request: &Value,
-    request_bytes: usize,
+    request_context: RequestContext,
 ) -> Result<Value, crate::dispatcher::ErrorObject> {
     if request.get("jsonrpc") != Some(&Value::String("2.0".to_string())) {
         return Err(invalid_request("jsonrpc must equal `2.0`"));
@@ -101,10 +106,7 @@ fn request_to_response(
     }
 
     match method {
-        "tools/list" => {
-            Ok(dispatcher
-                .list_tools(&crate::dispatcher::RequestContext::local(request_bytes).caller))
-        }
+        "tools/list" => Ok(dispatcher.list_tools(&request_context)),
         "tools/call" => {
             let name = params.get("name").and_then(Value::as_str).ok_or_else(|| {
                 map_error(RufloError::invalid_input(
@@ -125,7 +127,7 @@ fn request_to_response(
 
             dispatcher
                 .call(
-                    RequestContext::local(request_bytes),
+                    request_context,
                     ToolCall {
                         name: name.to_string(),
                         arguments,

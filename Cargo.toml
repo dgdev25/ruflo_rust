@@ -16,6 +16,10 @@ autobenches = false
 [lib]
 path = "src/root_harness.rs"
 
+[features]
+default = []
+stateless-http = ["ruflo-mcp/stateless-http"]
+
 [workspace]
 members = ["src/crates/*", "src/bin/ruflo", "src/bin/claude-flow"]
 resolver = "2"
@@ -26,9 +30,15 @@ rust-version = "1.87"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
+axum = "0.8.9"
+base64 = "0.22.1"
+hmac = "0.12.1"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
+sha2 = "0.10.9"
 tempfile = "3.21.0"
+tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+tower = { version = "0.5.3", features = ["util"] }
 
 [dependencies]
 ruflo-actions = { path = "src/crates/ruflo-actions" }
@@ -41,6 +51,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
+axum = { workspace = true }
 ruflo-actions = { path = "src/crates/ruflo-actions" }
 ruflo-config = { path = "src/crates/ruflo-config" }
 ruflo-mcp = { path = "src/crates/ruflo-mcp" }
@@ -49,6 +60,8 @@ ruflo-storage = { path = "src/crates/ruflo-storage" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
 
 [[bin]]
 name = "fixture-capture"

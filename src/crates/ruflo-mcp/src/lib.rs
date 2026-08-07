@@ -1,8 +1,14 @@
 mod dispatcher;
+#[cfg(feature = "stateless-http")]
+mod http;
 mod stdio;
 
 pub use dispatcher::{
-    map_error, Dispatcher, ErrorObject, ErrorResponseData, RequestContext, ToolCall,
-    ToolDefinition, ToolResponseContent, ToolResult,
+    map_error, Dispatcher, ErrorObject, ErrorResponseData, RequestContext, RequestIdentity,
+    ToolCall, ToolDefinition, ToolResponseContent, ToolResult,
+};
+#[cfg(feature = "stateless-http")]
+pub use http::{
+    serve_stateless_http, HttpLimits, IdentityClaims, IdentityValidator, IdentityValidatorConfig,
 };
 pub use stdio::{serve_stdio, serve_stdio_with};

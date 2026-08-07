@@ -1,4 +1,6 @@
+use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 use ruflo_config::{Caller, DispatchRequest, EffectiveConfig, RegisteredCapability, ToolPolicy};
 use ruflo_types::{Capability, RufloError};
@@ -9,6 +11,7 @@ static CORRELATION_COUNTER: AtomicU64 = AtomicU64::new(1);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RequestContext {
     pub caller: Caller,
+    pub identity: Option<RequestIdentity>,
     pub request_bytes: usize,
     pub active_executions: usize,
     pub duration_ms: u64,
@@ -18,11 +21,43 @@ impl RequestContext {
     pub fn local(request_bytes: usize) -> Self {
         Self {
             caller: Caller::local(),
+            identity: None,
             request_bytes,
             active_executions: 0,
             duration_ms: 0,
         }
     }
+
+    pub fn remote(
+        identity: RequestIdentity,
+        request_bytes: usize,
+        active_executions: usize,
+        duration_ms: u64,
+    ) -> Self {
+        Self {
+            caller: Caller::named(identity.subject.clone()),
+            identity: Some(identity),
+            request_bytes,
+            active_executions,
+            duration_ms,
+        }
+    }
+
+    fn allows_capability(&self, capability: &str) -> bool {
+        self.identity
+            .as_ref()
+            .map(|identity| identity.capabilities.contains(capability))
+            .unwrap_or(true)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RequestIdentity {
+    pub subject: String,
+    pub issuer: String,
+    pub audience: String,
+    pub expires_at_epoch_s: u64,
+    pub capabilities: BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -126,11 +161,15 @@ impl Dispatcher {
         })
     }
 
-    pub fn list_tools(&self, caller: &Caller) -> Value {
+    pub fn list_tools(&self, context: &RequestContext) -> Value {
         let tools = self
             .registry
             .iter()
-            .filter(|tool| self.policy.is_discoverable(caller, tool.definition.name))
+            .filter(|tool| {
+                self.policy
+                    .is_discoverable(&context.caller, tool.definition.name)
+            })
+            .filter(|tool| context.allows_capability(&tool.definition.capability.name))
             .map(|tool| tool.definition.json_schema())
             .collect::<Vec<_>>();
         json!({ "tools": tools })
@@ -154,6 +193,11 @@ impl Dispatcher {
                 duration_ms: context.duration_ms,
             },
         )?;
+        if !context.allows_capability(&tool.definition.capability.name) {
+            return Err(RufloError::unauthorized(
+                tool.definition.capability.name.clone(),
+            ));
+        }
 
         (tool.handler)(&call.arguments)
     }
@@ -185,6 +229,7 @@ fn build_registry() -> Vec<RegisteredTool> {
 }
 
 fn agent_spawn(arguments: &Value) -> Result<ToolResult, RufloError> {
+    maybe_sleep(arguments)?;
     let role = optional_string(arguments, "role")?.unwrap_or_else(|| "generalist".to_string());
     let agent_id = format!("agent-{role}");
     Ok(ToolResult::text(
@@ -198,6 +243,7 @@ fn agent_spawn(arguments: &Value) -> Result<ToolResult, RufloError> {
 }
 
 fn memory_search(arguments: &Value) -> Result<ToolResult, RufloError> {
+    maybe_sleep(arguments)?;
     let query = required_string(arguments, "query")?;
     Ok(ToolResult::text(
         format!("no stored matches for `{query}`"),
@@ -206,6 +252,20 @@ fn memory_search(arguments: &Value) -> Result<ToolResult, RufloError> {
             "matches": []
         })),
     ))
+}
+
+fn maybe_sleep(arguments: &Value) -> Result<(), RufloError> {
+    let Some(raw) = arguments.get("sleep_ms") else {
+        return Ok(());
+    };
+    let sleep_ms = raw.as_u64().ok_or_else(|| {
+        RufloError::invalid_input(
+            "tool.invalid_arguments",
+            "field `sleep_ms` must be an unsigned integer",
+        )
+    })?;
+    std::thread::sleep(Duration::from_millis(sleep_ms));
+    Ok(())
 }
 
 fn required_string(arguments: &Value, field: &'static str) -> Result<String, RufloError> {
