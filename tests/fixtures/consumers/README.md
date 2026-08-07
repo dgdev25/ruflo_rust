@@ -16,5 +16,7 @@ Still missing curated fixtures:
 - migration and RVF/RVFA compatibility samples
 - policy-denial transcripts
 - POSIX and Windows platform hook samples
+  - `platform-hooks/posix.json`
+  - `platform-hooks/windows.json`
 
-Until those fixtures exist, the contract matrix records the rows as blocked instead of supported.
+These fixtures let the contract matrix carry explicit platform-hook evidence instead of a blocker-only row.

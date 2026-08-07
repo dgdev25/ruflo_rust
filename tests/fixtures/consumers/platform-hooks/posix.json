@@ -1,0 +1,13 @@
+{
+  "platform": "posix",
+  "executable": "ruflo",
+  "args": [
+    "mcp",
+    "start"
+  ],
+  "forbidden_fragments": [
+    "|",
+    "/bin/bash",
+    "cmd.exe"
+  ]
+}

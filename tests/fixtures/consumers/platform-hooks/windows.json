@@ -1,0 +1,13 @@
+{
+  "platform": "windows",
+  "executable": "ruflo.exe",
+  "args": [
+    "mcp",
+    "start"
+  ],
+  "forbidden_fragments": [
+    "|",
+    "/bin/bash",
+    "cmd.exe /c"
+  ]
+}

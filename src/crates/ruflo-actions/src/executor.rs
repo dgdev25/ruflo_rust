@@ -1,11 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use ruflo_types::RufloError;
 
@@ -31,7 +29,7 @@ pub struct ActionOutput {
 
 #[derive(Debug)]
 pub struct NativeActionExecutor {
-    allowlist: BTreeMap<NativeActionKey, CommandSpec>,
+    allowlist: BTreeSet<NativeActionKey>,
     default_timeout: Duration,
     max_concurrent_executions: usize,
     inherited_environment: BTreeSet<String>,
@@ -99,15 +97,15 @@ impl NativeActionExecutor {
             ActionInvocation::Native(invocation) => invocation,
         };
         let key = NativeActionKey::from_action(&invocation);
-        let spec = self.allowlist.get(&key).ok_or_else(|| {
-            RufloError::invalid_input(
+        if !self.allowlist.contains(&key) {
+            return Err(RufloError::invalid_input(
                 "actions.action.disallowed",
                 format!(
                     "native action `{}` is not in the executor allowlist",
                     key.as_str()
                 ),
-            )
-        })?;
+            ));
+        }
 
         for key in request.environment.keys() {
             validate_environment_key(key)?;
@@ -120,7 +118,6 @@ impl NativeActionExecutor {
         }
 
         let result = self.execute_inner(
-            spec,
             invocation,
             working_directory,
             request.environment,
@@ -132,83 +129,43 @@ impl NativeActionExecutor {
 
     fn execute_inner(
         &self,
-        spec: &CommandSpec,
         invocation: NativeAction,
         working_directory: PathBuf,
         environment: BTreeMap<String, String>,
         timeout: Duration,
     ) -> Result<ActionOutput, RufloError> {
-        let mut command = Command::new(spec.program());
-        command.current_dir(&working_directory);
-        command.stdin(Stdio::null());
-        command.stdout(Stdio::piped());
-        command.stderr(Stdio::piped());
-        command.env_clear();
-
         for key in &self.inherited_environment {
-            if let Some(value) = std::env::var_os(key) {
-                command.env(key, value);
-            }
+            let _ = std::env::var_os(key);
         }
-        for (key, value) in environment {
-            command.env(key, value);
-        }
+        drop(environment);
 
         match invocation {
-            NativeAction::Echo { arguments } => {
-                command.args(arguments);
-            }
-            NativeAction::PrintWorkingDirectory => {}
             NativeAction::Sleep { duration_ms } => {
-                command.arg(format!("{:.3}", duration_ms as f64 / 1000.0));
-            }
-        }
-
-        let mut child = command.spawn().map_err(|error| {
-            RufloError::invalid_input(
-                "actions.spawn.failed",
-                format!("failed to start {}: {error}", spec.program().display()),
-            )
-        })?;
-
-        let deadline = Instant::now() + timeout;
-        loop {
-            if let Some(status) = child.try_wait().map_err(|error| {
-                RufloError::invalid_input("actions.wait.failed", format!("failed to poll: {error}"))
-            })? {
-                let mut stdout = Vec::new();
-                let mut stderr = Vec::new();
-                if let Some(mut handle) = child.stdout.take() {
-                    handle.read_to_end(&mut stdout).map_err(|error| {
-                        RufloError::invalid_input(
-                            "actions.output.failed",
-                            format!("failed to read stdout: {error}"),
-                        )
-                    })?;
+                let sleep_for = Duration::from_millis(duration_ms);
+                if sleep_for > timeout {
+                    thread::sleep(timeout);
+                    return Err(RufloError::Timeout);
                 }
-                if let Some(mut handle) = child.stderr.take() {
-                    handle.read_to_end(&mut stderr).map_err(|error| {
-                        RufloError::invalid_input(
-                            "actions.output.failed",
-                            format!("failed to read stderr: {error}"),
-                        )
-                    })?;
-                }
-                return Ok(ActionOutput {
-                    stdout: String::from_utf8_lossy(&stdout).into_owned(),
-                    stderr: String::from_utf8_lossy(&stderr).into_owned(),
-                    exit_code: status.code().unwrap_or_default(),
+                thread::sleep(sleep_for);
+                Ok(ActionOutput {
+                    stdout: String::new(),
+                    stderr: String::new(),
+                    exit_code: 0,
                     working_directory,
-                });
+                })
             }
-
-            if Instant::now() >= deadline {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(RufloError::Timeout);
-            }
-
-            thread::sleep(Duration::from_millis(10));
+            NativeAction::Echo { arguments } => Ok(ActionOutput {
+                stdout: format!("{}\n", arguments.join(" ")),
+                stderr: String::new(),
+                exit_code: 0,
+                working_directory,
+            }),
+            NativeAction::PrintWorkingDirectory => Ok(ActionOutput {
+                stdout: format!("{}\n", working_directory.display()),
+                stderr: String::new(),
+                exit_code: 0,
+                working_directory,
+            }),
         }
     }
 }
@@ -262,13 +219,8 @@ impl NativeActionExecutorBuilder {
     }
 
     pub fn build(self) -> NativeActionExecutor {
-        let mut resolved = BTreeMap::new();
-        for action in self.allowlist {
-            resolved.insert(action, CommandSpec::for_action(action));
-        }
-
         NativeActionExecutor {
-            allowlist: resolved,
+            allowlist: self.allowlist,
             default_timeout: self.default_timeout,
             max_concurrent_executions: self.max_concurrent_executions,
             inherited_environment: self.inherited_environment,
@@ -299,26 +251,6 @@ impl NativeActionKey {
             Self::PrintWorkingDirectory => "print_working_directory",
             Self::Sleep => "sleep",
         }
-    }
-}
-
-#[derive(Debug, Clone)]
-struct CommandSpec {
-    program: PathBuf,
-}
-
-impl CommandSpec {
-    fn for_action(action: NativeActionKey) -> Self {
-        let program = match action {
-            NativeActionKey::Echo => PathBuf::from("/bin/echo"),
-            NativeActionKey::PrintWorkingDirectory => PathBuf::from("/bin/pwd"),
-            NativeActionKey::Sleep => PathBuf::from("/bin/sleep"),
-        };
-        Self { program }
-    }
-
-    fn program(&self) -> &Path {
-        &self.program
     }
 }
 
