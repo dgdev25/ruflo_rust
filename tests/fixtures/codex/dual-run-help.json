@@ -1,0 +1,31 @@
+{
+  "argv": [
+    "dual",
+    "run",
+    "--help"
+  ],
+  "exit": 0,
+  "stdout": "Usage: claude-flow-codex dual run [options] [template]\n\nRun a collaborative dual-mode swarm\n\nArguments:\n  template               Pre-built template name (feature, security, refactor)\n                         — positional alias for --template\n\nOptions:\n  -t, --template <name>  Use a pre-built template (feature, security, refactor)\n  -w, --worker <spec>    Worker spec \"<platform>:<role>:<prompt>\" (platform =\n                         claude|codex). Repeatable. Workers chain sequentially\n                         unless --parallel-workers. (default: [])\n  --parallel-workers     Run --worker specs in parallel instead of chaining\n                         them sequentially (default: false)\n  -c, --config <path>    Path to collaboration config JSON\n  --task <description>   Task description for the swarm\n  --max-concurrent <n>   Maximum concurrent workers (default: \"4\")\n  --timeout <ms>         Worker timeout in milliseconds (default: \"300000\")\n  --namespace <name>     Shared memory namespace (default: \"collaboration\")\n  -h, --help             display help for command\n",
+  "stderr": "",
+  "environment": {},
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "installed:claude-flow-codex@3.0.1",
+    "source_command": [
+      "dual",
+      "run",
+      "--help"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-07T18:45:00Z",
+    "recorded_by": "live-oracle-capture",
+    "harness": "differential-cli"
+  }
+}

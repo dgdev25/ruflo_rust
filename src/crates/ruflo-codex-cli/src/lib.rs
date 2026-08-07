@@ -43,6 +43,28 @@ Templates:
 Custom workers:
   --worker "claude:architect:Design the API" --worker "codex:coder:Implement it"
 "#;
+const DUAL_RUN_HELP: &str = r#"Usage: claude-flow-codex dual run [options] [template]
+
+Run a collaborative dual-mode swarm
+
+Arguments:
+  template               Pre-built template name (feature, security, refactor)
+                         — positional alias for --template
+
+Options:
+  -t, --template <name>  Use a pre-built template (feature, security, refactor)
+  -w, --worker <spec>    Worker spec "<platform>:<role>:<prompt>" (platform =
+                         claude|codex). Repeatable. Workers chain sequentially
+                         unless --parallel-workers. (default: [])
+  --parallel-workers     Run --worker specs in parallel instead of chaining
+                         them sequentially (default: false)
+  -c, --config <path>    Path to collaboration config JSON
+  --task <description>   Task description for the swarm
+  --max-concurrent <n>   Maximum concurrent workers (default: "4")
+  --timeout <ms>         Worker timeout in milliseconds (default: "300000")
+  --namespace <name>     Shared memory namespace (default: "collaboration")
+  -h, --help             display help for command
+"#;
 
 pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
     let args = argv
@@ -67,6 +89,10 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         ["dual", "run"] => {
             print!("{EMPTY_DUAL_RUN}");
+            ExitCode::SUCCESS
+        }
+        ["dual", "run", "--help"] | ["dual", "run", "-h"] => {
+            print!("{DUAL_RUN_HELP}");
             ExitCode::SUCCESS
         }
         _ => {

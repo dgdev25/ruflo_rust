@@ -7,9 +7,9 @@ create project files nor launch a Codex or Claude worker.
 ## Acceptance ledger
 
 - [x] Inventory the live Codex integration and identify its native boundaries.
-- [x] Verify that the local oracle executable is available; capture replay
-  fixtures for `--version`, `dual templates`, and `dual run` with no worker
-  configuration, and record help output for the next command surface.
+- [x] Verify that the local oracle executable is available and capture replay
+  fixtures for `--version`, `dual templates`, `dual run` with no worker
+  configuration, and `dual run --help`.
 - [x] Add a native `claude-flow-codex` façade that exactly replays the safe
   fixture contract.
 - [x] Capture redacted source-oracle fixtures for each replayed command and

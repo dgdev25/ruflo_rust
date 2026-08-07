@@ -464,6 +464,7 @@ fn checked_in_cli_fixtures_parse() {
         "tests/fixtures/codex/version.json",
         "tests/fixtures/codex/dual-templates.json",
         "tests/fixtures/codex/dual-run-empty.json",
+        "tests/fixtures/codex/dual-run-help.json",
     ] {
         Fixture::load(path).unwrap();
     }

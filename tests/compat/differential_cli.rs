@@ -170,6 +170,7 @@ fn codex_facade_replays_safe_oracle_workflows() {
         "tests/fixtures/codex/version.json",
         "tests/fixtures/codex/dual-templates.json",
         "tests/fixtures/codex/dual-run-empty.json",
+        "tests/fixtures/codex/dual-run-help.json",
     ] {
         assert_cli_fixture("claude-flow-codex", fixture);
     }
