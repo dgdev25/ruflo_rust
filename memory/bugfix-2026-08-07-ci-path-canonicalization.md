@@ -29,6 +29,11 @@ could restore that empty directory. The script now creates only its parent,
 and selects a unique advisory database per GitHub run to avoid a restored
 empty clone destination.
 
+The subsequent macOS aarch64 run found the same test-oracle error in the
+migration suite: the backup path is derived from a canonical persisted path,
+but its parent project root was compared without canonicalization. Its
+containment assertion now compares canonical roots.
+
 ## Verification
 
 - `cargo fmt --all -- --check`

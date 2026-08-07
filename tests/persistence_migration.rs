@@ -24,7 +24,9 @@ fn successful_migration_commits_atomically_and_cleans_marker() {
         outcome.database_path,
         project.database_path().canonicalize().unwrap()
     );
-    assert!(outcome.backup_path.starts_with(project.root()));
+    assert!(outcome
+        .backup_path
+        .starts_with(project.root().canonicalize().unwrap()));
     assert_eq!(
         project.read_fixture(),
         project.read_backup(&outcome.backup_path)
