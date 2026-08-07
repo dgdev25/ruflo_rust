@@ -16,6 +16,7 @@ named compatibility evidence and focused verification.
 | 6. Shared stdio MCP dispatcher | Complete | `1eb3994`; JSON-RPC protocol, dispatcher, errors, and denial tests pass. |
 | 7. Runtime lifecycle handles | Complete | `2963195`; task cancellation and lifecycle invariants pass across the workspace suite. |
 | 8. Persistence ports and migration safety | Complete | `9ab4c98`; rollback, locking, root validation, and backup permission tests pass. |
+| 9. RVF adapter facade | Complete | `8d54f45`; public immutable RuVector pin and AgentDB/Agentic Flow interop tests pass; unavailable typed unknown-segment round trip is explicitly tracked with upstream evidence. |
 
 ## Remaining execution order
 
@@ -68,11 +69,11 @@ named compatibility evidence and focused verification.
 - Never expose database values, keys, or paths outside project root.
 - Verify success, lock conflict, rollback, and permissions with legacy fixtures.
 
-### 9. RVF adapter facade
+### 9. RVF adapter facade — complete
 
 - Pin and verify existing `rvf-runtime`, AgentDB, and Agentic Flow adapter revisions.
 - Translate objects only; never hand-encode RVF, indexes, vectors, quantization, or witnesses.
-- Verify AgentDB/Agentic Flow fixture interop, unknown-segment survival, and stable search order.
+- Verify AgentDB/Agentic Flow fixture interop and stable search order; record any typed-API gap in the fixture evidence rather than hand-encoding RVF.
 
 ### 10. Native hook and plugin action boundary
 
