@@ -482,6 +482,9 @@ fn checked_in_json_rpc_fixture_parses() {
         memory_search.response["result"]["structuredContent"]["query"],
         "auth"
     );
+
+    let denied = JsonRpcFixture::load("tests/fixtures/mcp/memory-search-denied.json").unwrap();
+    assert_eq!(denied.response["error"]["code"], -32001);
 }
 
 #[test]

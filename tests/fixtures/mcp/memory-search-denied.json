@@ -1,0 +1,43 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "compat-denied",
+    "method": "tools/call",
+    "params": {
+      "name": "memory_search",
+      "arguments": {
+        "query": "auth"
+      }
+    }
+  },
+  "response": {
+    "jsonrpc": "2.0",
+    "id": "compat-denied",
+    "error": {
+      "code": -32001,
+      "message": "Unauthorized",
+      "data": {
+        "correlationId": "corr-00000001",
+        "details": {
+          "capability": "memory.search"
+        }
+      }
+    }
+  },
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "reduced-schema",
+    "source": "/mnt/datadisk/repos/rUvnet/claude-flow/tests/docker-regression/scripts/test-security.sh",
+    "reduction": "The legacy regression suite exercises shell-hook denial, while this native rebuild currently exposes policy at the shared MCP dispatcher. The fixture fixes the equivalent native pre-dispatch denial for a named capability; the test supplies RUFLO_MCP_DENY=memory_search without recording environment values.",
+    "redactions": [
+      "RUFLO_MCP_DENY supplied by test harness"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-07T19:10:00Z",
+    "recorded_by": "native-compatibility-curation",
+    "harness": "mcp-stdio"
+  }
+}
