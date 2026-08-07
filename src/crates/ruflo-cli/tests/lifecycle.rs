@@ -225,6 +225,45 @@ fn swarm_state_is_durable_and_status_is_derived_from_project_records() {
 }
 
 #[test]
+fn swarm_scale_durably_reconciles_the_native_agent_registry() {
+    let temp = tempfile::tempdir().unwrap();
+    lifecycle::initialize(temp.path()).unwrap();
+    let swarm = lifecycle::initialize_swarm(temp.path(), "hierarchical", 2, "development").unwrap();
+    lifecycle::spawn_agent(temp.path(), "coder", "coder-1").unwrap();
+
+    let scaled = lifecycle::scale_swarm(temp.path(), &swarm.id, 3, Some("tester")).unwrap();
+    assert_eq!(scaled.delta, 2);
+    let agents = lifecycle::list_agents(temp.path()).unwrap();
+    assert_eq!(
+        agents
+            .iter()
+            .filter(|agent| agent.status != "terminated")
+            .count(),
+        3
+    );
+    assert!(agents.iter().any(|agent| agent.agent_type == "tester"));
+    assert_eq!(
+        lifecycle::swarm_status(temp.path())
+            .unwrap()
+            .swarm
+            .unwrap()
+            .max_agents,
+        3
+    );
+
+    let downscaled = lifecycle::scale_swarm(temp.path(), &swarm.id, 1, None).unwrap();
+    assert_eq!(downscaled.delta, -2);
+    assert_eq!(
+        lifecycle::list_agents(temp.path())
+            .unwrap()
+            .iter()
+            .filter(|agent| agent.status != "terminated")
+            .count(),
+        1
+    );
+}
+
+#[test]
 fn sessions_snapshot_restore_export_import_and_delete_project_state() {
     let temp = tempfile::tempdir().unwrap();
     lifecycle::initialize(temp.path()).unwrap();

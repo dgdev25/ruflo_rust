@@ -203,6 +203,25 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
                 Err(error) => task_error(error),
             }
         }
+        Ok(ParsedCommand::SwarmScale {
+            swarm_id,
+            target_agents,
+            agent_type,
+        }) => match lifecycle::scale_swarm(
+            &current_directory(),
+            &swarm_id,
+            target_agents,
+            agent_type.as_deref(),
+        ) {
+            Ok(result) => {
+                println!(
+                    "Swarm {} scaled to {} agents (delta {})",
+                    result.swarm_id, result.target_agents, result.delta
+                );
+                ExitCode::SUCCESS
+            }
+            Err(error) => task_error(error),
+        },
         Ok(ParsedCommand::AgentSpawn { agent_type, name }) => {
             match lifecycle::spawn_agent(&current_directory(), &agent_type, &name) {
                 Ok(agent) => {

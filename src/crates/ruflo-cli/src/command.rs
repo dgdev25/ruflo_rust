@@ -19,6 +19,11 @@ pub enum ParsedCommand {
     SwarmStop {
         swarm_id: String,
     },
+    SwarmScale {
+        swarm_id: String,
+        target_agents: usize,
+        agent_type: Option<String>,
+    },
     SessionSave {
         name: String,
         description: String,
@@ -248,6 +253,20 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             swarm_id: normalized[2].into(),
         });
     }
+    if normalized.len() >= 3 && normalized[0] == "swarm" && normalized[1] == "scale" {
+        let target_agents = option_value(&args, "--agents", "-a")
+            .ok_or("target agent count required. Use --agents or -a")?
+            .parse()
+            .map_err(|_| "target agent count must be a positive integer")?;
+        if target_agents == 0 {
+            return Err("target agent count must be a positive integer".into());
+        }
+        return Ok(ParsedCommand::SwarmScale {
+            swarm_id: normalized[2].into(),
+            target_agents,
+            agent_type: option_value(&args, "--type", "-t"),
+        });
+    }
     if normalized.len() >= 2
         && normalized[0] == "session"
         && matches!(normalized[1], "save" | "create" | "checkpoint")
@@ -425,6 +444,11 @@ mod tests {
         assert!(matches!(
             parse(argv(&["swarm", "stop", "swarm-1"])),
             Ok(ParsedCommand::SwarmStop { swarm_id }) if swarm_id == "swarm-1"
+        ));
+        assert!(matches!(
+            parse(argv(&["swarm", "scale", "swarm-1", "-a", "3", "-t", "coder"])),
+            Ok(ParsedCommand::SwarmScale { swarm_id, target_agents: 3, agent_type: Some(agent_type) })
+                if swarm_id == "swarm-1" && agent_type == "coder"
         ));
     }
 

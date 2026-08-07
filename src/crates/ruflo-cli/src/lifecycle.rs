@@ -35,6 +35,13 @@ pub struct SwarmStatus {
     pub tasks_running: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SwarmScaleResult {
+    pub swarm_id: String,
+    pub target_agents: usize,
+    pub delta: isize,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionRecord {
@@ -392,6 +399,68 @@ pub fn stop_swarm(project_root: &Path, swarm_id: &str) -> io::Result<SwarmRecord
     swarm.status = "stopped".into();
     write_swarm(project_root, &swarm)?;
     Ok(swarm)
+}
+
+pub fn scale_swarm(
+    project_root: &Path,
+    swarm_id: &str,
+    target_agents: usize,
+    agent_type: Option<&str>,
+) -> io::Result<SwarmScaleResult> {
+    if !(1..=100).contains(&target_agents) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "target agent count must be between 1 and 100",
+        ));
+    }
+    let mut swarm = read_swarm(project_root)?.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "no swarm is initialized in this directory",
+        )
+    })?;
+    if swarm.id != swarm_id {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("swarm `{swarm_id}` does not exist"),
+        ));
+    }
+    if swarm.status == "stopped" {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "stopped swarm cannot be scaled; initialize a new swarm",
+        ));
+    }
+
+    let mut active = list_agents(project_root)?
+        .into_iter()
+        .filter(|agent| agent.status != "terminated")
+        .collect::<Vec<_>>();
+    let delta = target_agents as isize - active.len() as isize;
+    if delta > 0 {
+        let agent_type = safe_identifier(agent_type.unwrap_or("worker"))?;
+        let mut next = 1_usize;
+        while active.len() < target_agents {
+            let id = format!("scale-{agent_type}-{next}");
+            next += 1;
+            if get_agent(project_root, &id).is_ok() {
+                continue;
+            }
+            active.push(spawn_agent(project_root, &agent_type, &id)?);
+        }
+    } else if delta < 0 {
+        active.sort_by(|left, right| right.id.cmp(&left.id));
+        for agent in active.iter().take((-delta) as usize) {
+            stop_agent(project_root, &agent.id)?;
+        }
+    }
+    swarm.max_agents = target_agents;
+    write_swarm(project_root, &swarm)?;
+    Ok(SwarmScaleResult {
+        swarm_id: swarm.id,
+        target_agents,
+        delta,
+    })
 }
 
 pub fn list_tasks(project_root: &Path) -> io::Result<Vec<TaskRecord>> {

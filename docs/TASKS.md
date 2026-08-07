@@ -46,9 +46,10 @@ named compatibility evidence and focused verification.
   is accepted on the one-shot V3-compatible command surface. WASM and publish
   operations plus all differential
   output and MCP fixtures remain open.
-- Swarm lifecycle increment: native `init`, `status`, `start`, and `stop`
-  persist `.swarm/state.json`, derive counts from durable task/agent records,
-  and hand `start` to the existing Codex-only, policy-gated scheduler. It is
+- Swarm lifecycle increment: native `init`, `status`, `start`, `stop`, and
+  `scale` persist `.swarm/state.json`, derive counts from durable task/agent
+  records, and hand `start` to the existing Codex-only, policy-gated scheduler.
+  `scale` reconciles durable agent records without a second scheduler. It is
   incomplete pending source-oracle fixtures, remaining swarm subcommands, and
   a live configured-Codex deployment receipt.
 - Session lifecycle increment: native `save`/`create`/`checkpoint`, `list`/`ls`,
