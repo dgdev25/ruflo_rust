@@ -23,6 +23,7 @@ named compatibility evidence and focused verification.
 | 13. Supply-chain, SBOM, reproducibility gates | Complete | `59d3994`; Cargo audit/deny, SPDX SBOM+digest generation, and locked policy checks pass. |
 | 14. Wave-promotion evidence gates | Complete | `dd365d7`; release manifests and verifier block incomplete evidence while accepting complete Wave 2 evidence. |
 | 15. Native Codex dual-run scheduler | Complete | A safe live-TS fake-Codex capture plus direct-process scheduler test prove the launch vector, prompt clauses, opt-in policy, isolated worktrees, bounded execution, native shared memory, and secret-safe child environment. |
+| 16. ruVocal bridge-entrypoint staging | Complete | The actual bridge ran the native child via `RUFLO_MCP_COMMAND`; namespaced discovery, durable memory round trip, and `ENABLE_RUFLO=false` rollback were verified. |
 
 ## Remaining execution order
 

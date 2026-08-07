@@ -30,10 +30,11 @@ create project files nor launch a Codex or Claude worker.
   provider.
 - [x] Capture and implement the separate `dual status` shared-memory view
   without delegating to `npx ruflo@latest`.
-- [x] Pilot the native façade as an opt-in ruVocal MCP child using the accepted
-  prefix-stripping and stdio JSON-RPC contract.
-- [x] Publish the opt-in native MCP-child promotion report after consumer
-  evidence and all native runner checks are green.
+- [x] Stage the actual ruVocal bridge entrypoint against the opt-in native MCP
+  child, including namespace discovery, a durable memory round trip, and the
+  `ENABLE_RUFLO=false` rollback.
+- [x] Publish the opt-in native MCP-child promotion report with checked local
+  verification evidence; GitHub Actions are intentionally absent.
 
 ## Observed oracle contract
 
