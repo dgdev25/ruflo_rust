@@ -14,6 +14,7 @@ named compatibility evidence and focused verification.
 | 4. Native CLI façade and aliases | Complete | `03fc0d9`; both native aliases pass version/help and MCP placeholder contract tests. |
 | 5. Capability/configuration/policy layer | Complete | `6ed4b55`; precedence, manifest, denial, and resource-limit tests pass. |
 | 6. Shared stdio MCP dispatcher | Complete | `1eb3994`; JSON-RPC protocol, dispatcher, errors, and denial tests pass. |
+| 7. Runtime lifecycle handles | Complete | `2963195`; task cancellation and lifecycle invariants pass across the workspace suite. |
 
 ## Remaining execution order
 
@@ -52,7 +53,7 @@ named compatibility evidence and focused verification.
 - Guarantee JSON-RPC-only stdout and stderr-only diagnostics.
 - Verify stdio round trips, schema equivalence, and denial filtering.
 
-### 7. Runtime lifecycle handles
+### 7. Runtime lifecycle handles — complete
 
 - Define opaque agent, task, swarm, and workflow identifiers.
 - Implement explicit lifecycle transitions, deterministic cancellation, and auditable terminal handles.
