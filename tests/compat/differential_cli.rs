@@ -211,6 +211,44 @@ fn codex_facade_replays_provider_free_loop_lifecycle_fixtures() {
 }
 
 #[test]
+fn codex_facade_replays_provider_free_loop_dry_run_fixture() {
+    let fixture = CliFixture::load("tests/fixtures/codex/loop-dry-run.json").unwrap();
+    let project = tempfile::tempdir().unwrap();
+    let project_path = project.path().display().to_string();
+    let args = fixture
+        .argv
+        .iter()
+        .map(|argument| argument.replace("<PROJECT>", &project_path))
+        .collect::<Vec<_>>();
+    let output = Command::new(executable_path("claude-flow-codex"))
+        .args(args)
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(fixture.exit));
+    assert_eq!(
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .replace(&project_path, "<PROJECT>"),
+        fixture.stdout
+    );
+    assert_eq!(String::from_utf8(output.stderr).unwrap(), fixture.stderr);
+
+    let state_path = project.path().join(".codex/loop/qa-loop.json");
+    let state: Value = serde_json::from_str(&std::fs::read_to_string(state_path).unwrap()).unwrap();
+    assert_eq!(state["name"], "qa-loop");
+    assert_eq!(state["mode"], "command");
+    assert_eq!(state["status"], "idle");
+    assert_eq!(state["prompt"], "");
+    assert_eq!(state["command"], "echo safe");
+    for field in ["startedAt", "updatedAt"] {
+        let timestamp = state[field].as_str().unwrap();
+        let (_, fraction) = timestamp.split_once('.').unwrap();
+        assert_eq!(fraction.strip_suffix('Z').unwrap().len(), 3);
+    }
+}
+
+#[test]
 fn codex_facade_replays_reduced_invalid_worker_contract() {
     let fixture = CliFixture::load("tests/fixtures/codex/invalid-worker-spec.json").unwrap();
     let output = Command::new(executable_path("claude-flow-codex"))

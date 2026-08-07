@@ -650,6 +650,7 @@ name = "ruflo-codex-cli"
 version = "0.1.0"
 dependencies = [
  "ruflo-storage",
+ "serde_json",
 ]
 
 [[package]]

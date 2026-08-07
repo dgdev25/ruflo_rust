@@ -9,6 +9,9 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use serde_json::json;
 
 const VERSION: &str = "3.0.1\n";
 const TEMPLATES: &str = r#"
@@ -91,6 +94,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
     }
     if borrowed.starts_with(&["loop", "stop"]) {
         return loop_stop(&args[2..]);
+    }
+    if borrowed.starts_with(&["loop", "run"]) {
+        return loop_run(&args[2..]);
     }
     if borrowed.starts_with(&["dual", "status"]) {
         return dual_status(&args[2..]);
@@ -209,6 +215,87 @@ fn loop_stop(args: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+fn loop_run(args: &[String]) -> ExitCode {
+    let options = LoopOptions::parse(args);
+    if !options.dry_run {
+        eprintln!(
+            "error: live native loop execution is unsupported; use --dry-run or the future policy-governed scheduler"
+        );
+        return ExitCode::from(2);
+    }
+    if options.command.is_none() && options.prompt.trim().is_empty() {
+        eprintln!("loop run requires a prompt unless --command is provided");
+        return ExitCode::from(1);
+    }
+
+    let state_path = options.state_path();
+    let stop_path = options.stop_path();
+    let complete_path = options.complete_path();
+    let parent = match state_path.parent() {
+        Some(parent) => parent,
+        None => {
+            eprintln!("error: loop state path has no parent");
+            return ExitCode::from(2);
+        }
+    };
+    if let Err(error) = fs::create_dir_all(parent) {
+        eprintln!(
+            "error: failed to create loop state directory {}: {error}",
+            parent.display()
+        );
+        return ExitCode::from(2);
+    }
+    if let Err(error) = fs::remove_file(&stop_path) {
+        if error.kind() != std::io::ErrorKind::NotFound {
+            eprintln!(
+                "error: failed to reset loop stop marker {}: {error}",
+                stop_path.display()
+            );
+            return ExitCode::from(2);
+        }
+    }
+
+    let now = now_rfc3339_millis();
+    let mode = if options.command.is_some() {
+        "command"
+    } else {
+        "codex"
+    };
+    let mut state = json!({
+        "name": options.name,
+        "projectPath": options.project_path,
+        "mode": mode,
+        "status": "idle",
+        "iteration": 0,
+        "maxIterations": options.max_iterations,
+        "intervalSeconds": options.interval_seconds,
+        "startedAt": now,
+        "updatedAt": now,
+        "untilFile": complete_path,
+        "prompt": options.prompt,
+    });
+    if let Some(command) = &options.command {
+        state["command"] = json!(command);
+    }
+    let serialized = match serde_json::to_string_pretty(&state) {
+        Ok(serialized) => serialized,
+        Err(error) => {
+            eprintln!("error: failed to serialize loop state: {error}");
+            return ExitCode::from(2);
+        }
+    };
+    if let Err(error) = fs::write(&state_path, format!("{serialized}\n")) {
+        eprintln!(
+            "error: failed to write loop state {}: {error}",
+            state_path.display()
+        );
+        return ExitCode::from(2);
+    }
+
+    print_loop_state(&options, mode, "idle", &complete_path);
+    ExitCode::SUCCESS
+}
+
 fn dual_status(args: &[String]) -> ExitCode {
     let namespace = option_value(args, &["--namespace"]).unwrap_or_else(|| "collaboration".into());
     println!("\nDual-Mode Collaboration Status\n");
@@ -256,6 +343,11 @@ struct LoopOptions {
     name: String,
     project_path: PathBuf,
     json: bool,
+    dry_run: bool,
+    command: Option<String>,
+    prompt: String,
+    interval_seconds: u64,
+    max_iterations: u64,
 }
 
 impl LoopOptions {
@@ -263,6 +355,11 @@ impl LoopOptions {
         let mut name = "default".to_string();
         let mut project_path = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         let mut json = false;
+        let mut dry_run = false;
+        let mut command = None;
+        let mut prompt = Vec::new();
+        let mut interval_seconds = 270;
+        let mut max_iterations = 10;
         let mut index = 0;
         while index < args.len() {
             match args[index].as_str() {
@@ -279,6 +376,26 @@ impl LoopOptions {
                     }
                 }
                 "--json" => json = true,
+                "--dry-run" => dry_run = true,
+                "--command" => {
+                    if let Some(value) = args.get(index + 1) {
+                        command = Some(value.clone());
+                        index += 1;
+                    }
+                }
+                "--interval" | "-i" => {
+                    if let Some(value) = args.get(index + 1) {
+                        interval_seconds = value.parse().unwrap_or(270);
+                        index += 1;
+                    }
+                }
+                "--max-iterations" | "-m" => {
+                    if let Some(value) = args.get(index + 1) {
+                        max_iterations = value.parse().unwrap_or(10);
+                        index += 1;
+                    }
+                }
+                value if !value.starts_with('-') => prompt.push(value.to_string()),
                 _ => {}
             }
             index += 1;
@@ -287,6 +404,11 @@ impl LoopOptions {
             name: normalize_loop_name(&name),
             project_path,
             json,
+            dry_run,
+            command,
+            prompt: prompt.join(" "),
+            interval_seconds,
+            max_iterations,
         }
     }
 
@@ -303,6 +425,28 @@ impl LoopOptions {
             .join("loop")
             .join(format!("{}.stop", self.name))
     }
+
+    fn complete_path(&self) -> PathBuf {
+        self.project_path
+            .join(".codex")
+            .join("loop")
+            .join(format!("{}.complete", self.name))
+    }
+}
+
+fn print_loop_state(options: &LoopOptions, mode: &str, status: &str, complete_path: &Path) {
+    println!("Loop {}: {status}", options.name);
+    println!("  mode:       {mode}");
+    println!(
+        "  iteration:  0/{}",
+        if options.max_iterations == 0 {
+            "unbounded".to_string()
+        } else {
+            options.max_iterations.to_string()
+        }
+    );
+    println!("  interval:   {}s", options.interval_seconds);
+    println!("  until file: {}", complete_path.display());
 }
 
 fn absolute_path(path: &Path) -> PathBuf {
@@ -331,4 +475,42 @@ fn normalize_loop_name(name: &str) -> String {
     } else {
         normalized.to_string()
     }
+}
+
+fn now_rfc3339_millis() -> String {
+    let elapsed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    let total_seconds = elapsed.as_secs();
+    let days = i64::try_from(total_seconds / 86_400).unwrap_or(i64::MAX);
+    let time_of_day = total_seconds % 86_400;
+    let (year, month, day) = civil_date_from_days(days);
+    let hour = time_of_day / 3_600;
+    let minute = (time_of_day % 3_600) / 60;
+    let second = time_of_day % 60;
+    format!(
+        "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{:03}Z",
+        elapsed.subsec_millis()
+    )
+}
+
+// Converts days since the Unix epoch to proleptic Gregorian Y-M-D. This is
+// the public-domain civil-calendar algorithm adapted from Howard Hinnant.
+fn civil_date_from_days(days_since_epoch: i64) -> (i64, u32, u32) {
+    let days = days_since_epoch + 719_468;
+    let era = if days >= 0 { days } else { days - 146_096 } / 146_097;
+    let day_of_era = days - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_parameter = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_parameter + 2) / 5 + 1;
+    let month = month_parameter + if month_parameter < 10 { 3 } else { -9 };
+    let year = year + if month <= 2 { 1 } else { 0 };
+    (
+        year,
+        u32::try_from(month).unwrap_or_default(),
+        u32::try_from(day).unwrap_or_default(),
+    )
 }

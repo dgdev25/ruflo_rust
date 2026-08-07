@@ -1,0 +1,19 @@
+{
+  "argv": ["loop", "run", "--path", "<PROJECT>", "--name", "QA Loop", "--command", "echo safe", "--dry-run"],
+  "exit": 0,
+  "stdout": "Loop qa-loop: idle\n  mode:       command\n  iteration:  0/10\n  interval:   270s\n  until file: <PROJECT>/.codex/loop/qa-loop.complete\n",
+  "stderr": "",
+  "environment": {},
+  "platform": {"family": "portable"},
+  "provenance": {
+    "kind": "reduced-schema",
+    "source": "installed:claude-flow-codex@3.0.1",
+    "reduction": "The live dry-run command writes a state JSON file whose project path and timestamps vary per invocation. The fixture preserves the complete portable stdout contract; the native differential test validates the stable state fields and ISO-8601 millisecond timestamp shape separately.",
+    "redactions": ["temporary project path", "state timestamps"]
+  },
+  "recording": {
+    "recorded_at": "2026-08-07T19:25:52Z",
+    "recorded_by": "live-oracle-capture",
+    "harness": "differential-cli"
+  }
+}

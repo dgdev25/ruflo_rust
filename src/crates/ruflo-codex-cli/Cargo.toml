@@ -8,3 +8,4 @@ publish = false
 
 [dependencies]
 ruflo-storage = { path = "../ruflo-storage" }
+serde_json = { workspace = true }
