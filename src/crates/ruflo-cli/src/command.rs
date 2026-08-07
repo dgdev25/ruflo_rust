@@ -29,6 +29,7 @@ pub enum ParsedCommand {
     },
     SwarmCompressMessage {
         message: Option<String>,
+        message_file: Option<String>,
         budget_tokens: usize,
         mode: String,
     },
@@ -298,6 +299,7 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
         }
         return Ok(ParsedCommand::SwarmCompressMessage {
             message: option_value(&args, "--message", "-m"),
+            message_file: option_value(&args, "--message-file", "--message-file"),
             budget_tokens,
             mode,
         });
@@ -488,6 +490,10 @@ mod tests {
         assert!(matches!(
             parse(argv(&["swarm", "coordinate", "--agents", "5"])),
             Ok(ParsedCommand::SwarmCoordinate { agents: 5 })
+        ));
+        assert!(matches!(
+            parse(argv(&["swarm", "compress-message", "--message-file", "note.md", "-b", "20"])),
+            Ok(ParsedCommand::SwarmCompressMessage { message: None, message_file: Some(path), budget_tokens: 20, .. }) if path == "note.md"
         ));
     }
 

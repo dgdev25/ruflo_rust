@@ -237,12 +237,20 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::SwarmCompressMessage {
             message,
+            message_file,
             budget_tokens,
             mode,
-        }) => match message
-            .as_deref()
-            .ok_or_else(|| "No message provided. Use --message or --message-file.".to_string())
-            .and_then(|message| compressor::compress_message(message, budget_tokens, &mode))
+        }) => match match message {
+            Some(message) => Ok(message),
+            None => match message_file {
+                Some(path) => read_project_message_file(&current_directory(), &path)
+                    .map_err(|error| format!("Failed to read {path}: {error}")),
+                None => Err("No message provided. Use --message or --message-file.".into()),
+            },
+        }
+        .as_deref()
+        .map_err(Clone::clone)
+        .and_then(|message| compressor::compress_message(message, budget_tokens, &mode))
         {
             Ok(result) => {
                 println!("{}", result.compressed);
@@ -573,6 +581,26 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
 
 fn current_directory() -> std::path::PathBuf {
     std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+}
+
+fn read_project_message_file(
+    project_root: &std::path::Path,
+    input: &str,
+) -> Result<String, std::io::Error> {
+    let path = project_root.join(input);
+    let parent = path.parent().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "message file has no parent",
+        )
+    })?;
+    if !std::fs::canonicalize(parent)?.starts_with(std::fs::canonicalize(project_root)?) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "message file must remain within project root",
+        ));
+    }
+    std::fs::read_to_string(path)
 }
 
 fn task_error(error: std::io::Error) -> ExitCode {
