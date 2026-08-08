@@ -19,6 +19,7 @@ mod lifecycle;
 mod metaharness;
 mod policy;
 mod providers;
+mod proxy;
 mod settings;
 mod spinner;
 mod update_cmd;
@@ -366,6 +367,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::Autopilot(command)) => {
             ExitCode::from(autopilot::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::Proxy(command)) => {
+            ExitCode::from(proxy::run(&current_directory(), command))
         }
         Ok(ParsedCommand::NativeOverview { name }) => {
             let root = current_directory();

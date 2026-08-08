@@ -46,6 +46,7 @@ pub enum ParsedCommand {
     Providers(crate::providers::ProvidersCommand),
     Auth(crate::auth::AuthCommand),
     Autopilot(crate::autopilot::AutopilotCommand),
+    Proxy(crate::proxy::ProxyCommand),
     MemoryStore {
         key: String,
         value: String,
@@ -927,6 +928,13 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
                 limit: option_value(&args, "--limit", "--limit").and_then(|v| v.parse().ok()),
             },
         ));
+    }
+    if normalized.first() == Some(&"proxy") {
+        let operation = normalized.get(1).copied().unwrap_or("").to_string();
+        return Ok(ParsedCommand::Proxy(crate::proxy::ProxyCommand {
+            operation,
+            yes: args.iter().any(|v| v == "--yes"),
+        }));
     }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {
         let key = option_value(&args, "--key", "-k").ok_or("memory key is required")?;
