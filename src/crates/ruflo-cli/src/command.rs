@@ -31,6 +31,7 @@ pub enum ParsedCommand {
     },
     Deployment(crate::deployment::DeploymentCommand),
     Claims(crate::claims::ClaimsCommand),
+    Advisor(crate::funnel::AdvisorCommand),
     MemoryStore {
         key: String,
         value: String,
@@ -483,6 +484,28 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             }
             Some(other) => return Err(format!("Unknown subcommand '{other}' for claims")),
         }
+    }
+    if normalized.first() == Some(&"advisor") {
+        use crate::funnel::AdvisorCommand as Advisor;
+        let subcommand = normalized.get(1).copied();
+        if args.iter().any(|v| matches!(v.as_str(), "--help" | "-h")) {
+            return Ok(ParsedCommand::Advisor(Advisor::Help {
+                subcommand: subcommand
+                    .filter(|v| !v.starts_with('-'))
+                    .map(str::to_owned),
+            }));
+        }
+        let yes = args.iter().any(|v| v == "--yes");
+        let cmd = match subcommand {
+            None => Advisor::Status,
+            Some("status") => Advisor::Status,
+            Some("enable") => Advisor::Enable { yes },
+            Some("disable") => Advisor::Disable,
+            Some(other) => {
+                return Err(format!("Unknown subcommand '{other}' for advisor"));
+            }
+        };
+        return Ok(ParsedCommand::Advisor(cmd));
     }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {
         let key = option_value(&args, "--key", "-k").ok_or("memory key is required")?;
