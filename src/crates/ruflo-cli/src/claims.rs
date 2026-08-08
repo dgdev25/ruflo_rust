@@ -913,37 +913,53 @@ fn help(bin: &str, subcommand: Option<&str>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    // Some claims tests mutate the process-global HOME (the precedence test),
+    // and load() reads HOME. Serialize the whole module so no two claims tests
+    // race on HOME mid-load.
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    fn lock() -> std::sync::MutexGuard<'static, ()> {
+        TEST_LOCK.lock().unwrap()
+    }
 
     #[test]
     fn wildcard_exact_match() {
+        let _g = lock();
         assert!(check_claim("swarm:create", &["swarm:create".into()]));
     }
 
     #[test]
     fn wildcard_star_matches_all() {
+        let _g = lock();
         assert!(check_claim("admin:delete", &["*".into()]));
     }
 
     #[test]
     fn wildcard_prefix_matches() {
+        let _g = lock();
         assert!(check_claim("swarm:create", &["swarm:*".into()]));
         assert!(check_claim("agent:spawn", &["agent:*".into()]));
     }
 
     #[test]
     fn wildcard_suffix_matches() {
+        let _g = lock();
         assert!(check_claim("swarm:list", &["*:list".into()]));
         assert!(check_claim("memory:list", &["*:list".into()]));
     }
 
     #[test]
     fn wildcard_no_match() {
+        let _g = lock();
         assert!(!check_claim("admin:delete", &["swarm:*".into()]));
         assert!(!check_claim("swarm:create", &["*:list".into()]));
     }
 
     #[test]
     fn wildcard_requires_colon_boundary_no_overgrant() {
+        let _g = lock();
         // claims.ts:242,247 — the colon boundary is mandatory.
         assert!(!check_claim("swarm", &["swarm:*".into()]));
         assert!(!check_claim("list", &["*:list".into()]));
@@ -955,6 +971,7 @@ mod tests {
 
     #[test]
     fn malformed_config_returns_error_not_default() {
+        let _g = lock();
         let project = tempfile::tempdir().unwrap();
         let path = project.path().join(".claude-flow/claims.json");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -965,6 +982,7 @@ mod tests {
 
     #[test]
     fn check_merges_defaults_so_users_only_config_still_grants_defaults() {
+        let _g = lock();
         let project = tempfile::tempdir().unwrap();
         let path = project.path().join(".claude-flow/claims.json");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -987,6 +1005,7 @@ mod tests {
 
     #[test]
     fn non_empty_treats_empty_and_flag_like_as_absent() {
+        let _g = lock();
         assert_eq!(non_empty(Some("".into())), None);
         assert_eq!(non_empty(Some("-r".into())), None);
         assert_eq!(non_empty(Some("--role".into())), None);
@@ -996,6 +1015,7 @@ mod tests {
 
     #[test]
     fn default_config_has_expected_roles() {
+        let _g = lock();
         let config = default_config();
         let roles = config.get("roles").and_then(Value::as_object).unwrap();
         assert!(roles.contains_key("admin"));
@@ -1006,6 +1026,7 @@ mod tests {
 
     #[test]
     fn grant_then_revoke_user_claim_round_trip() {
+        let _g = lock();
         let project = tempfile::tempdir().unwrap();
         let root = project.path();
 
@@ -1046,6 +1067,7 @@ mod tests {
 
     #[test]
     fn grant_requires_user_or_role() {
+        let _g = lock();
         let project = tempfile::tempdir().unwrap();
         assert!(grant(project.path(), Some("swarm:create".into()), None, None).is_err());
         assert_eq!(
@@ -1065,6 +1087,7 @@ mod tests {
 
     #[test]
     fn grant_rejects_empty_target_values() {
+        let _g = lock();
         let project = tempfile::tempdir().unwrap();
         // --user= (empty) is falsy, so both targets are absent.
         assert!(grant(
@@ -1079,6 +1102,7 @@ mod tests {
 
     #[test]
     fn check_granted_via_default_policy() {
+        let _g = lock();
         let project = tempfile::tempdir().unwrap();
         let code = check(project.path(), Some("swarm:create".into()), None, None).unwrap();
         assert_eq!(code, 0);
@@ -1086,6 +1110,7 @@ mod tests {
 
     #[test]
     fn check_denied_admin_claim() {
+        let _g = lock();
         let project = tempfile::tempdir().unwrap();
         let code = check(project.path(), Some("admin:delete".into()), None, None).unwrap();
         assert_eq!(code, 1);
@@ -1093,6 +1118,7 @@ mod tests {
 
     #[test]
     fn roles_create_show_delete() {
+        let _g = lock();
         let project = tempfile::tempdir().unwrap();
         let root = project.path();
         roles(root, "create".into(), Some("auditor".into())).unwrap();
@@ -1129,6 +1155,7 @@ mod tests {
         }
         impl Drop for HomeGuard {
             fn drop(&mut self) {
+                let _g = lock();
                 match &self.previous {
                     Some(v) => env::set_var("HOME", v),
                     None => env::remove_var("HOME"),
