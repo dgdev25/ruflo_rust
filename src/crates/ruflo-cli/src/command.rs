@@ -3,6 +3,10 @@ use std::ffi::OsString;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParsedCommand {
     Version,
+    VersionCommand {
+        explain: bool,
+        require_catalog_gte: Option<u64>,
+    },
     Help,
     Init,
     Status,
@@ -119,6 +123,21 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect::<Vec<_>>();
     let normalized = args.iter().map(String::as_str).collect::<Vec<_>>();
+
+    if normalized.first() == Some(&"version") {
+        let require_catalog_gte =
+            option_value(&args, "--require-catalog-gte", "--require-catalog-gte")
+                .map(|value| {
+                    value
+                        .parse()
+                        .map_err(|_| "catalog generation must be a non-negative integer")
+                })
+                .transpose()?;
+        return Ok(ParsedCommand::VersionCommand {
+            explain: args.iter().any(|value| value == "--explain"),
+            require_catalog_gte,
+        });
+    }
 
     if normalized.starts_with(&["agent", "spawn"]) {
         let agent_type = option_value(&args, "--type", "-t").ok_or("agent type is required")?;

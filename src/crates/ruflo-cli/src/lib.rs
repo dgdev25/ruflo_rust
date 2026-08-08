@@ -101,6 +101,27 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             print!("{VERSION}");
             ExitCode::SUCCESS
         }
+        Ok(ParsedCommand::VersionCommand {
+            explain,
+            require_catalog_gte,
+        }) => {
+            let generation = 0_u64;
+            if let Some(required) = require_catalog_gte {
+                if generation >= required {
+                    println!("OK (installed catalog is {generation})");
+                    return ExitCode::SUCCESS;
+                }
+                eprintln!("Installed catalog generation {generation} is below required {required}");
+                return ExitCode::from(1);
+            }
+            if explain {
+                println!("Installed: ruflo@{}", env!("CARGO_PKG_VERSION"));
+                println!("  (no catalog-manifest.json — plain semver, native dev checkout)");
+            } else {
+                println!("{}", env!("CARGO_PKG_VERSION"));
+            }
+            ExitCode::SUCCESS
+        }
         Ok(ParsedCommand::Help) => {
             print!("{HELP}");
             ExitCode::SUCCESS
