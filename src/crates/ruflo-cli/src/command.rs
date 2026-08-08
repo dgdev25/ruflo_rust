@@ -50,6 +50,7 @@ pub enum ParsedCommand {
     ApplianceAdvanced(crate::appliance_advanced::ApplianceAdvancedCommand),
     Appliance(crate::appliance::ApplianceCommand),
     Guidance(crate::guidance::GuidanceCommand),
+    Performance(crate::performance::PerformanceCommand),
     TransferStore(crate::transfer_store::TransferStoreCommand),
     MemoryStore {
         key: String,
@@ -1000,6 +1001,49 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
                 file: option_value(&args, "--file", "-f"),
                 name: option_value(&args, "--name", "-n"),
                 cid: option_value(&args, "--cid", "--cid"),
+            },
+        ));
+    }
+    if matches!(
+        normalized.first().copied(),
+        Some("guidance") | Some("guide")
+    ) {
+        let operation = normalized.get(1).copied().unwrap_or("").to_string();
+        return Ok(ParsedCommand::Guidance(crate::guidance::GuidanceCommand {
+            operation,
+            root: option_value(&args, "--root", "-r"),
+            local: option_value(&args, "--local", "-l"),
+            output: option_value(&args, "--output", "-o"),
+            json: args.iter().any(|v| v == "--json"),
+            task: option_value(&args, "--task", "-t"),
+            max_shards: option_value(&args, "--max-shards", "-n")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(5),
+            gate: option_value(&args, "--gate", "--gate"),
+        }));
+    }
+    if matches!(
+        normalized.first().copied(),
+        Some("performance") | Some("perf")
+    ) {
+        let operation = normalized.get(1).copied().unwrap_or("").to_string();
+        return Ok(ParsedCommand::Performance(
+            crate::performance::PerformanceCommand {
+                operation,
+                suite: option_value(&args, "--suite", "-s"),
+                iterations: option_value(&args, "--iterations", "-i")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(100),
+                warmup: option_value(&args, "--warmup", "-w")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(10),
+                output: option_value(&args, "--output", "-o"),
+                profile_type: option_value(&args, "--type", "-t"),
+                duration: option_value(&args, "--duration", "-d")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(30),
+                component: option_value(&args, "--component", "-c"),
+                json: args.iter().any(|v| v == "--json"),
             },
         ));
     }

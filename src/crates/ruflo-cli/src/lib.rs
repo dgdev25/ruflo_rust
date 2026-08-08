@@ -20,6 +20,7 @@ mod guidance;
 mod issues;
 mod lifecycle;
 mod metaharness;
+mod performance;
 mod policy;
 mod providers;
 mod proxy;
@@ -386,6 +387,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::Guidance(command)) => {
             ExitCode::from(guidance::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::Performance(command)) => {
+            ExitCode::from(performance::run(&current_directory(), command))
         }
         Ok(ParsedCommand::NativeOverview { name }) => {
             let root = current_directory();
