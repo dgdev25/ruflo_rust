@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "daemon"
+  ],
+  "exit": 0,
+  "stdout": "\nRuFlo Daemon - Background Task Management\n\nNode.js-based background worker system that auto-runs like shell daemons.\nManages 12 specialized workers for continuous optimization and monitoring.\n\nHeadless Mode\nWorkers can run in headless mode using E2B sandboxes for isolated execution.\nUse --headless flag with start/trigger commands. Sandbox modes: strict, permissive, disabled.\n\nAvailable Workers\n  - map         - Codebase mapping (5 min interval)\n  - audit       - Security analysis (10 min interval)\n  - optimize    - Performance optimization (15 min interval)\n  - consolidate - Memory distillation: memory_entries -> episodes/reasoning_patterns/causal_edges (30 min interval, ADR-174; --no-distill to disable)\n  - testgaps    - Test coverage analysis (20 min interval)\n  - predict     - Predictive preloading (2 min, disabled by default)\n  - document    - Auto-documentation (60 min, disabled by default)\n  - ultralearn  - Deep knowledge acquisition (manual trigger)\n  - refactor    - Code refactoring suggestions (manual trigger)\n  - benchmark   - Performance benchmarking (manual trigger)\n  - deepdive    - Deep code analysis (manual trigger)\n  - preload     - Resource preloading (manual trigger)\n\nSubcommands\n  - start   - Start the daemon\n  - stop    - Stop the daemon\n  - status  - Show daemon status\n  - trigger - Manually run a worker\n  - enable  - Enable/disable a worker\n\nRun \"claude-flow daemon <subcommand> --help\" for details\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "daemon"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/daemon.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T17:11:30Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

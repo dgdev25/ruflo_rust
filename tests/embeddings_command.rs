@@ -11,7 +11,7 @@ fn overview_lists_subcommands() {
         let out = run(binary, project.path(), &["embeddings"]);
         assert_eq!(out.status.code(), Some(0));
         let s = stdout(&out);
-        for sub in ["generate", "compare", "providers", "benchmark", "hyperbolic"] {
+        for sub in ["generate", "compare", "providers", "hyperbolic"] {
             assert!(s.contains(sub), "{binary}: overview missing '{sub}'");
         }
     }

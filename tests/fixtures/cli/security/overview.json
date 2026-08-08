@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "security"
+  ],
+  "exit": 0,
+  "stdout": "\nRuFlo Security Suite\nComprehensive security scanning and vulnerability management\n\nSubcommands:\n  - scan              - Run security scans on code, deps\n  - cve               - Check and manage CVE vulnerabilities\n  - threats           - Threat modeling (STRIDE, DREAD, PASTA)\n  - audit             - Security audit logging and compliance\n  - secrets           - Detect and manage secrets in codebase\n  - defend            - AI manipulation defense (prompt injection, jailbreaks, PII)\n  - composition-scan  - Cross-tool prompt-injection scan on MCP registry (dream-cycle #2783)\n  - channel-scan      - Scan inter-agent message content for injection payloads (dream-cycle #2783 ChannelGuard)\n  - scan-plan         - Scan an agent-emitted plan for injected steps (dream-cycle #2752 PlanFlip gate)\n\nUse --help with subcommands for more info\n\nCreated with ❤️ by ruv.io\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "security"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/security.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T17:11:30Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

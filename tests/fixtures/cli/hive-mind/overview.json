@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "hive-mind"
+  ],
+  "exit": 0,
+  "stdout": "\nHive Mind - Consensus-Based Multi-Agent Coordination\n\nUsage: claude-flow hive-mind <subcommand> [options]\n\nSubcommands:\n  - init            - Initialize hive mind\n  - spawn           - Spawn worker agents (use --claude to launch Claude Code)\n  - status          - Show hive status\n  - task            - Submit task to hive\n  - join            - Join an agent to the hive\n  - leave           - Remove an agent from the hive\n  - consensus       - Manage consensus proposals\n  - broadcast       - Broadcast message to workers\n  - memory          - Access shared memory\n  - optimize-memory - Optimize patterns and memory\n  - shutdown        - Shutdown the hive\n\nFeatures:\n  - Queen-led hierarchical coordination\n  - Byzantine fault tolerant consensus\n  - HNSW-accelerated pattern matching\n  - Cross-session memory persistence\n  - Automatic load balancing\n  - NEW: --claude flag to launch interactive Claude Code sessions\n\nQuick Start with Claude Code:\n  claude-flow hive-mind init\n  claude-flow hive-mind spawn -n 5 --claude -o \"Your objective here\"\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "hive-mind"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/hive-mind.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T17:11:31Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

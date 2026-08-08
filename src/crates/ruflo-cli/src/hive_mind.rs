@@ -114,21 +114,36 @@ pub fn run(root: &Path, command: HiveMindCommand) -> u8 {
 }
 
 fn overview(_command: &HiveMindCommand) -> u8 {
-    println!("\nHive Mind");
-    println!("Collective intelligence coordination across a swarm of agents.\n");
-    println!("Subcommands:");
-    println!("  init            Initialize a hive mind");
-    println!("  spawn           Spawn worker agents");
-    println!("  status          Show hive status");
-    println!("  task            Assign a task to the hive");
-    println!("  join            Join an agent to the hive");
-    println!("  leave           Remove an agent from the hive");
-    println!("  consensus       Consensus propose/vote/status");
-    println!("  broadcast       Broadcast a message to all workers");
-    println!("  memory          Shared memory get/set/delete/list");
-    println!("  optimize-memory Compact the shared memory store");
-    println!("  shutdown        Shut down the hive");
-    println!("\nNative build manages hive state; live worker orchestration needs a Node runtime.");
+    print!(r####"
+Hive Mind - Consensus-Based Multi-Agent Coordination
+
+Usage: claude-flow hive-mind <subcommand> [options]
+
+Subcommands:
+  - init            - Initialize hive mind
+  - spawn           - Spawn worker agents (use --claude to launch Claude Code)
+  - status          - Show hive status
+  - task            - Submit task to hive
+  - join            - Join an agent to the hive
+  - leave           - Remove an agent from the hive
+  - consensus       - Manage consensus proposals
+  - broadcast       - Broadcast message to workers
+  - memory          - Access shared memory
+  - optimize-memory - Optimize patterns and memory
+  - shutdown        - Shutdown the hive
+
+Features:
+  - Queen-led hierarchical coordination
+  - Byzantine fault tolerant consensus
+  - HNSW-accelerated pattern matching
+  - Cross-session memory persistence
+  - Automatic load balancing
+  - NEW: --claude flag to launch interactive Claude Code sessions
+
+Quick Start with Claude Code:
+  claude-flow hive-mind init
+  claude-flow hive-mind spawn -n 5 --claude -o "Your objective here"
+"####);
     0
 }
 
@@ -583,7 +598,9 @@ fn optimize_memory(root: &Path, _command: &HiveMindCommand) -> u8 {
     let before = hive["memory"].as_object().map(|m| m.len()).unwrap_or(0);
     // Drop null/empty values (the cheap structural pass).
     if let Some(mem) = hive["memory"].as_object_mut() {
-        mem.retain(|_, v| !v.is_null() && !(v.is_string() && v.as_str().unwrap_or("").is_empty()));
+        mem.retain(|_, v| {
+            !(v.is_null() || (v.is_string() && v.as_str().unwrap_or("").is_empty()))
+        });
     }
     let after = hive["memory"].as_object().map(|m| m.len()).unwrap_or(0);
     let _ = write_hive(root, &hive);
@@ -616,7 +633,7 @@ mod tests {
     use super::*;
 
     fn tmp_root() -> PathBuf {
-        tempfile::tempdir().unwrap().into_path()
+        tempfile::tempdir().unwrap().keep()
     }
 
     #[test]
@@ -672,7 +689,7 @@ mod tests {
             message: None, key: None, value: None, json: false,
         };
         run(&root, init);
-        let mut spawn = HiveMindCommand {
+        let spawn = HiveMindCommand {
             operation: "spawn".into(), topology: None, consensus: None, max_agents: 15,
             persist: true, memory_backend: None, count: 3, role: Some("worker".into()),
             agent_type: Some("worker".into()), prefix: Some("w".into()), claude: false,

@@ -332,19 +332,25 @@ pub fn run(root: &Path, command: SecurityCommand) -> u8 {
 }
 
 fn overview(_command: &SecurityCommand) -> u8 {
-    println!("\nRuFlo Security Suite");
-    println!("Comprehensive security scanning and vulnerability management\n");
-    println!("Subcommands:");
-    println!("  scan              - Run security scans on code, deps");
-    println!("  cve               - Check and manage CVE vulnerabilities");
-    println!("  threats           - Threat modeling (STRIDE, DREAD, PASTA)");
-    println!("  audit             - Security audit logging and compliance");
-    println!("  secrets           - Detect and manage secrets in codebase");
-    println!("  defend            - AI manipulation defense (prompt injection, jailbreaks, PII)");
-    println!("  composition-scan  - Cross-tool prompt-injection scan on MCP registry");
-    println!("  channel-scan      - Scan inter-agent message content for injection payloads");
-    println!("  scan-plan         - Scan an agent-emitted plan for injected steps");
-    println!();
+    print!(r####"
+RuFlo Security Suite
+Comprehensive security scanning and vulnerability management
+
+Subcommands:
+  - scan              - Run security scans on code, deps
+  - cve               - Check and manage CVE vulnerabilities
+  - threats           - Threat modeling (STRIDE, DREAD, PASTA)
+  - audit             - Security audit logging and compliance
+  - secrets           - Detect and manage secrets in codebase
+  - defend            - AI manipulation defense (prompt injection, jailbreaks, PII)
+  - composition-scan  - Cross-tool prompt-injection scan on MCP registry (dream-cycle #2783)
+  - channel-scan      - Scan inter-agent message content for injection payloads (dream-cycle #2783 ChannelGuard)
+  - scan-plan         - Scan an agent-emitted plan for injected steps (dream-cycle #2752 PlanFlip gate)
+
+Use --help with subcommands for more info
+
+Created with ❤️ by ruv.io
+"####);
     0
 }
 

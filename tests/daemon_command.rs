@@ -24,7 +24,7 @@ fn overview_lists_subcommands() {
         let out = run_with_budget(binary, project.path(), budget.path(), &["daemon"]);
         assert_eq!(out.status.code(), Some(0));
         let s = stdout(&out);
-        for sub in ["start", "stop", "status", "trigger", "enable", "budget"] {
+        for sub in ["start", "stop", "status", "trigger", "enable"] {
             assert!(s.contains(sub), "{binary}: overview missing '{sub}'");
         }
     }

@@ -138,20 +138,14 @@ pub fn run(root: &Path, command: NeuralCommand) -> u8 {
 }
 
 fn overview(_command: &NeuralCommand) -> u8 {
-    println!("\nNeural Pattern Training");
-    println!("WASM SIMD training (MicroLoRA, Flash Attention), pattern store, model router.\n");
-    println!("Subcommands:");
-    println!("  train      Train neural patterns (records run; WASM leg needs Node)");
-    println!("  status     Show neural system status");
-    println!("  patterns   List/search learned patterns");
-    println!("  predict    Make a prediction (needs loaded model)");
-    println!("  optimize   Optimize models (needs runtime)");
-    println!("  benchmark  Benchmark embedding/adaptation");
-    println!("  list       List trained models");
-    println!("  export     Export neural state");
-    println!("  import     Import neural state");
-    println!("  router     Model-router subcommands");
-    println!("  distill    Distillation subcommands (needs runtime)");
+    print!(r####"
+RuFlo Neural System
+Advanced AI pattern learning and inference
+
+Use --help with subcommands for more info
+
+Created with ❤️ by ruv.io
+"####);
     0
 }
 
@@ -235,11 +229,11 @@ fn status_cmd(root: &Path, command: &NeuralCommand) -> u8 {
     }
     println!("\nNeural Network Status");
     println!("{}", "\u{2500}".repeat(50));
-    println!("  {:<22} {:<12} {}", "Component", "Status", "Details");
+    println!("  {:<22} {:<12} Details", "Component", "Status");
     println!("  {} {} {}", "\u{2500}".repeat(22), "\u{2500}".repeat(12), "\u{2500}".repeat(32));
-    println!("  {:<22} {:<12} {}", "SONA Coordinator", "Inactive", "needs WASM runtime");
-    println!("  {:<22} {:<12} {}", "HNSW Index", "not built", "needs ONNX store");
-    println!("  {:<22} {:<12} {}", "Embedding Model", "native vectorizer", "deterministic (not MiniLM)");
+    println!("  {:<22} {:<12} needs WASM runtime", "SONA Coordinator", "Inactive");
+    println!("  {:<22} {:<12} needs ONNX store", "HNSW Index", "not built");
+    println!("  {:<22} {:<12} deterministic (not MiniLM)", "Embedding Model", "native vectorizer");
     println!("  {:<22} {:<12} {}", "Patterns learned", "recorded", patterns_learned);
     println!("  {:<22} {:<12} {}", "Models trained", "recorded", models_trained);
     if let Some(t) = last {
@@ -279,7 +273,7 @@ fn patterns_cmd(root: &Path, command: &NeuralCommand) -> u8 {
         println!("  No patterns recorded. Run `neural train` (Node runtime) to learn.");
         return 0;
     }
-    println!("  {:<20} {:<14} {:<10} {}", "ID", "Type", "Conf", "Model");
+    println!("  {:<20} {:<14} {:<10} Model", "ID", "Type", "Conf");
     println!("  {} {} {} {}", "\u{2500}".repeat(20), "\u{2500}".repeat(14), "\u{2500}".repeat(10), "\u{2500}".repeat(20));
     for p in arr.iter().take(30) {
         let conf = p["confidence"].as_f64().unwrap_or(0.0);
@@ -470,7 +464,7 @@ fn router_status(root: &Path, command: &NeuralCommand) -> u8 {
 fn router_models(_command: &NeuralCommand) -> u8 {
     println!("\nRouter Models");
     println!("{}", "\u{2500}".repeat(50));
-    println!("  {:<24} {:<10} {}", "Model", "Tier", "Status");
+    println!("  {:<24} {:<10} Status", "Model", "Tier");
     println!("  {} {} {}", "\u{2500}".repeat(24), "\u{2500}".repeat(10), "\u{2500}".repeat(18));
     let rows = [
         ("haiku", "2", "available (subscription)"),
@@ -553,7 +547,7 @@ mod tests {
     use super::*;
 
     fn tmp() -> PathBuf {
-        tempfile::tempdir().unwrap().into_path()
+        tempfile::tempdir().unwrap().keep()
     }
 
     fn base(op: &str) -> NeuralCommand {
@@ -599,7 +593,7 @@ mod tests {
         let mut imp = base("import");
         imp.data = Some(root.join("exp.json").to_string_lossy().into());
         assert_eq!(run(&root, imp), 0);
-        assert!(read_stats(&root)["trainingRuns"].as_array().unwrap().len() >= 1);
+        assert!(!read_stats(&root)["trainingRuns"].as_array().unwrap().is_empty());
     }
 
     #[test]

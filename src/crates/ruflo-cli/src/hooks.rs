@@ -166,23 +166,55 @@ pub fn run(root: &Path, command: HooksCommand) -> u8 {
 }
 
 fn overview(_command: &HooksCommand) -> u8 {
-    println!("\nHooks");
-    println!("Self-learning hooks system for workflow automation.\n");
-    println!("Subcommands:");
-    println!("  pre-edit / post-edit        Edit lifecycle hooks");
-    println!("  pre-command / post-command  Command lifecycle hooks");
-    println!("  pre-task / post-task        Task lifecycle hooks");
-    println!("  session-start / end / restore  Session hooks");
-    println!("  route / route-task          Route a task to an agent");
-    println!("  explain                     Explain the last routing decision");
-    println!("  model-route / model-stats / model-outcome  Model routing");
-    println!("  list                        List registered hooks");
-    println!("  metrics                     Show hook metrics");
-    println!("  worker-list / worker-status List background workers");
-    println!("  intelligence                Neural intelligence stats");
-    println!("  statusline                  Render statusline");
-    println!("  notify                      Send a notification");
-    println!("\nHook-event ops record to .claude-flow/hooks-events.jsonl.");
+    print!(r####"
+Self-Learning Hooks System
+
+Intelligent workflow automation with pattern learning and adaptive routing
+
+Usage: claude-flow hooks <subcommand> [options]
+
+Subcommands:
+  - pre-edit        - Get context before editing files
+  - post-edit       - Record editing outcomes for learning
+  - pre-command     - Assess risk before executing commands
+  - post-command    - Record command execution outcomes
+  - pre-task        - Record task start and get agent suggestions
+  - post-task       - Record task completion for learning
+  - session-end     - End current session and persist state
+  - session-restore - Restore a previous session
+  - route           - Route tasks to optimal agents
+  - explain         - Explain routing decisions
+  - pretrain        - Bootstrap intelligence from repository
+  - build-agents    - Generate optimized agent configs
+  - metrics         - View learning metrics dashboard
+  - transfer        - Transfer patterns from another project
+  - list            - List all registered hooks
+  - worker          - Background worker management (12 workers)
+  - progress        - Check V3 implementation progress
+  - statusline      - Generate dynamic statusline display
+  - coverage-route  - Route tasks based on coverage gaps (ruvector)
+  - coverage-suggest- Suggest coverage improvements
+  - coverage-gaps   - List all coverage gaps with agents
+  - token-optimize - Token optimization (agentic-flow integration)
+  - model-route    - Route to optimal model (haiku/sonnet/opus)
+  - model-outcome  - Record model routing outcome
+  - model-stats    - View model routing statistics
+  - 
+  - Agent Teams:
+  - teammate-idle  - Handle idle teammate (auto-assign tasks)
+  - task-completed - Handle task completion (train patterns)
+
+Run "claude-flow hooks <subcommand> --help" for subcommand help
+
+V3 Features:
+  - 🧠 ReasoningBank adaptive learning
+  - ⚡ Flash Attention (2.49x-7.47x speedup)
+  - 🔍 AgentDB integration (150x faster search)
+  - 📊 84.8% SWE-Bench solve rate
+  - 🎯 32.3% token reduction
+  - 🚀 2.8-4.4x speed improvement
+  - 👥 Agent Teams integration (auto task assignment)
+"####);
     0
 }
 
@@ -265,7 +297,7 @@ fn metrics(root: &Path, command: &HooksCommand) -> u8 {
     if by_event.is_empty() {
         println!("  (no events yet — hooks record as Claude Code fires them)");
     } else {
-        println!("\n  {:<20} {}", "Event", "Count");
+        println!("\n  {:<20} Count", "Event");
         println!("  {} {}", "\u{2500}".repeat(20), "\u{2500}".repeat(8));
         for (e, c) in &by_event {
             println!("  {:<20} {c}", e);
@@ -451,7 +483,7 @@ fn worker_list(command: &HooksCommand) -> u8 {
     }
     println!("\nBackground Workers ({})", cat.len());
     println!("{}", "\u{2500}".repeat(50));
-    println!("  {:<14} {:<10} {}", "Type", "Status", "Description");
+    println!("  {:<14} {:<10} Description", "Type", "Status");
     println!("  {} {} {}", "\u{2500}".repeat(14), "\u{2500}".repeat(10), "\u{2500}".repeat(36));
     for (t, d, s) in cat {
         println!("  {:<14} {:<10} {d}", t, s);
@@ -572,7 +604,7 @@ mod tests {
     use super::*;
 
     fn tmp() -> PathBuf {
-        tempfile::tempdir().unwrap().into_path()
+        tempfile::tempdir().unwrap().keep()
     }
 
     fn base(op: &str) -> HooksCommand {

@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "hooks"
+  ],
+  "exit": 0,
+  "stdout": "\nSelf-Learning Hooks System\n\nIntelligent workflow automation with pattern learning and adaptive routing\n\nUsage: claude-flow hooks <subcommand> [options]\n\nSubcommands:\n  - pre-edit        - Get context before editing files\n  - post-edit       - Record editing outcomes for learning\n  - pre-command     - Assess risk before executing commands\n  - post-command    - Record command execution outcomes\n  - pre-task        - Record task start and get agent suggestions\n  - post-task       - Record task completion for learning\n  - session-end     - End current session and persist state\n  - session-restore - Restore a previous session\n  - route           - Route tasks to optimal agents\n  - explain         - Explain routing decisions\n  - pretrain        - Bootstrap intelligence from repository\n  - build-agents    - Generate optimized agent configs\n  - metrics         - View learning metrics dashboard\n  - transfer        - Transfer patterns from another project\n  - list            - List all registered hooks\n  - worker          - Background worker management (12 workers)\n  - progress        - Check V3 implementation progress\n  - statusline      - Generate dynamic statusline display\n  - coverage-route  - Route tasks based on coverage gaps (ruvector)\n  - coverage-suggest- Suggest coverage improvements\n  - coverage-gaps   - List all coverage gaps with agents\n  - token-optimize - Token optimization (agentic-flow integration)\n  - model-route    - Route to optimal model (haiku/sonnet/opus)\n  - model-outcome  - Record model routing outcome\n  - model-stats    - View model routing statistics\n  - \n  - Agent Teams:\n  - teammate-idle  - Handle idle teammate (auto-assign tasks)\n  - task-completed - Handle task completion (train patterns)\n\nRun \"claude-flow hooks <subcommand> --help\" for subcommand help\n\nV3 Features:\n  - 🧠 ReasoningBank adaptive learning\n  - ⚡ Flash Attention (2.49x-7.47x speedup)\n  - 🔍 AgentDB integration (150x faster search)\n  - 📊 84.8% SWE-Bench solve rate\n  - 🎯 32.3% token reduction\n  - 🚀 2.8-4.4x speed improvement\n  - 👥 Agent Teams integration (auto task assignment)\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "hooks"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/hooks.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T17:12:19Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

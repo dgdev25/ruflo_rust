@@ -175,25 +175,35 @@ pub fn run(_root: &Path, command: EmbeddingsCommand) -> u8 {
 }
 
 fn overview(_command: &EmbeddingsCommand) -> u8 {
-    println!("\nEmbeddings");
-    println!("Vector generation, similarity search, and hyperbolic operations.\n");
-    println!("Subcommands:");
-    println!("  generate     Generate an embedding for text");
-    println!("  search       Semantic similarity search (needs memory store)");
-    println!("  compare      Compare two texts (cosine/euclidean/dot)");
-    println!("  collections  List namespaces (needs memory store)");
-    println!("  index        HNSW index build/status (needs ONNX store)");
-    println!("  init         Initialize embedding model config");
-    println!("  providers    List embedding providers");
-    println!("  chunk        Chunk text for embedding");
-    println!("  normalize    L2-normalize a vector or text");
-    println!("  hyperbolic   Poincaré ball operations");
-    println!("  neural       Neural embedding operations (degraded)");
-    println!("  models       List available models");
-    println!("  cache        Embedding cache stats");
-    println!("  warmup       Warm up the model cache");
-    println!("  benchmark    Benchmark embedding generation");
-    println!("\nNative build uses a deterministic feature-hash vectorizer (not ONNX MiniLM).");
+    print!(r####"
+RuFlo Embeddings
+Vector embeddings and semantic search
+
+Core Commands:
+  - init        - Initialize ONNX models and hyperbolic config
+  - generate    - Generate embeddings for text
+  - search      - Semantic similarity search
+  - compare     - Compare similarity between texts
+  - collections - Manage embedding collections
+  - index       - Manage HNSW indexes
+  - providers   - List available providers
+
+Advanced Features:
+  - chunk       - Document chunking with overlap
+  - normalize   - L2/L1/minmax/zscore normalization
+  - hyperbolic  - Poincaré ball embeddings
+  - neural      - Neural substrate (drift, memory, swarm)
+  - models      - List/download ONNX models
+  - cache       - Manage persistent SQLite cache
+
+Performance:
+  - HNSW indexing: 150x-12,500x faster search
+  - Agentic Flow: 75x faster than Transformers.js (~3ms)
+  - Persistent cache: SQLite-backed, survives restarts
+  - Hyperbolic: Better hierarchical representation
+
+Created with ❤️ by ruv.io
+"####);
     0
 }
 
@@ -318,7 +328,7 @@ fn compare(command: &EmbeddingsCommand) -> u8 {
     println!();
     println!("  {label}: {score:.6}");
     if metric == "cosine" {
-        let pct = ((score + 1.0) / 2.0 * 100.0).max(0.0).min(100.0);
+        let pct = ((score + 1.0) / 2.0 * 100.0).clamp(0.0, 100.0);
         println!("  Similarity: {pct:.1}%");
     }
     0

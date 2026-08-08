@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "analyze"
+  ],
+  "exit": 0,
+  "stdout": "\nAnalyze Commands\n--------------------------------------------------\n\nAvailable subcommands:\n\n  diff         Analyze git diff for change risk and classification\n  code         Static code analysis and quality assessment\n  deps         Analyze project dependencies\n  ast          AST analysis with symbol extraction and complexity\n  complexity   Analyze cyclomatic and cognitive complexity\n  symbols      Extract functions, classes, and types\n  imports      Analyze import dependencies\n  boundaries   Find code boundaries using MinCut algorithm\n  modules      Detect module communities using Louvain algorithm\n  dependencies Build and export full dependency graph\n  circular     Detect circular dependencies in codebase\n\nAST Analysis Examples:\n\n  claude-flow analyze ast src/                  # Full AST analysis\n  claude-flow analyze ast src/index.ts -c       # Include complexity\n  claude-flow analyze complexity src/ -t 15     # Flag high complexity\n  claude-flow analyze symbols src/ --type fn    # Extract functions\n  claude-flow analyze imports src/ --external   # Only npm imports\n\nGraph Analysis Examples:\n\n  claude-flow analyze boundaries src/            # Find natural code boundaries\n  claude-flow analyze modules src/               # Detect module communities\n  claude-flow analyze dependencies -f dot src/   # Export to DOT format\n  claude-flow analyze circular src/              # Find circular deps\n\nDiff Analysis Examples:\n\n  claude-flow analyze diff --risk              # Risk assessment\n  claude-flow analyze diff HEAD~1 --classify   # Classify changes\n  claude-flow analyze diff main..feature       # Compare branches\n\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "analyze"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/analyze.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T17:11:30Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

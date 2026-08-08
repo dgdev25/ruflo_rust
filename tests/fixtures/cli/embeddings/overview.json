@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "embeddings"
+  ],
+  "exit": 0,
+  "stdout": "\nRuFlo Embeddings\nVector embeddings and semantic search\n\nCore Commands:\n  - init        - Initialize ONNX models and hyperbolic config\n  - generate    - Generate embeddings for text\n  - search      - Semantic similarity search\n  - compare     - Compare similarity between texts\n  - collections - Manage embedding collections\n  - index       - Manage HNSW indexes\n  - providers   - List available providers\n\nAdvanced Features:\n  - chunk       - Document chunking with overlap\n  - normalize   - L2/L1/minmax/zscore normalization\n  - hyperbolic  - Poincaré ball embeddings\n  - neural      - Neural substrate (drift, memory, swarm)\n  - models      - List/download ONNX models\n  - cache       - Manage persistent SQLite cache\n\nPerformance:\n  - HNSW indexing: 150x-12,500x faster search\n  - Agentic Flow: 75x faster than Transformers.js (~3ms)\n  - Persistent cache: SQLite-backed, survives restarts\n  - Hyperbolic: Better hierarchical representation\n\nCreated with ❤️ by ruv.io\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "embeddings"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/embeddings.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T17:11:31Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

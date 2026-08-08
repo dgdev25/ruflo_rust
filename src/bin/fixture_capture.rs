@@ -30,6 +30,8 @@ struct FixtureProvenance {
     source: &'static str,
     source_command: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
+    source_paths: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     redactions: Vec<String>,
 }
 
@@ -106,14 +108,59 @@ fn metadata_for(fixture_path: &str, argv: &[String]) -> Result<FixtureProvenance
             kind: "source-oracle",
             source: "managed:ruflo-cli",
             source_command: argv.to_vec(),
+            source_paths: Vec::new(),
             redactions: vec!["environment omitted".to_string()],
         }),
         "tests/fixtures/mcp/tools-list.json" => Err(
             "tools-list.json is a reduced-schema fixture and must be curated manually with provenance metadata"
                 .to_string(),
         ),
-        _ => Err(format!("unapproved fixture path: {fixture_path}")),
+        _ => {
+            // Per-family source-oracle fixtures captured from the TS reference
+            // CLI. Approve any tests/fixtures/cli/<family>/*.json and stamp the
+            // owning TS source path so the fixture is source-proven.
+            let ts_source = family_ts_source(fixture_path)
+                .ok_or_else(|| format!("unapproved fixture path: {fixture_path}"))?;
+            Ok(FixtureProvenance {
+                kind: "source-oracle",
+                source: "managed:ruflo-cli@3.34.0",
+                source_command: argv.to_vec(),
+                source_paths: vec![ts_source.to_string()],
+                redactions: vec!["environment omitted".to_string()],
+            })
+        }
     }
+}
+
+/// Map a per-family fixture path to its owning TS source file. Only families
+/// with a real TS oracle are approved.
+fn family_ts_source(fixture_path: &str) -> Option<&'static str> {
+    let family = fixture_path
+        .strip_prefix("tests/fixtures/cli/")?
+        .split('/')
+        .next()?;
+    let sources: &[(&str, &str)] = &[
+        ("cleanup", "v3/@claude-flow/cli/src/commands/cleanup.ts"),
+        ("config", "v3/@claude-flow/cli/src/commands/config.ts"),
+        ("deployment", "v3/@claude-flow/cli/src/commands/deployment.ts"),
+        ("transport", "v3/@claude-flow/cli/src/commands/transport.ts"),
+        ("migrate", "v3/@claude-flow/cli/src/commands/migrate.ts"),
+        ("security", "v3/@claude-flow/cli/src/commands/security.ts"),
+        ("analyze", "v3/@claude-flow/cli/src/commands/analyze.ts"),
+        ("daemon", "v3/@claude-flow/cli/src/commands/daemon.ts"),
+        ("embeddings", "v3/@claude-flow/cli/src/commands/embeddings.ts"),
+        ("hive-mind", "v3/@claude-flow/cli/src/commands/hive-mind.ts"),
+        ("neural", "v3/@claude-flow/cli/src/commands/neural.ts"),
+        ("hooks", "v3/@claude-flow/cli/src/commands/hooks.ts"),
+        ("claims", "v3/@claude-flow/cli/src/commands/claims.ts"),
+        ("issues", "v3/@claude-flow/cli/src/commands/issues.ts"),
+        ("completions", "v3/@claude-flow/cli/src/commands/completions.ts"),
+        ("version", "v3/@claude-flow/cli/src/commands/version.ts"),
+    ];
+    sources
+        .iter()
+        .find(|(f, _)| *f == family)
+        .map(|(_, src)| *src)
 }
 
 fn reject_if_sensitive(text: &str) -> Result<(), String> {
@@ -122,7 +169,6 @@ fn reject_if_sensitive(text: &str) -> Result<(), String> {
         "/Users/",
         ":\\\\Users\\\\",
         "ghp_",
-        "sk-",
         "AIza",
         "PRIVATE KEY-----",
         "xoxb-",
@@ -137,6 +183,20 @@ fn reject_if_sensitive(text: &str) -> Result<(), String> {
             ));
         }
     }
-
+    // `sk-` is checked with a word boundary so legitimate words like
+    // "task-completed" (which contain the letters s-k-) don't trip it. A real
+    // Stripe/OpenAI key appears as a standalone token: quote/space/start + sk-.
+    for (idx, _) in text.match_indices("sk-") {
+        let prev = text[..idx].chars().next_back();
+        let boundary = match prev {
+            None => true,
+            Some(c) => !c.is_alphanumeric(),
+        };
+        if boundary {
+            return Err(
+                "captured output contains a forbidden path or secret marker: sk-".to_string(),
+            );
+        }
+    }
     Ok(())
 }

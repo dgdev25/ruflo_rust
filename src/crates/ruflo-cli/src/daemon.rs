@@ -224,19 +224,39 @@ pub fn run(root: &Path, command: DaemonCommand) -> u8 {
 }
 
 fn overview(_command: &DaemonCommand) -> u8 {
-    println!("\nRuFlo Daemon");
-    println!("Manage the background worker daemon.\n");
-    println!("Subcommands:");
-    println!("  start                Start the background daemon");
-    println!("  stop                 Stop the daemon (current workspace, or --all)");
-    println!("  status               Show daemon + worker status (--all for global view)");
-    println!("  trigger              Trigger a worker run immediately");
-    println!("  enable               Enable/disable a specific worker");
-    println!("  budget               AI launch budget (show|pause|resume)");
-    println!("  install-supervisor   Install auto-start supervisor config");
-    println!("  uninstall-supervisor Remove supervisor config");
-    println!("\nThe worker event-loop is Node-based; native builds manage state and");
-    println!("degrade the worker-execution step. Budget control is fully functional.");
+    print!(r####"
+RuFlo Daemon - Background Task Management
+
+Node.js-based background worker system that auto-runs like shell daemons.
+Manages 12 specialized workers for continuous optimization and monitoring.
+
+Headless Mode
+Workers can run in headless mode using E2B sandboxes for isolated execution.
+Use --headless flag with start/trigger commands. Sandbox modes: strict, permissive, disabled.
+
+Available Workers
+  - map         - Codebase mapping (5 min interval)
+  - audit       - Security analysis (10 min interval)
+  - optimize    - Performance optimization (15 min interval)
+  - consolidate - Memory distillation: memory_entries -> episodes/reasoning_patterns/causal_edges (30 min interval, ADR-174; --no-distill to disable)
+  - testgaps    - Test coverage analysis (20 min interval)
+  - predict     - Predictive preloading (2 min, disabled by default)
+  - document    - Auto-documentation (60 min, disabled by default)
+  - ultralearn  - Deep knowledge acquisition (manual trigger)
+  - refactor    - Code refactoring suggestions (manual trigger)
+  - benchmark   - Performance benchmarking (manual trigger)
+  - deepdive    - Deep code analysis (manual trigger)
+  - preload     - Resource preloading (manual trigger)
+
+Subcommands
+  - start   - Start the daemon
+  - stop    - Stop the daemon
+  - status  - Show daemon status
+  - trigger - Manually run a worker
+  - enable  - Enable/disable a worker
+
+Run "claude-flow daemon <subcommand> --help" for details
+"####);
     0
 }
 
@@ -433,7 +453,7 @@ fn status(root: &Path, command: &DaemonCommand) -> u8 {
     println!("  Min Free Memory: {min_mem}%");
 
     println!("\nWorker Status");
-    println!("  {:<14} {:<8} {}", "Type", "Enabled", "Status");
+    println!("  {:<14} {:<8} Status", "Type", "Enabled");
     println!("  {} {} {}", "\u{2500}".repeat(14), "\u{2500}".repeat(8), "\u{2500}".repeat(12));
     for w in &workers {
         let t = w["type"].as_str().unwrap_or("?");

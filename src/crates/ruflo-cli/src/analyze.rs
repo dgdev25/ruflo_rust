@@ -207,26 +207,46 @@ pub fn run(root: &Path, command: AnalyzeCommand) -> u8 {
 }
 
 fn overview(_command: &AnalyzeCommand) -> u8 {
-    println!("\nAnalyze Commands");
-    println!("{}", "-".repeat(50));
-    println!("\nAvailable subcommands:\n");
-    println!("  diff         Analyze git diff for change risk and classification");
-    println!("  code         Static code analysis and quality assessment");
-    println!("  deps         Analyze project dependencies");
-    println!("  ast          AST analysis with symbol extraction and complexity");
-    println!("  complexity   Analyze cyclomatic and cognitive complexity");
-    println!("  symbols      Extract functions, classes, and types");
-    println!("  imports      Analyze import dependencies");
-    println!("  boundaries   Find code boundaries using MinCut algorithm");
-    println!("  modules      Detect module communities using Louvain algorithm");
-    println!("  dependencies Build and export full dependency graph");
-    println!("  circular     Detect circular dependencies in codebase");
-    println!("\nExamples:");
-    println!("  ruflo analyze ast src/");
-    println!("  ruflo analyze complexity src/ --threshold 15");
-    println!("  ruflo analyze imports src/ --external");
-    println!("  ruflo analyze diff --risk");
-    println!("  ruflo analyze circular src/");
+    print!(r####"
+Analyze Commands
+--------------------------------------------------
+
+Available subcommands:
+
+  diff         Analyze git diff for change risk and classification
+  code         Static code analysis and quality assessment
+  deps         Analyze project dependencies
+  ast          AST analysis with symbol extraction and complexity
+  complexity   Analyze cyclomatic and cognitive complexity
+  symbols      Extract functions, classes, and types
+  imports      Analyze import dependencies
+  boundaries   Find code boundaries using MinCut algorithm
+  modules      Detect module communities using Louvain algorithm
+  dependencies Build and export full dependency graph
+  circular     Detect circular dependencies in codebase
+
+AST Analysis Examples:
+
+  claude-flow analyze ast src/                  # Full AST analysis
+  claude-flow analyze ast src/index.ts -c       # Include complexity
+  claude-flow analyze complexity src/ -t 15     # Flag high complexity
+  claude-flow analyze symbols src/ --type fn    # Extract functions
+  claude-flow analyze imports src/ --external   # Only npm imports
+
+Graph Analysis Examples:
+
+  claude-flow analyze boundaries src/            # Find natural code boundaries
+  claude-flow analyze modules src/               # Detect module communities
+  claude-flow analyze dependencies -f dot src/   # Export to DOT format
+  claude-flow analyze circular src/              # Find circular deps
+
+Diff Analysis Examples:
+
+  claude-flow analyze diff --risk              # Risk assessment
+  claude-flow analyze diff HEAD~1 --classify   # Classify changes
+  claude-flow analyze diff main..feature       # Compare branches
+
+"####);
     0
 }
 
