@@ -56,6 +56,12 @@ pub enum ParsedCommand {
         force: bool,
         path: Option<String>,
     },
+    ConfigInit {
+        force: bool,
+    },
+    ConfigGet {
+        key: Option<String>,
+    },
     Help,
     Init,
     Status,
@@ -305,6 +311,18 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
                 .iter()
                 .any(|argument| argument == "--force" || argument == "-f"),
             path: option_value(&args, "--path", "--path"),
+        });
+    }
+    if normalized.len() >= 2 && normalized[0] == "config" && normalized[1] == "init" {
+        return Ok(ParsedCommand::ConfigInit {
+            force: args
+                .iter()
+                .any(|argument| argument == "--force" || argument == "-f"),
+        });
+    }
+    if normalized.len() >= 2 && normalized[0] == "config" && normalized[1] == "get" {
+        return Ok(ParsedCommand::ConfigGet {
+            key: option_value(&args, "--key", "-k").or_else(|| config_positional(&args, 2)),
         });
     }
     if normalized.starts_with(&["agent", "spawn"]) {
@@ -666,6 +684,13 @@ fn parse_positive_usize(
     Ok(parsed)
 }
 
+fn config_positional(args: &[String], first_argument_index: usize) -> Option<String> {
+    args.iter()
+        .skip(first_argument_index)
+        .find(|value| !value.starts_with('-'))
+        .cloned()
+}
+
 #[cfg(test)]
 mod tests {
     use std::ffi::OsString;
@@ -822,6 +847,18 @@ mod tests {
             Ok(ParsedCommand::MemoryPurge { namespace, dry_run: true, force: false, .. }) if namespace == "plans"
         ));
         assert!(parse(argv(&["memory", "purge", "--force"])).is_err());
+        assert!(matches!(
+            parse(argv(&["config", "init", "--force"])),
+            Ok(ParsedCommand::ConfigInit { force: true })
+        ));
+        assert!(matches!(
+            parse(argv(&["config", "get", "-k", "policy.allow"])),
+            Ok(ParsedCommand::ConfigGet { key: Some(key) }) if key == "policy.allow"
+        ));
+        assert!(matches!(
+            parse(argv(&["config", "get", "limits.max_request_bytes"])),
+            Ok(ParsedCommand::ConfigGet { key: Some(key) }) if key == "limits.max_request_bytes"
+        ));
         assert!(parse(argv(&["memory", "search", "-q", "ship", "-l", "0"])).is_err());
     }
 }

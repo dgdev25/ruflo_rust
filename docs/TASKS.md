@@ -70,6 +70,10 @@ named compatibility evidence and focused verification.
   production 384-dimension embedding selection is wired through the existing
   semantic facade; remaining memory subcommands, MCP parity, and source
   fixtures remain open.
+- Config increment: native `config init` creates an explicit, overwrite-gated
+  `ruflo.toml`; `config get` reads the existing typed precedence layer for
+  policy and limits keys. V3 `set`, providers, reset, export/import, broader
+  config schema, and source fixtures remain open.
 - Then migrate every remaining command family from the original registry,
   capturing source fixtures before implementation and exercising real local
   Codex swarm deployment before release.

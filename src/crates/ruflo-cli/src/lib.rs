@@ -94,6 +94,7 @@ Created with ❤️ by ruv.io
 "#;
 
 const ERROR_EXIT: u8 = 2;
+const DEFAULT_RUFLO_CONFIG: &str = "# Native Ruflo configuration\n\n[policy]\nallow = []\ndeny = []\n\n[limits]\nmax_request_bytes = 65536\nmax_concurrent_executions = 4\nmax_duration_ms = 30000\n";
 
 pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
     match command::parse(argv) {
@@ -151,7 +152,7 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             }
         }
         Ok(ParsedCommand::Progress) => {
-            println!("Native V3 command migration progress\nTop-level families: 13 initial native commands; 53 required for parity\nStatus: in progress — source differential fixtures remain mandatory");
+            println!("Native V3 command migration progress\nTop-level families: 14 initial native commands; 53 required for parity\nStatus: in progress — source differential fixtures remain mandatory");
             ExitCode::SUCCESS
         }
         Ok(ParsedCommand::MemoryStore {
@@ -312,6 +313,37 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
                 );
                 ExitCode::SUCCESS
             }
+            Err(error) => ruflo_error(error),
+        },
+        Ok(ParsedCommand::ConfigInit { force }) => {
+            let path = current_directory().join("ruflo.toml");
+            if path.exists() && !force {
+                eprintln!(
+                    "configuration already exists: {}; use --force to overwrite",
+                    path.display()
+                );
+                ExitCode::from(1)
+            } else {
+                match std::fs::write(&path, DEFAULT_RUFLO_CONFIG) {
+                    Ok(()) => {
+                        println!("Configuration created: {}", path.display());
+                        ExitCode::SUCCESS
+                    }
+                    Err(error) => task_error(error),
+                }
+            }
+        }
+        Ok(ParsedCommand::ConfigGet { key }) => match ruflo_config::EffectiveConfig::load() {
+            Ok(config) => match config_value(&config, key.as_deref()) {
+                Ok(value) => {
+                    println!("{value}");
+                    ExitCode::SUCCESS
+                }
+                Err(message) => {
+                    eprintln!("Configuration key not found: {message}");
+                    ExitCode::from(1)
+                }
+            },
             Err(error) => ruflo_error(error),
         },
         Ok(ParsedCommand::Help) => {
@@ -844,6 +876,28 @@ fn open_memory_store(
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| root.join(".swarm/memory.db"));
     ruflo_storage::SqliteMemoryStore::open(root, path)
+}
+
+fn config_value(
+    config: &ruflo_config::EffectiveConfig,
+    key: Option<&str>,
+) -> Result<String, String> {
+    match key {
+        None => Ok(format!(
+            "policy.allow = {:?}\npolicy.deny = {:?}\nlimits.max_request_bytes = {}\nlimits.max_concurrent_executions = {}\nlimits.max_duration_ms = {}",
+            config.policy.allow,
+            config.policy.deny,
+            config.limits.max_request_bytes,
+            config.limits.max_concurrent_executions,
+            config.limits.max_duration_ms,
+        )),
+        Some("policy.allow") => Ok(format!("{:?}", config.policy.allow)),
+        Some("policy.deny") => Ok(format!("{:?}", config.policy.deny)),
+        Some("limits.max_request_bytes") => Ok(config.limits.max_request_bytes.to_string()),
+        Some("limits.max_concurrent_executions") => Ok(config.limits.max_concurrent_executions.to_string()),
+        Some("limits.max_duration_ms") => Ok(config.limits.max_duration_ms.to_string()),
+        Some(key) => Err(key.into()),
+    }
 }
 
 fn swarm_worker_plan(swarm: &lifecycle::SwarmRecord, objective: &str) -> Vec<String> {
