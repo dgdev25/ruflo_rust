@@ -503,6 +503,104 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
                         println!("\nWorkflows: {count} defined");
                     }
                 }
+                "agent" => { print!(r####"
+Agent Management Commands
+
+Usage: claude-flow agent <subcommand> [options]
+
+Subcommands:
+  - spawn         - Spawn a new agent
+  - list          - List all active agents
+  - status        - Show detailed agent status
+  - stop          - Stop a running agent
+  - metrics       - Show agent metrics
+  - pool          - Manage agent pool
+  - health        - Show agent health
+  - logs          - Show agent logs
+  - wasm-status   - Check WASM runtime availability
+  - wasm-create   - Create a WASM-sandboxed agent
+  - wasm-prompt   - Send a prompt to a WASM agent
+  - wasm-gallery  - List WASM agent gallery templates
+
+Run "claude-flow agent <subcommand> --help" for subcommand help
+"####); }
+                "swarm" => { print!(r####"
+Swarm Coordination Commands
+
+Usage: claude-flow swarm <subcommand> [options]
+
+Subcommands:
+  - init        - Initialize a new swarm
+  - start       - Start swarm execution
+  - status      - Show swarm status
+  - stop        - Stop swarm execution
+  - scale       - Scale swarm agent count
+  - coordinate  - V3 15-agent coordination
+  - pheromone   - Inspect/update adaptive pheromone state
+"####); }
+                "task" => { print!(r####"
+Task Management Commands
+
+Usage: claude-flow task <subcommand> [options]
+
+Subcommands:
+  - create  - Create a new task
+  - list    - List tasks
+  - status  - Get task details
+  - cancel  - Cancel a running task
+  - assign  - Assign task to agent(s)
+  - retry   - Retry a failed task
+
+Run "claude-flow task <subcommand> --help" for subcommand help
+"####); }
+                "session" => { print!(r####"
+Session Management Commands
+
+Usage: claude-flow session <subcommand> [options]
+
+Subcommands:
+  - list    - List all sessions
+  - save    - Save current session state
+  - restore - Restore a saved session
+  - delete  - Delete a saved session
+  - export  - Export session to file
+  - import  - Import session from file
+  - current - Show current active session
+
+Run "claude-flow session <subcommand> --help" for subcommand help
+"####); }
+                "memory" => { print!(r####"
+Memory Management Commands
+
+Usage: claude-flow memory <subcommand> [options]
+
+Subcommands:
+  - init       - Initialize memory database (sql.js)
+  - store      - Store data in memory
+  - retrieve   - Retrieve data from memory
+  - search     - Semantic/vector search
+  - list       - List memory entries
+  - delete     - Delete memory entry
+  - stats      - Show statistics
+  - configure  - Configure backend
+  - cleanup    - Clean expired entries
+  - compress   - Compress database
+  - export     - Export memory to file
+  - import     - Import from file
+  - distill    - Distill memory_entries into structured intelligence (ADR-174)
+"####); }
+                "migrate" => { print!(r####"
+V2 to V3 Migration Tools
+
+Usage: claude-flow migrate <subcommand> [options]
+
+Subcommands:
+  - status    - Check migration status
+  - run       - Run migration
+  - verify    - Verify migration integrity
+  - rollback  - Rollback to previous version
+  - breaking  - Show breaking changes
+"####); }
                 cmd => {
                     let overview = match cmd {
                         "embeddings" | "embed" => "\nSubcommands: init, generate, search, compare, collections, index, providers, chunk, normalize, hyperbolic, neural, models, cache, warmup, benchmark",

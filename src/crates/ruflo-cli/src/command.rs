@@ -1853,7 +1853,7 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
         ["agent", "list"] | ["agent", "ls"] => Ok(ParsedCommand::AgentList),
         ["task", "list"] | ["task", "ls"] => Ok(ParsedCommand::TaskList),
         ["mcp", "start"] => Ok(ParsedCommand::McpStart),
-        // 25 families with native overview surface (full V3 parity pending)
+        // Families with native overview surface (full V3 parity pending)
         _ if matches!(
             normalized.first().copied(),
             Some("hooks")
@@ -1874,6 +1874,12 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
                 | Some("verify")
                 | Some("analyze")  // verify + policy + analyze handled above
                 | Some("an")
+                | Some("migrate")
+                | Some("agent")
+                | Some("swarm")
+                | Some("task")
+                | Some("session")
+                | Some("memory")
                 | Some("route")
                 | Some("providers")
                 | Some("update")
