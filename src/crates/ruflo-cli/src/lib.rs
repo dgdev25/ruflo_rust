@@ -13,6 +13,7 @@ mod command;
 mod completions;
 mod compressor;
 mod config_file;
+mod daemon;
 mod deployment;
 mod eject;
 mod funnel;
@@ -418,6 +419,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::Analyze(command)) => {
             ExitCode::from(analyze::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::Daemon(command)) => {
+            ExitCode::from(daemon::run(&current_directory(), command))
         }
         Ok(ParsedCommand::NativeOverview { name }) => {
             let root = current_directory();

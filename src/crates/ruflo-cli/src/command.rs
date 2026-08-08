@@ -58,6 +58,7 @@ pub enum ParsedCommand {
     Plugins(crate::plugins::PluginsCommand),
     Security(crate::security::SecurityCommand),
     Analyze(crate::analyze::AnalyzeCommand),
+    Daemon(crate::daemon::DaemonCommand),
     TransferStore(crate::transfer_store::TransferStoreCommand),
     MemoryStore {
         key: String,
@@ -1139,6 +1140,31 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             plan_file: option_value(&args, "--plan-file", "--plan-file"),
             strict: args.iter().any(|v| v == "--strict"),
             json: args.iter().any(|v| v == "--json" || v == "--format=json"),
+        }));
+    }
+    if normalized.first() == Some(&"daemon") {
+        let operation = normalized.get(1).copied().unwrap_or("").to_string();
+        // `daemon budget <show|pause|resume>` — capture the budget subcommand.
+        let sub = if operation == "budget" {
+            normalized.get(2).copied().map(|s| s.to_string())
+        } else {
+            None
+        };
+        return Ok(ParsedCommand::Daemon(crate::daemon::DaemonCommand {
+            operation,
+            sub,
+            workers: option_value(&args, "--workers", "-w"),
+            background: args.iter().any(|v| matches!(v.as_str(), "--background" | "-b")),
+            foreground: args.iter().any(|v| matches!(v.as_str(), "--foreground" | "-f")),
+            headless: args.iter().any(|v| v == "--headless"),
+            ttl: option_value(&args, "--ttl", "--ttl").and_then(|v| v.parse::<u64>().ok()),
+            all: args.iter().any(|v| matches!(v.as_str(), "--all" | "-a")),
+            verbose: args.iter().any(|v| matches!(v.as_str(), "--verbose" | "-v")),
+            show_modes: args.iter().any(|v| v == "--show-modes"),
+            worker: option_value(&args, "--worker", "-w"),
+            reason: option_value(&args, "--reason", "-r"),
+            disable: args.iter().any(|v| matches!(v.as_str(), "--disable" | "-d")),
+            quiet: args.iter().any(|v| matches!(v.as_str(), "--quiet" | "-Q")),
         }));
     }
     if normalized.first() == Some(&"analyze") || normalized.first() == Some(&"an") {
