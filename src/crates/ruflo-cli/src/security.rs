@@ -185,6 +185,93 @@ fn is_scan_type(v: &str) -> bool {
     SCAN_TYPES.contains(&v)
 }
 
+/// Symlink-safe atomic write: create a fresh file (O_CREAT|O_EXCL, so an
+/// attacker cannot pre-place a symlink at the tmp path), then rename over the
+/// target. `rename` replaces the target dirent itself, so if the target was a
+/// symlink it is overwritten rather than followed — a malicious repo cannot
+/// redirect the scan report at an arbitrary file by pre-creating one.
+fn write_report_atomic(path: &Path, bytes: &[u8]) -> bool {
+    use std::io::ErrorKind;
+    use std::os::unix::fs::OpenOptionsExt;
+    let Some(dir) = path.parent() else {
+        return false;
+    };
+    let tmp = dir.join(format!(
+        ".{}.tmp",
+        path.file_name().and_then(|n| n.to_str()).unwrap_or("report")
+    ));
+    // create_new => O_CREAT|O_EXCL: fails if the path already exists (symlink
+    // or otherwise), defeating pre-placement.
+    let created = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&tmp);
+    let mut file = match created {
+        Ok(f) => f,
+        Err(_) => return false,
+    };
+    use std::io::Write;
+    if file.write_all(bytes).is_err() {
+        let _ = std::fs::remove_file(&tmp);
+        return false;
+    }
+    let _ = file.sync_all();
+    drop(file);
+    match std::fs::rename(&tmp, path) {
+        Ok(()) => true,
+        Err(e) if e.kind() == ErrorKind::CrossesDevices => {
+            // Cross-filesystem rename isn't atomic; fall back to a content
+            // copy + remove. Still symlink-safe (we never open the target).
+            std::fs::copy(&tmp, path).is_ok() && std::fs::remove_file(&tmp).is_ok()
+        }
+        Err(_) => {
+            let _ = std::fs::remove_file(&tmp);
+            false
+        }
+    }
+}
+
+/// Resolve `target` under `root` and enforce containment. Rejects absolute
+/// paths and any `..` that escapes `root`, so a scan target can never direct
+/// state writes outside the project.
+fn resolve_contained(root: &Path, target: &str) -> Result<PathBuf, String> {
+    let p = Path::new(target);
+    if p.is_absolute() {
+        // Allow absolute paths only if they live under root.
+        let abs_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+        let can = p.canonicalize().map_err(|_| format!("Target does not exist: {}", p.display()))?;
+        if !can.starts_with(&abs_root) {
+            return Err(format!("Target escapes project root: {}", can.display()));
+        }
+        return Ok(can);
+    }
+    let joined = root.join(p);
+    // Block `..` escape without requiring the path to exist yet.
+    let normalized = normalize_lexical(&joined);
+    let normalized_root = normalize_lexical(root);
+    if !normalized.starts_with(&normalized_root) {
+        return Err(format!("Target escapes project root: {}", joined.display()));
+    }
+    Ok(normalized)
+}
+
+fn normalize_lexical(p: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for comp in p.components() {
+        use std::path::Component;
+        match comp {
+            Component::ParentDir => {
+                out.pop();
+            }
+            Component::CurDir => {}
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
+}
+
+
 // ---- Command struct ---------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -325,7 +412,13 @@ fn scan(root: &Path, command: &SecurityCommand) -> u8 {
         return 1;
     }
 
-    let resolved = resolve_under(root, Path::new(&target));
+    let resolved = match resolve_contained(root, &target) {
+        Ok(p) => p,
+        Err(msg) => {
+            eprintln!("[ERROR] {msg}");
+            return 1;
+        }
+    };
     let meta = match fs::metadata(&resolved) {
         Ok(m) => m,
         Err(_) => {
@@ -343,32 +436,46 @@ fn scan(root: &Path, command: &SecurityCommand) -> u8 {
 
     let mut findings: Vec<ScanFinding> = Vec::new();
     let mut counts = ScanCounts { critical: 0, high: 0, medium: 0, low: 0 };
+    let mut deps_phase_ran = false;
 
-    // Phase 1: npm audit (deps).
-    if (scan_type == "all" || scan_type == "deps") && resolved.join("package.json").exists() {
-        if let Some(audit) = run_npm_audit(&resolved) {
-            if let Some(vulns) = audit["vulnerabilities"].as_object() {
-                for (pkg, v) in vulns {
-                    let sev = v["severity"].as_str().unwrap_or("low");
-                    let title = v["via"]
-                        .as_array()
-                        .and_then(|arr| arr.first())
-                        .and_then(|x| x["title"].as_str())
-                        .unwrap_or("Vulnerability");
-                    match sev {
-                        "critical" => counts.critical += 1,
-                        "high" => counts.high += 1,
-                        "moderate" | "medium" => counts.medium += 1,
-                        _ => counts.low += 1,
+    // Phase 1: npm audit (deps). Fail closed for type=="deps" with no
+    // package.json: scanning nothing and reporting clean is the exact bug this
+    // scanner exists to prevent. For type=="all", warn but continue to code
+    // phases so the report never claims a clean deps bill of health it never
+    // ran.
+    if scan_type == "all" || scan_type == "deps" {
+        if !resolved.join("package.json").exists() {
+            if scan_type == "deps" {
+                eprintln!("[ERROR] No package.json in target — cannot run dependency scan.");
+                return 1;
+            }
+            eprintln!("[WARN] No package.json — skipping dependency scan phase.");
+        } else {
+            deps_phase_ran = true;
+            if let Some(audit) = run_npm_audit(&resolved) {
+                if let Some(vulns) = audit["vulnerabilities"].as_object() {
+                    for (pkg, v) in vulns {
+                        let sev = v["severity"].as_str().unwrap_or("low");
+                        let title = v["via"]
+                            .as_array()
+                            .and_then(|arr| arr.first())
+                            .and_then(|x| x["title"].as_str())
+                            .unwrap_or("Vulnerability");
+                        match sev {
+                            "critical" => counts.critical += 1,
+                            "high" => counts.high += 1,
+                            "moderate" | "medium" => counts.medium += 1,
+                            _ => counts.low += 1,
+                        }
+                        let label = sev_label(sev);
+                        let desc = chars_take(title, 35);
+                        findings.push(ScanFinding {
+                            severity: label,
+                            kind: "Dependency CVE".into(),
+                            location: format!("package.json:{pkg}"),
+                            description: desc,
+                        });
                     }
-                    let label = sev_label(sev);
-                    let desc = chars_take(title, 35);
-                    findings.push(ScanFinding {
-                        severity: label,
-                        kind: "Dependency CVE".into(),
-                        location: format!("package.json:{pkg}"),
-                        description: desc,
-                    });
                 }
             }
         }
@@ -414,6 +521,7 @@ fn scan(root: &Path, command: &SecurityCommand) -> u8 {
         "target": target,
         "depth": candidate_depth,
         "type": scan_type,
+        "depsPhaseRan": deps_phase_ran,
         "summary": {
             "critical": counts.critical,
             "high": counts.high,
@@ -429,15 +537,23 @@ fn scan(root: &Path, command: &SecurityCommand) -> u8 {
         })).collect::<Vec<_>>(),
     });
     let out_file = scan_dir_out.join(format!("scan-{scan_type}-{candidate_depth}.json"));
-    let _ = fs::write(&out_file, serde_json::to_vec_pretty(&record).unwrap_or_default());
+    // Symlink-safe atomic write (write_report_atomic); a failed write no
+    // longer leaves a stale/truncated report silently in place.
+    if !write_report_atomic(&out_file, &serde_json::to_vec_pretty(&record).unwrap_or_default()) {
+        eprintln!("[WARN] Failed to persist scan report at {}", out_file.display());
+    }
 
     if command.fix && counts.critical + counts.high > 0 {
         println!("\nAttempting fixes...");
-        let _ = ProcCommand::new("npm")
+        let fix_out = ProcCommand::new("npm")
             .args(["audit", "fix"])
             .current_dir(&resolved)
             .output();
-        println!("Applied available fixes (run scan again to verify).");
+        match fix_out {
+            Ok(o) if o.status.success() => println!("Applied available fixes (run scan again to verify)."),
+            Ok(_) => println!("[WARN] npm audit fix exited non-zero; some fixes may not have applied."),
+            Err(_) => eprintln!("[ERROR] Could not run `npm audit fix` (npm unavailable)."),
+        }
     }
 
     let success = findings.is_empty() || (counts.critical == 0 && counts.high == 0);
@@ -685,7 +801,14 @@ fn cve(root: &Path, command: &SecurityCommand) -> u8 {
         println!("  {:<10} {:<30} {:<28} {}", sev, pkg, chars_take(&ids_s, 28), chars_take(title, 40));
     }
     println!("\nSource: `npm audit --json`. Run `security scan` for code + dep scan.");
-    0
+    // The TS source intended `exitCode: finalRows.length > 0 ? 1 : 0` for CI
+    // gating but shipped `? 0 : 0` (a typo). Implement the documented intent:
+    // a non-empty result exits non-zero so CI can gate on it.
+    if final_rows.is_empty() {
+        0
+    } else {
+        1
+    }
 }
 
 fn rows_is_empty_check(audit: &Value) -> bool {
@@ -705,7 +828,17 @@ fn threats(root: &Path, command: &SecurityCommand) -> u8 {
     println!("\nThreat Model: {}", model.to_uppercase());
     println!("{}", "\u{2500}".repeat(50));
 
-    let root_dir = resolve_under(root, Path::new(&scope));
+    let root_dir = match resolve_contained(root, &scope) {
+        Ok(p) => p,
+        Err(msg) => {
+            eprintln!("[ERROR] {msg}");
+            return 1;
+        }
+    };
+    if !root_dir.is_dir() {
+        eprintln!("[ERROR] Scope is not a directory: {}", root_dir.display());
+        return 1;
+    }
     let mut findings: Vec<ThreatFinding> = Vec::new();
     let mut files_scanned = 0u32;
     const MAX_FILES: u32 = 500;
@@ -769,7 +902,16 @@ fn threats(root: &Path, command: &SecurityCommand) -> u8 {
         }
     }
     println!("\nFiles scanned: {files_scanned} (max {MAX_FILES})");
-    0
+    // Gate on critical/high so a CRITICAL/HIGH threat model finding is not
+    // indistinguishable from a clean run in CI.
+    let has_high = findings
+        .iter()
+        .any(|f| f.severity.eq_ignore_ascii_case("critical") || f.severity.eq_ignore_ascii_case("high"));
+    if has_high {
+        1
+    } else {
+        0
+    }
 }
 
 struct ThreatFinding {
@@ -924,7 +1066,13 @@ fn collect_server_files(root_dir: &Path, dir: &Path, depth: i32, findings: &mut 
                     description: "No CORS middleware detected".into(),
                 });
             }
-            if !content.contains("rate") && !content.contains("limit") && !content.contains("throttle") {
+            // Rate-limit detection: use a word-boundary regex rather than bare
+            // substrings — otherwise any unrelated `limit` variable suppresses
+            // the missing-rate-limit finding.
+            static RATE_RE: Lazy<Regex> = Lazy::new(|| {
+                Regex::new(r"(?i)(?:rate.?limit|throttle|express.?rate.?limit)").unwrap()
+            });
+            if !RATE_RE.is_match(&content) {
                 findings.push(ThreatFinding {
                     category: "DoS".into(),
                     severity: "MEDIUM".into(),
@@ -1011,9 +1159,21 @@ fn secrets(root: &Path, command: &SecurityCommand) -> u8 {
     println!("\nSecret Detection");
     println!("{}", "\u{2500}".repeat(50));
 
-    let root_dir = resolve_under(root, Path::new(&scan_path));
+    let root_dir = match resolve_contained(root, &scan_path) {
+        Ok(p) => p,
+        Err(msg) => {
+            eprintln!("[ERROR] {msg}");
+            return 1;
+        }
+    };
+    if !root_dir.is_dir() {
+        eprintln!("[ERROR] Path is not a directory: {}", root_dir.display());
+        return 1;
+    }
+    // An empty ignore entry would match every path (every string contains ""),
+    // silently disabling the whole scan. Drop empties.
     let ignore_list: Vec<&str> = ignore_patterns
-        .map(|p| p.split(',').map(str::trim).collect())
+        .map(|p| p.split(',').map(str::trim).filter(|s| !s.is_empty()).collect())
         .unwrap_or_default();
 
     let mut findings: Vec<SecretFinding> = Vec::new();
@@ -1184,7 +1344,10 @@ fn defend(command: &SecurityCommand) -> u8 {
     let lower = text.to_lowercase();
     let mut threats: Vec<(&str, &str, f64)> = Vec::new();
     for phrase in INJECTION_PHRASES {
-        if lower.contains(phrase) {
+        // Case-insensitive: the catalog mixes case ("DAN"), so compare the
+        // lowercased phrase against the lowercased input — otherwise "DAN"
+        // never matches.
+        if lower.contains(&phrase.to_lowercase()) {
             let (sev, conf) = if matches!(*phrase, "jailbreak" | "DAN" | "developer mode" | "exfiltrate") {
                 ("critical", 0.95)
             } else if matches!(*phrase, "ignore previous instructions" | "ignore all previous instructions" | "disregard the above" | "forget your instructions" | "override your instructions" | "do not follow your rules" | "reveal your system prompt" | "reveal your instructions" | "send me the api key") {
@@ -1347,7 +1510,7 @@ fn scan_tool_descriptions(tools: &[(String, String)], min_fragment: usize) -> Co
     for (i, (name_i, desc_i)) in tools.iter().enumerate() {
         let lower_i = desc_i.to_lowercase();
         for phrase in INJECTION_PHRASES {
-            if lower_i.contains(phrase) {
+            if lower_i.contains(&phrase.to_lowercase()) {
                 suspects.push(CompSuspect {
                     kind: "injection-phrase".into(),
                     tool: name_i.clone(),
@@ -1493,7 +1656,8 @@ fn scan_channel_message(message: &str, min_encoded_len: usize) -> ChanResult {
     let mut findings = Vec::new();
 
     for phrase in INJECTION_PHRASES {
-        if let Some(idx) = lower.find(phrase) {
+        let plower = phrase.to_lowercase();
+        if let Some(idx) = lower.find(&plower) {
             let sev = if matches!(
                 *phrase,
                 "jailbreak" | "DAN" | "developer mode" | "exfiltrate" | "send me the api key"
@@ -1514,28 +1678,36 @@ fn scan_channel_message(message: &str, min_encoded_len: usize) -> ChanResult {
             });
         }
     }
-    // Encoded payload heuristic: long base64/hex run.
-    let b64_re = Regex::new(r"[A-Za-z0-9+/]{80,}={0,2}").unwrap();
-    let hex_re = Regex::new(r"[0-9a-fA-F]{80,}").unwrap();
+    // Encoded payload heuristic: long base64/hex run. Build the regex with the
+    // caller's threshold (default 80) so `--min-encoded-len` actually works —
+    // the previous hard-coded `{80,}` ignored anything below 80.
+    let b64_re = Regex::new(&format!("[A-Za-z0-9+/]{{{n},}}={{0,2}}", n = min_encoded_len.max(1))).unwrap();
+    let hex_re = Regex::new(&format!("[0-9a-fA-F]{{{n},}}", n = min_encoded_len.max(1))).unwrap();
     for m in b64_re.find_iter(message) {
-        if m.len() >= min_encoded_len {
-            findings.push(ChanFinding {
-                kind: "encoded-payload".into(),
-                severity: "medium".into(),
-                offset: m.start(),
-                span: chars_take(m.as_str(), 40),
-            });
-        }
+        findings.push(ChanFinding {
+            kind: "encoded-payload".into(),
+            severity: "medium".into(),
+            offset: m.start(),
+            span: chars_take(m.as_str(), 40),
+        });
     }
     for m in hex_re.find_iter(message) {
-        if m.len() >= min_encoded_len {
-            findings.push(ChanFinding {
-                kind: "encoded-payload".into(),
-                severity: "medium".into(),
-                offset: m.start(),
-                span: chars_take(m.as_str(), 40),
-            });
-        }
+        findings.push(ChanFinding {
+            kind: "encoded-payload".into(),
+            severity: "medium".into(),
+            offset: m.start(),
+            span: chars_take(m.as_str(), 40),
+        });
+    }
+    // Bidi override / Trojan-Source obfuscation (U+202E, U+202D, U+202C, etc.).
+    let bidi_re = Regex::new(r"[\u{202A}-\u{202E}\u{2066}-\u{2069}]").unwrap();
+    for m in bidi_re.find_iter(message) {
+        findings.push(ChanFinding {
+            kind: "bidi-override".into(),
+            severity: "high".into(),
+            offset: m.start(),
+            span: "<bidi>".into(),
+        });
     }
     // Zero-width unicode.
     let zw_re = Regex::new(r"[\u{200B}-\u{200F}\u{2060}\u{FEFF}]").unwrap();
@@ -1620,14 +1792,6 @@ fn scan_plan(command: &SecurityCommand) -> u8 {
 }
 
 // ---- helpers ----------------------------------------------------------------
-
-fn resolve_under(root: &Path, target: &Path) -> PathBuf {
-    if target.is_absolute() {
-        target.to_path_buf()
-    } else {
-        root.join(target)
-    }
-}
 
 fn resolve_path(p: &str) -> PathBuf {
     let path = Path::new(p);
@@ -1746,10 +1910,16 @@ mod tests {
 
     #[test]
     fn defend_detects_pii_and_injection() {
-        // Build a command and call defend indirectly via the scanner logic.
         let lower = "ignore previous instructions".to_lowercase();
-        assert!(INJECTION_PHRASES.iter().any(|p| lower.contains(p)));
+        assert!(INJECTION_PHRASES.iter().any(|p| lower.contains(&p.to_lowercase())));
         assert!(PII_PATTERNS.iter().any(|(_, re)| re.is_match("foo@bar.com")));
+    }
+
+    #[test]
+    fn dan_detected_case_insensitively() {
+        // "DAN" is uppercase in the catalog; lowercased input must still match.
+        let r = scan_channel_message("enable DAN mode now", 80);
+        assert!(!r.safe, "DAN must be flagged regardless of case");
     }
 
     #[test]
