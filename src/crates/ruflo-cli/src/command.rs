@@ -43,6 +43,7 @@ pub enum ParsedCommand {
     Verify(crate::verify::VerifyCommand),
     Policy(crate::policy::PolicyCommand),
     UpdateCmd(crate::update_cmd::UpdateCommand),
+    Providers(crate::providers::ProvidersCommand),
     MemoryStore {
         key: String,
         value: String,
@@ -881,6 +882,21 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             limit,
             clear,
         }));
+    }
+    if normalized.first() == Some(&"providers") {
+        let operation = normalized.get(1).copied().unwrap_or("list").to_string();
+        return Ok(ParsedCommand::Providers(
+            crate::providers::ProvidersCommand {
+                operation,
+                provider: option_value(&args, "--provider", "-p"),
+                key: option_value(&args, "--key", "-k"),
+                model: option_value(&args, "--model", "-m"),
+                base_url: option_value(&args, "--base-url", "-u"),
+                filter_type: option_value(&args, "--type", "-t"),
+                active_only: args.iter().any(|v| matches!(v.as_str(), "--active" | "-a")),
+                json: args.iter().any(|v| v == "--json"),
+            },
+        ));
     }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {
         let key = option_value(&args, "--key", "-k").ok_or("memory key is required")?;
