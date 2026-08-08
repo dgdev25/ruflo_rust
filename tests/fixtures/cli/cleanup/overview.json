@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "cleanup"
+  ],
+  "exit": 0,
+  "stdout": "\nClaude Flow Cleanup (dry run)\n\nArtifacts found:\n\n  [would remove] dir   .claude/helpers  (358.9 KB) - Ruflo hook scripts\n  [would remove] file  .claude/settings.json  (0 B) - Remove ruflo hooks/claudeFlow blocks (preserves rest)\n  [would remove] dir   .claude-flow  (519.7 KB) - Capabilities and configuration\n  [would remove] dir   .swarm  (3.6 MB) - Swarm state\n  [would remove] dir   memory  (4.3 KB) - Memory storage\n\nSummary:\n  Found 5 artifact(s) totaling 4.5 MB\n\n  This was a dry run. Use --force to actually remove artifacts.\n\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "cleanup"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/cleanup.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:23Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

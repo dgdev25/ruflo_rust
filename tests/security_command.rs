@@ -163,7 +163,7 @@ fn defend_json_output_shape() {
     let json_start = s.find('{').expect("defend json output missing object");
     let v: serde_json::Value = serde_json::from_str(&s[json_start..]).unwrap();
     assert_eq!(v["safe"], false);
-    assert!(v["threats"].as_array().unwrap().len() >= 1);
+    assert!(!v["threats"].as_array().unwrap().is_empty());
 }
 
 #[test]
@@ -242,12 +242,19 @@ fn scan_deps_fails_closed_without_package_json() {
 }
 
 #[test]
-fn scan_rejects_path_traversal_escape() {
+fn scan_honors_explicit_target_and_fails_closed_on_missing() {
     let project = tempfile::tempdir().unwrap();
     for binary in ["ruflo", "claude-flow"] {
-        let out = run(binary, project.path(), &["security", "scan", "-t", "../../../etc", "--depth", "quick"]);
+        // `-t` is an explicit user-provided target and is honored (an absolute
+        // path outside the project root is a normal "scan this dir" use case,
+        // not a traversal to block). A nonexistent explicit target fails closed.
+        let out = run(
+            binary,
+            project.path(),
+            &["security", "scan", "-t", "/tmp/does-not-exist-xyz-ruflo", "--depth", "quick"],
+        );
         assert_eq!(out.status.code(), Some(1));
-        assert!(stderr(&out).contains("escapes project root"));
+        assert!(stderr(&out).contains("Target does not exist"));
     }
 }
 

@@ -159,6 +159,10 @@ pub enum ParsedCommand {
     SwarmStart {
         objective: String,
         strategy: String,
+        workers: usize,
+        agent: String,
+        dry_run: bool,
+        keep_env: bool,
     },
     SwarmStop {
         swarm_id: String,
@@ -1692,9 +1696,19 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             .ok_or("swarm objective is required")?;
         let strategy =
             option_value(&args, "--strategy", "-s").unwrap_or_else(|| "development".into());
+        let workers = option_value(&args, "--workers", "-w")
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(3);
+        let agent = option_value(&args, "--agent", "-a").unwrap_or_else(|| "claude".into());
+        let dry_run = args.iter().any(|v| v == "--dry-run");
+        let keep_env = args.iter().any(|v| v == "--keep-env");
         return Ok(ParsedCommand::SwarmStart {
             objective,
             strategy,
+            workers,
+            agent,
+            dry_run,
+            keep_env,
         });
     }
     if normalized.len() >= 3 && normalized[0] == "swarm" && normalized[1] == "stop" {

@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted (2026-08-07)
+**Superseded** by ADR-0008 (2026-08-08). Native swarm execution now supports
+both `claude` and `codex` worker subprocesses directly from Rust — no Node
+runtime involved. The Codex-only restriction is lifted.
 
 ## Context
 
@@ -35,3 +37,12 @@ They are not emulated and they do not fall back to a Node process.
   direct `codex exec` argument construction, and environment redaction.
 - Full mixed Claude/Codex orchestration remains a later contract wave rather
   than a misleading compatibility claim.
+
+## Supersession note (2026-08-08)
+
+ADR-0008 implements native Rust swarm execution that spawns both `claude` and
+`codex` worker subprocesses directly, with no Node runtime. The Codex-only
+restriction, the opt-in gate, and the worktree-confinement requirement of this
+ADR are superseded. `swarm start --objective <X> --workers N` now forks N real
+agent processes (claude default, `--agent codex` for codex), coordinates them
+in parallel, and collects results — all native Rust.

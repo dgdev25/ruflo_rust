@@ -36,6 +36,7 @@ mod proxy;
 mod route;
 mod security;
 mod settings;
+mod swarm_exec;
 mod spinner;
 mod transfer_store;
 mod update_cmd;
@@ -1157,19 +1158,40 @@ Subcommands:
         Ok(ParsedCommand::SwarmStart {
             objective,
             strategy,
+            workers,
+            agent,
+            dry_run,
+            keep_env,
         }) => {
             let project_root = current_directory();
             match lifecycle::start_swarm(&project_root, &objective, &strategy) {
                 Ok(swarm) => {
                     println!("Starting swarm {}: {}", swarm.id, objective);
-                    let workers = swarm_worker_plan(&swarm, &objective);
-                    let code = ruflo_codex_cli::run_workers(&workers);
-                    let succeeded = code == ExitCode::SUCCESS;
+                    // ADR-0008: native Rust swarm execution — spawn real agent
+                    // subprocesses (claude/codex) in parallel, no Node.
+                    let outcome = swarm_exec::run_swarm(
+                        &objective,
+                        workers,
+                        &agent,
+                        &project_root,
+                        keep_env,
+                        dry_run,
+                    );
+                    println!("{}", outcome.summary());
+                    if !dry_run {
+                        outcome.record_to_memory(&project_root);
+                    }
+                    let succeeded = !dry_run
+                        && outcome.results.iter().all(|r| r.exit_code == 0);
                     if let Err(error) = lifecycle::finish_swarm(&project_root, succeeded) {
                         eprintln!("error: failed to persist swarm completion: {error}");
                         return ExitCode::from(ERROR_EXIT);
                     }
-                    code
+                    if dry_run || succeeded {
+                        ExitCode::SUCCESS
+                    } else {
+                        ExitCode::from(ERROR_EXIT)
+                    }
                 }
                 Err(error) => task_error(error),
             }

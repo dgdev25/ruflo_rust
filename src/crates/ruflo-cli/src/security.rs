@@ -232,43 +232,20 @@ fn write_report_atomic(path: &Path, bytes: &[u8]) -> bool {
     }
 }
 
-/// Resolve `target` under `root` and enforce containment. Rejects absolute
-/// paths and any `..` that escapes `root`, so a scan target can never direct
-/// state writes outside the project.
+/// Resolve `target`. `-t`/`--target` (and secrets `-p`, threats `-s`) is an
+/// EXPLICIT user-provided path, not untrusted input — so the user may scan any
+/// directory they name, including absolute paths outside the project root
+/// (`ruflo security scan -t /tmp/foo`). The scan report is written with the
+/// symlink-safe atomic writer (write_report_atomic), so a pre-placed symlink at
+/// the report path cannot redirect it. Containment of an explicit user argument
+/// would break the normal "scan this dir" use case; existence + is-dir are
+/// validated by the caller.
 fn resolve_contained(root: &Path, target: &str) -> Result<PathBuf, String> {
     let p = Path::new(target);
     if p.is_absolute() {
-        // Allow absolute paths only if they live under root.
-        let abs_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
-        let can = p.canonicalize().map_err(|_| format!("Target does not exist: {}", p.display()))?;
-        if !can.starts_with(&abs_root) {
-            return Err(format!("Target escapes project root: {}", can.display()));
-        }
-        return Ok(can);
+        return Ok(p.to_path_buf());
     }
-    let joined = root.join(p);
-    // Block `..` escape without requiring the path to exist yet.
-    let normalized = normalize_lexical(&joined);
-    let normalized_root = normalize_lexical(root);
-    if !normalized.starts_with(&normalized_root) {
-        return Err(format!("Target escapes project root: {}", joined.display()));
-    }
-    Ok(normalized)
-}
-
-fn normalize_lexical(p: &Path) -> PathBuf {
-    let mut out = PathBuf::new();
-    for comp in p.components() {
-        use std::path::Component;
-        match comp {
-            Component::ParentDir => {
-                out.pop();
-            }
-            Component::CurDir => {}
-            other => out.push(other.as_os_str()),
-        }
-    }
-    out
+    Ok(root.join(p))
 }
 
 

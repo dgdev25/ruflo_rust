@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "completions"
+  ],
+  "exit": 0,
+  "stdout": "\nShell Completions\n\nGenerate shell completion scripts for tab completion support.\n\nSupported shells:\n  - bash       - Bash completion\n  - zsh        - Zsh completion\n  - fish       - Fish completion\n  - powershell - PowerShell completion\n\nInstallation:\n\nBash:\n  claude-flow completions bash > ~/.bash_completion.d/claude-flow\n  source ~/.bash_completion.d/claude-flow\n\nZsh:\n  mkdir -p ~/.zfunc\n  claude-flow completions zsh > ~/.zfunc/_claude-flow\n  # Add to ~/.zshrc: fpath=(~/.zfunc $fpath); autoload -Uz compinit && compinit\n\nFish:\n  claude-flow completions fish > ~/.config/fish/completions/claude-flow.fish\n\nPowerShell:\n  claude-flow completions powershell >> $PROFILE\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "completions"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/completions.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:23Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

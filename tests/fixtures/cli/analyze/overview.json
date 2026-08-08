@@ -26,7 +26,7 @@
     ]
   },
   "recording": {
-    "recorded_at": "2026-08-08T17:11:30Z",
+    "recorded_at": "2026-08-08T21:23:21Z",
     "recorded_by": "scripts/capture-reference-contract.sh",
     "harness": "fixture-capture"
   }
