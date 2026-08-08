@@ -61,9 +61,11 @@ named compatibility evidence and focused verification.
 - Memory increment: `ruflo-memory` composes the durable metadata projection
   with the upstream AgentDB/RVF adapter and verifies store, close/reopen,
   semantic search, and vector upsert. The native CLI now implements
-  `memory store`, `retrieve`/`get`, `search`, and `list`/`ls`, with namespace,
-  project-contained `--path`, tags, provenance, upsert, and value-only
-  handling. Its CLI search is deliberately keyword-projection behavior until
+  `memory store`, `retrieve`/`get`, `search`, `list`/`ls`, `delete`/`rm`, and
+  `stats`, with namespace, project-contained `--path`, tags, provenance,
+  upsert, and value-only handling. Delete is a soft tombstone; it does not
+  hand-edit the upstream vector container. Its CLI search is deliberately
+  keyword-projection behavior until
   production 384-dimension embedding selection is wired through the existing
   semantic facade; remaining memory subcommands, MCP parity, and source
   fixtures remain open.

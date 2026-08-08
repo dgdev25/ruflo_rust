@@ -244,6 +244,40 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             }
             Err(error) => ruflo_error(error),
         },
+        Ok(ParsedCommand::MemoryDelete {
+            key,
+            namespace,
+            path,
+        }) => match open_memory_store(path.as_deref())
+            .and_then(|store| store.delete(&namespace, &key))
+        {
+            Ok(Some(_entry)) => {
+                println!("Deleted \"{key}\" from namespace \"{namespace}\"");
+                ExitCode::SUCCESS
+            }
+            Ok(None) => {
+                eprintln!("Key not found: \"{key}\" in namespace \"{namespace}\"");
+                ExitCode::from(1)
+            }
+            Err(error) => ruflo_error(error),
+        },
+        Ok(ParsedCommand::MemoryStats { path }) => match open_memory_store(path.as_deref())
+            .and_then(|store| {
+                let database_path = store.database_path().display().to_string();
+                store.stats().map(|stats| (database_path, stats))
+            }) {
+            Ok((database_path, stats)) => {
+                println!(
+                    "Memory Statistics\nBackend: SQLite metadata projection (semantic RVF CLI wiring pending)\nTotal Entries: {}\nEntries With Vectors: {}\nContent Bytes: {}\nLocation: {}",
+                    stats.total_entries,
+                    stats.entries_with_vectors,
+                    stats.total_content_bytes,
+                    database_path,
+                );
+                ExitCode::SUCCESS
+            }
+            Err(error) => ruflo_error(error),
+        },
         Ok(ParsedCommand::Help) => {
             print!("{HELP}");
             ExitCode::SUCCESS

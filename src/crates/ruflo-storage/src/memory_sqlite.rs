@@ -32,6 +32,13 @@ pub struct MemoryStoreInput {
     pub upsert: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryStats {
+    pub total_entries: u64,
+    pub entries_with_vectors: u64,
+    pub total_content_bytes: u64,
+}
+
 pub struct SqliteMemoryStore {
     connection: Connection,
     database_path: PathBuf,
@@ -280,6 +287,41 @@ impl SqliteMemoryStore {
         Ok(entries)
     }
 
+    /// Soft-delete a memory row. The record remains auditable, while all
+    /// public reads and listings exclude it. Its vector may remain in the
+    /// upstream RVF index until that index's owner compacts it; callers must
+    /// not hand-edit RVF segments to remove it.
+    pub fn delete(&self, namespace: &str, key: &str) -> Result<Option<MemoryEntry>, RufloError> {
+        let existing = self.find(namespace, key)?;
+        if existing.is_none() {
+            return Ok(None);
+        }
+        self.connection
+            .execute(
+                "UPDATE memory_entries SET status = 'deleted', updated_at = ?1 WHERE namespace = ?2 AND key = ?3 AND status = 'active'",
+                params![now_ms(), namespace, key],
+            )
+            .map_err(map_sqlite("memory.delete"))?;
+        Ok(existing)
+    }
+
+    pub fn stats(&self) -> Result<MemoryStats, RufloError> {
+        self.connection
+            .query_row(
+                "SELECT COUNT(*), COUNT(semantic_id), COALESCE(SUM(length(content)), 0) \
+                 FROM memory_entries WHERE status = 'active'",
+                [],
+                |row| {
+                    Ok(MemoryStats {
+                        total_entries: row.get::<_, i64>(0)? as u64,
+                        entries_with_vectors: row.get::<_, i64>(1)? as u64,
+                        total_content_bytes: row.get::<_, i64>(2)? as u64,
+                    })
+                },
+            )
+            .map_err(map_sqlite("memory.stats"))
+    }
+
     fn find(&self, namespace: &str, key: &str) -> Result<Option<MemoryEntry>, RufloError> {
         self.connection
             .query_row(
@@ -405,5 +447,37 @@ fn now_ms() -> i64 {
 fn map_sqlite(operation: &'static str) -> impl FnOnce(rusqlite::Error) -> RufloError {
     move |error| RufloError::UpstreamAdapter {
         message: format!("{operation}: {error}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn input(key: &str, content: &str) -> MemoryStoreInput {
+        MemoryStoreInput {
+            key: key.into(),
+            namespace: "test".into(),
+            content: content.into(),
+            memory_type: "semantic".into(),
+            tags_json: None,
+            provenance_type: "unknown".into(),
+            upsert: true,
+        }
+    }
+
+    #[test]
+    fn delete_hides_an_entry_and_stats_only_count_active_rows() {
+        let project = tempfile::tempdir().unwrap();
+        let store = SqliteMemoryStore::open(project.path(), ".swarm/memory.db").unwrap();
+        store.store(&input("a", "alpha")).unwrap();
+        store.store(&input("b", "bravo")).unwrap();
+        assert_eq!(store.stats().unwrap().total_entries, 2);
+        assert_eq!(store.delete("test", "a").unwrap().unwrap().key, "a");
+        assert!(store.retrieve("test", "a").unwrap().is_none());
+        assert!(store.delete("test", "a").unwrap().is_none());
+        let stats = store.stats().unwrap();
+        assert_eq!(stats.total_entries, 1);
+        assert_eq!(stats.total_content_bytes, 5);
     }
 }

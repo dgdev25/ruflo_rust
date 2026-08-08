@@ -42,6 +42,14 @@ pub enum ParsedCommand {
         limit: usize,
         path: Option<String>,
     },
+    MemoryDelete {
+        key: String,
+        namespace: String,
+        path: Option<String>,
+    },
+    MemoryStats {
+        path: Option<String>,
+    },
     Help,
     Init,
     Status,
@@ -259,6 +267,24 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
                 50,
                 "memory list limit",
             )?,
+            path: option_value(&args, "--path", "--path"),
+        });
+    }
+    if normalized.len() >= 2
+        && normalized[0] == "memory"
+        && matches!(normalized[1], "delete" | "rm")
+    {
+        let key = option_value(&args, "--key", "-k")
+            .or_else(|| memory_positionals(&args).into_iter().next())
+            .ok_or("memory key is required")?;
+        return Ok(ParsedCommand::MemoryDelete {
+            key,
+            namespace: option_value(&args, "--namespace", "-n").unwrap_or_else(|| "default".into()),
+            path: option_value(&args, "--path", "--path"),
+        });
+    }
+    if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "stats" {
+        return Ok(ParsedCommand::MemoryStats {
             path: option_value(&args, "--path", "--path"),
         });
     }
@@ -763,6 +789,14 @@ mod tests {
         assert!(matches!(
             parse(argv(&["memory", "ls", "-n", "plans", "-l", "2"])),
             Ok(ParsedCommand::MemoryList { namespace: Some(namespace), limit: 2, .. }) if namespace == "plans"
+        ));
+        assert!(matches!(
+            parse(argv(&["memory", "rm", "goal", "-n", "plans"])),
+            Ok(ParsedCommand::MemoryDelete { key, namespace, .. }) if key == "goal" && namespace == "plans"
+        ));
+        assert!(matches!(
+            parse(argv(&["memory", "stats"])),
+            Ok(ParsedCommand::MemoryStats { .. })
         ));
         assert!(parse(argv(&["memory", "search", "-q", "ship", "-l", "0"])).is_err());
     }

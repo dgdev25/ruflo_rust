@@ -12,3 +12,6 @@ rusqlite = { workspace = true }
 rvf-runtime = { git = "https://github.com/ruvnet/RuVector.git", rev = "597be6a753472f0521fe2def097116e717ed4332", package = "rvf-runtime" }
 rvf-adapter-agentdb = { git = "https://github.com/ruvnet/RuVector.git", rev = "597be6a753472f0521fe2def097116e717ed4332", package = "rvf-adapter-agentdb" }
 rvf-adapter-agentic-flow = { git = "https://github.com/ruvnet/RuVector.git", rev = "597be6a753472f0521fe2def097116e717ed4332", package = "rvf-adapter-agentic-flow" }
+
+[dev-dependencies]
+tempfile = { workspace = true }
