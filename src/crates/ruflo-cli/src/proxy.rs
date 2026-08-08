@@ -155,10 +155,7 @@ fn consent_enable(domain: &str, surface: &str, config_field: &str, label: &str, 
         return 0;
     }
     println!("{label} requires explicit opt-in. This grants the '{domain}' consent domain.");
-    println!(
-        "Disable anytime: ruflo proxy {}-disable",
-        domain.replace('-', "-")
-    );
+    println!("Disable anytime: ruflo proxy {domain}-disable");
     if !yes {
         println!("\nRe-run with --yes to confirm.");
         return 0;
