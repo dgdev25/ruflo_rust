@@ -25,18 +25,22 @@ pub struct TransferStoreCommand {
 pub fn run(_root: &Path, command: TransferStoreCommand) -> u8 {
     match command.operation.as_str() {
         "" => {
-            println!("\nRuFlo Pattern Store");
-            println!("Decentralized pattern marketplace via IPFS");
-            println!();
-            println!("Subcommands:");
-            println!("  list      List available patterns");
-            println!("  search    Search patterns");
-            println!("  download  Download a pattern by CID");
-            println!("  publish   Publish a pattern");
-            println!("  info      Show pattern details");
-            println!();
-            println!("Example:");
-            println!("  claude-flow transfer-store list --featured");
+            print!(r####"
+RuFlo Pattern Store
+Decentralized pattern marketplace via IPFS
+
+Subcommands:
+  - list      - List patterns from registry
+  - search    - Search patterns
+  - download  - Download a pattern
+  - publish   - Publish a pattern
+  - info      - Show pattern details
+
+Example:
+  claude-flow hooks transfer store list --featured
+  claude-flow hooks transfer store search -q "routing"
+  claude-flow hooks transfer store download -n seraphine-genesis
+"####);
             0
         }
         "list" => {

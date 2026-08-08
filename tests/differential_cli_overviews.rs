@@ -50,6 +50,9 @@ const BYTE_ALIGNED: &[&str] = &[
     "session",
     "memory",
     "migrate",
+    "appliance",
+    "transfer-store",
+    "process",
 ];
 
 /// Families with a captured source-oracle overview fixture. doctor/funnel/

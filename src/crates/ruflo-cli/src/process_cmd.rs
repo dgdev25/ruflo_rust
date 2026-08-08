@@ -39,24 +39,24 @@ pub struct ProcessCommand {
 pub fn run(root: &Path, command: ProcessCommand) -> u8 {
     match command.operation.as_str() {
         "" => {
-            println!("\nProcess Management");
-            println!("{}", "\u{2500}".repeat(50));
-            if let Some(pid) = read_pid(root) {
-                let running = is_running(pid);
-                println!(
-                    "  Daemon: {} (pid {pid})",
-                    if running { "running" } else { "stale PID" }
-                );
-            } else {
-                println!("  Daemon: not started");
-            }
-            println!();
-            println!("Subcommands:");
-            println!("  daemon   Start/stop/status the background daemon");
-            println!("  monitor  Real-time monitoring");
-            println!("  workers  List/manage worker processes");
-            println!("  signals  Send signals to processes");
-            println!("  logs     View daemon logs");
+            print!(r####"
+🔧 Process Management
+
+Manage background processes, daemons, and workers.
+
+Subcommands:
+  daemon     - Manage background daemon process
+  monitor    - Real-time process monitoring
+  workers    - Manage background workers
+  signals    - Send signals to processes
+  logs       - View and manage process logs
+
+Examples:
+  claude-flow process daemon --action start
+  claude-flow process monitor --watch
+  claude-flow process workers --action spawn --type task --count 3
+  claude-flow process logs --follow --level error
+"####);
             0
         }
         "daemon" => match command.action.as_deref() {

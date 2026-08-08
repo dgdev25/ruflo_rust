@@ -24,22 +24,27 @@ pub struct ApplianceCommand {
 pub fn run(_root: &Path, command: ApplianceCommand) -> u8 {
     match command.operation.as_str() {
         "" => {
-            println!("\nRuflo Appliance (RVFA)");
-            println!("Self-contained deployment format for the full Ruflo platform.");
-            println!();
-            println!("Subcommands:");
-            println!("  build    Build an RVFA appliance");
-            println!("  inspect  Inspect an RVFA file");
-            println!("  verify   Verify appliance integrity");
-            println!("  extract  Extract appliance contents");
-            println!("  run      Run an appliance");
-            println!();
-            println!("Profiles:");
-            println!("  cloud    Cloud-optimized (API keys, no bundled models)");
-            println!("  hybrid   Mixed (some models bundled, cloud fallback)");
-            println!("  offline  Fully offline (all models bundled)");
-            println!();
-            println!("Use \"ruflo appliance <subcommand> --help\" for details.");
+            print!(r####"
+Ruflo Appliance (RVFA)
+Self-contained deployment format for the full Ruflo platform.
+
+Subcommands:
+  - build     - Build a self-contained ruflo.rvf appliance
+  - inspect   - Show appliance header and section manifest
+  - verify    - Verify appliance integrity and run capability tests
+  - extract   - Extract all sections from an appliance
+  - run       - Boot and run an RVFA appliance
+  - sign      - Sign an appliance with Ed25519 for tamper detection
+  - publish   - Publish an appliance to IPFS via Pinata
+  - update    - Hot-patch a section in an appliance
+
+Profiles:
+  - cloud    - API-only, smallest footprint (~15 MB)
+  - hybrid   - API + local fallback models (~500 MB)
+  - offline  - Fully air-gapped with bundled models (~4 GB)
+
+Use "ruflo appliance <subcommand> --help" for details.
+"####);
             0
         }
         "build" => build(&command),
