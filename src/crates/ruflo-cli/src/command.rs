@@ -1541,9 +1541,12 @@ mod tests {
             parse(argv(&["cleanup", "--force", "--no-force"])),
             Ok(ParsedCommand::Cleanup { force: false, .. })
         ));
+        // --version after a command is NOT intercepted as the global version
+        // flag (so `deployment deploy --version 1.0.0` works). Only standalone
+        // --version (first arg) triggers Version.
         assert!(matches!(
             parse(argv(&["cleanup", "--version"])),
-            Ok(ParsedCommand::Version)
+            Ok(ParsedCommand::Cleanup { force: false, .. })
         ));
     }
 
