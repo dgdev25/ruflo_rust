@@ -1,5 +1,5 @@
 use std::fs;
-use std::io;
+use std::io::{self, Write};
 use std::path::Path;
 
 use serde_json::Value;
@@ -92,6 +92,13 @@ pub fn discover(root: &Path, keep_config: bool) -> Vec<Artifact> {
             if !path.exists() {
                 return None;
             }
+            // Handoff item 40: never traverse outside the project through
+            // symlinks. Skip any candidate whose real path escapes the repo root
+            // (e.g. `.claude` symlinked to an external dir → `.claude/helpers`
+            // would otherwise delete/size foreign files).
+            if !within_root(root, &path) {
+                return None;
+            }
             Some(Artifact {
                 path: relative,
                 description,
@@ -111,10 +118,30 @@ pub fn discover(root: &Path, keep_config: bool) -> Vec<Artifact> {
         .collect()
 }
 
+/// True when `candidate`'s real (canonical) path stays inside `root`. Absent
+/// paths are treated as safe (they would be created under root). This is the
+/// symlink-escape guard mandated by handoff item 40.
+fn within_root(root: &Path, candidate: &Path) -> bool {
+    let Ok(root_real) = fs::canonicalize(root) else {
+        return true;
+    };
+    match fs::canonicalize(candidate) {
+        Ok(real) => real.starts_with(&root_real),
+        // Absent or broken symlink → not traversable; safe to consider in-root.
+        Err(_) => true,
+    }
+}
+
 fn size(path: &Path) -> u64 {
-    let Ok(metadata) = fs::metadata(path) else {
+    // Use symlink_metadata so a symlinked child is never followed out of the
+    // project (handoff item 40). A symlink counts as its link size, not its
+    // target tree.
+    let Ok(metadata) = fs::symlink_metadata(path) else {
         return 0;
     };
+    if metadata.is_symlink() {
+        return metadata.len();
+    }
     if metadata.is_file() {
         return metadata.len();
     }
@@ -142,13 +169,19 @@ fn remove(root: &Path, artifact: &Artifact) -> io::Result<()> {
         let Some(object) = settings.as_object_mut() else {
             return Ok(());
         };
+        // hooks/claudeFlow are ruflo-owned blocks (written by `ruflo init`);
+        // unrelated top-level keys (agents/, theme, …) are preserved.
         object.remove("hooks");
         object.remove("claudeFlow");
         normalize_js_numbers(&mut settings);
         let mut contents = serde_json::to_string_pretty(&settings)
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
         contents.push('\n');
-        let _ = fs::write(path, contents);
+        // Atomic + no-symlink-redirect write (handoff item 40). create_new
+        // (O_CREAT|O_EXCL) refuses an existing final component — including a
+        // symlink — and the pid-suffixed name is not predictable enough to
+        // pre-plant; failure is surfaced rather than silently claiming removal.
+        write_atomic_nofollow(&path, contents.as_bytes())?;
         return Ok(());
     }
     if artifact.kind == ArtifactKind::Directory {
@@ -161,6 +194,61 @@ fn remove(root: &Path, artifact: &Artifact) -> io::Result<()> {
     } else {
         fs::remove_file(path)
     }
+}
+
+/// Atomic same-directory write. `create_new` (O_CREAT|O_EXCL) refuses to open a
+/// path that already exists — including a symlink — so a pre-existing
+/// `settings.json.<pid>.tmp` symlink cannot redirect the write to a foreign
+/// file (EEXIST is surfaced as a failure). The unique pid-suffixed name avoids
+/// collisions with a stale regular tmp from a prior crash.
+#[cfg(unix)]
+fn write_atomic_nofollow(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    use std::os::unix::fs::OpenOptionsExt;
+    let tmp = tmp_path(path);
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&tmp)?;
+    let res = (|| {
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&tmp, path)
+    })();
+    if res.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    res
+}
+
+#[cfg(not(unix))]
+fn write_atomic_nofollow(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let tmp = tmp_path(path);
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&tmp)?;
+    let res = (|| {
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&tmp, path)
+    })();
+    if res.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    res
+}
+
+fn tmp_path(path: &Path) -> std::path::PathBuf {
+    // settings.json → settings.json.<pid>.tmp (sibling, unique per process).
+    let mut name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    name.push_str(&format!(".{}.tmp", std::process::id()));
+    path.with_file_name(name)
 }
 
 fn normalize_js_numbers(value: &mut Value) {
@@ -283,7 +371,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn directory_symlink_is_unlinked_without_touching_its_target() {
+    fn directory_symlink_to_outside_is_skipped_not_traversed() {
         use std::os::unix::fs::symlink;
 
         let project = tempfile::tempdir().unwrap();
@@ -293,12 +381,41 @@ mod tests {
 
         let result = run(project.path(), true, false);
 
-        assert_eq!(result.removed_count, 1);
-        assert!(!project.path().join(".swarm").exists());
+        // Handoff item 40: a symlink resolving outside the project is never
+        // traversed/removed — both the link and its foreign target are preserved.
+        assert_eq!(result.removed_count, 0);
+        assert!(result.artifacts.is_empty());
+        assert!(fs::symlink_metadata(project.path().join(".swarm")).is_ok());
         assert_eq!(
             fs::read_to_string(outside.path().join("keep.txt")).unwrap(),
             "outside"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn intermediate_claude_symlink_cannot_escape_to_foreign_helpers() {
+        use std::os::unix::fs::symlink;
+
+        let project = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        // Foreign `.claude/helpers` living OUTSIDE the project, surfaced via a
+        // `.claude` symlink. Without the escape guard, --force would delete the
+        // foreign helpers tree.
+        fs::create_dir_all(outside.path().join(".claude/helpers")).unwrap();
+        fs::write(outside.path().join(".claude/helpers/foreign.sh"), "foreign").unwrap();
+        symlink(
+            outside.path().join(".claude"),
+            project.path().join(".claude"),
+        )
+        .unwrap();
+
+        let result = run(project.path(), true, false);
+
+        assert_eq!(result.removed_count, 0);
+        assert!(result.artifacts.is_empty());
+        // Foreign helper survives.
+        assert!(outside.path().join(".claude/helpers/foreign.sh").is_file());
     }
 
     #[cfg(unix)]
@@ -361,6 +478,45 @@ mod tests {
         assert_eq!(
             fs::read_to_string(temp.path().join(".claude/settings.json")).unwrap(),
             "{\n  \"other\": 1\n}\n"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn settings_tmp_symlink_is_not_followed_and_foreign_file_is_preserved() {
+        use std::os::unix::fs::symlink;
+
+        let project = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        fs::create_dir_all(project.path().join(".claude")).unwrap();
+        // Adversary plants the EXACT pid-suffixed temp path as a symlink to a
+        // foreign file. create_new (O_CREAT|O_EXCL) refuses to open an existing
+        // symlink (EEXIST) — the write is not redirected.
+        fs::write(outside.path().join("sentinel"), "foreign-secret").unwrap();
+        let tmp = format!("settings.json.{}.tmp", std::process::id());
+        symlink(
+            outside.path().join("sentinel"),
+            project.path().join(".claude").join(&tmp),
+        )
+        .unwrap();
+        fs::write(
+            project.path().join(".claude/settings.json"),
+            r#"{"hooks":{"x":1},"other":true}"#,
+        )
+        .unwrap();
+
+        let result = run(project.path(), true, false);
+
+        // The symlinked temp must NOT be followed: the mutation fails (create_new
+        // on a path that exists errors), the foreign sentinel is untouched, and
+        // the original settings.json is unchanged.
+        assert!(result
+            .failures
+            .iter()
+            .any(|(a, _)| a.path == ".claude/settings.json"));
+        assert_eq!(
+            fs::read_to_string(outside.path().join("sentinel")).unwrap(),
+            "foreign-secret"
         );
     }
 }
