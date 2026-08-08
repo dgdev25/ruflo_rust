@@ -37,6 +37,7 @@ pub enum ParsedCommand {
     Settings(crate::settings::SettingsCommand),
     Funnel(crate::funnel_command::FunnelCommand),
     Eject(crate::eject::EjectCommand),
+    Issues(crate::issues::IssuesCommand),
     MemoryStore {
         key: String,
         value: String,
@@ -639,6 +640,94 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             confirm,
             format,
         }));
+    }
+    if normalized.first() == Some(&"issues") {
+        use crate::issues::{Claimant, IssuesCommand as Iss};
+        if args.iter().any(|v| matches!(v.as_str(), "--help" | "-h")) {
+            return Ok(ParsedCommand::Issues(Iss::Help {
+                subcommand: normalized
+                    .get(1)
+                    .filter(|v| !v.starts_with('-'))
+                    .copied()
+                    .map(str::to_owned),
+            }));
+        }
+        let sub = normalized.get(1).copied();
+        let json = args.iter().any(|v| v == "--json");
+        let issue = option_value(&args, "--issue", "-i");
+        let status = option_value(&args, "--status", "-s");
+        let note = option_value(&args, "--note", "-n");
+        let reason = option_value(&args, "--reason", "-r");
+        let mine = args.iter().any(|v| matches!(v.as_str(), "--mine" | "-m"));
+        let claimant = |short_agent: &str, short_user: &str| -> Option<Claimant> {
+            let agent = option_value(&args, "--agent", short_agent);
+            let user = option_value(&args, "--user", short_user);
+            if let Some(id) = agent {
+                let at =
+                    option_value(&args, "--agent-type", "-t").unwrap_or_else(|| "coder".into());
+                Some(Claimant::agent {
+                    agent_id: id,
+                    agent_type: at,
+                })
+            } else {
+                user.map(|name| Claimant::human {
+                    user_id: option_value(&args, "--user-id", "-U").unwrap_or_else(|| name.clone()),
+                    name,
+                })
+            }
+        };
+        let cmd = match sub {
+            None | Some("list") | Some("ls") => Iss::List { status, mine, json },
+            Some("claim") => match (issue, claimant("-a", "-u")) {
+                (Some(i), Some(c)) => Iss::Claim {
+                    issue: i,
+                    claimant: c,
+                },
+                _ => return Err("issues claim requires --issue and (--agent or --user)".into()),
+            },
+            Some("release") => match (issue, claimant("-a", "-u")) {
+                (Some(i), Some(c)) => Iss::Release {
+                    issue: i,
+                    claimant: c,
+                },
+                _ => return Err("issues release requires --issue and (--agent or --user)".into()),
+            },
+            Some("status") => match (issue, status) {
+                (Some(i), Some(s)) => Iss::Status {
+                    issue: i,
+                    status: s,
+                    note,
+                },
+                _ => return Err("issues status requires --issue and --status".into()),
+            },
+            Some("handoff") => match (&issue, claimant("-a", "-u")) {
+                (Some(i), Some(to)) => {
+                    let from = claimant("--from-agent", "--from-user").unwrap_or(Claimant::human {
+                        user_id: "current".into(),
+                        name: "current".into(),
+                    });
+                    Iss::Handoff {
+                        issue: i.clone(),
+                        from,
+                        to,
+                        reason,
+                    }
+                }
+                _ => return Err("issues handoff requires --issue and (--agent or --user)".into()),
+            },
+            Some("stealable") => Iss::Stealable {
+                agent_type: option_value(&args, "--agent-type", "-t"),
+            },
+            Some("steal") => match (issue, claimant("-a", "-u")) {
+                (Some(i), Some(c)) => Iss::Steal {
+                    issue: i,
+                    stealer: c,
+                },
+                _ => return Err("issues steal requires --issue and (--agent or --user)".into()),
+            },
+            Some(other) => return Err(format!("Unknown subcommand '{other}' for issues")),
+        };
+        return Ok(ParsedCommand::Issues(cmd));
     }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {
         let key = option_value(&args, "--key", "-k").ok_or("memory key is required")?;
