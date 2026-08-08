@@ -1,10 +1,9 @@
 //! Native V3 `appliance-advanced` command — RVFA sign/publish/update.
 //!
 //! Source: `v3/@claude-flow/cli/src/commands/appliance-advanced.ts`. The TS
-//! implementation imports `../appliance/rvfa-signing.js` (Ed25519),
-//! `../appliance/rvfa-distribution.js` (IPFS/Pinata), and
-//! `../appliance/rvfa-format.js` (RVFA container). The native build has no
-//! Ed25519 or IPFS crate; these operations degrade with documented messages.
+//! implementation imports rvfa-signing (Ed25519), rvfa-distribution (IPFS),
+//! and rvfa-format (RVFA container). The native build has no Ed25519 or IPFS
+//! crate; these operations degrade with documented messages.
 
 use std::fs;
 use std::path::Path;
@@ -54,12 +53,8 @@ fn sign(command: &ApplianceAdvancedCommand) -> u8 {
     }
     if command.generate_keys {
         println!("\nGenerating Ed25519 Key Pair");
-        println!("\u{2500}".repeat(50).as_str());
+        println!("{}", "\u{2500}".repeat(50));
         println!();
-        eprintln!("[ERROR] Ed25519 key generation not available in native build.");
-        eprintln!("  The rvfa-signing module requires @noble/ed25519 (not a Rust crate).");
-        eprintln!("  Use the TypeScript CLI for signing: npx ruflo appliance-advanced sign");
-        return 1;
     }
     eprintln!("[ERROR] RVFA appliance signing not available in native build.");
     eprintln!("  Requires Ed25519 (no ed25519 crate in workspace deps).");
