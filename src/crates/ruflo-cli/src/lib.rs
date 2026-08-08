@@ -2,6 +2,7 @@
 
 mod announcements;
 mod auth;
+mod autopilot;
 mod benchmark;
 mod claims;
 mod cleanup;
@@ -362,6 +363,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::Auth(command)) => {
             ExitCode::from(auth::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::Autopilot(command)) => {
+            ExitCode::from(autopilot::run(&current_directory(), command))
         }
         Ok(ParsedCommand::NativeOverview { name }) => {
             let root = current_directory();

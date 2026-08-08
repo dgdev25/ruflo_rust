@@ -45,6 +45,7 @@ pub enum ParsedCommand {
     UpdateCmd(crate::update_cmd::UpdateCommand),
     Providers(crate::providers::ProvidersCommand),
     Auth(crate::auth::AuthCommand),
+    Autopilot(crate::autopilot::AutopilotCommand),
     MemoryStore {
         key: String,
         value: String,
@@ -909,6 +910,23 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             all: args.iter().any(|v| v == "--all"),
             json: args.iter().any(|v| v == "--json"),
         }));
+    }
+    if matches!(normalized.first().copied(), Some("autopilot") | Some("ap")) {
+        let operation = normalized.get(1).copied().unwrap_or("status").to_string();
+        return Ok(ParsedCommand::Autopilot(
+            crate::autopilot::AutopilotCommand {
+                operation,
+                json: args.iter().any(|v| v == "--json"),
+                max_iterations: option_value(&args, "--max-iterations", "--max-iterations")
+                    .and_then(|v| v.parse().ok()),
+                timeout: option_value(&args, "--timeout", "--timeout").and_then(|v| v.parse().ok()),
+                task_sources: option_value(&args, "--task-sources", "--task-sources"),
+                last: option_value(&args, "--last", "--last").and_then(|v| v.parse().ok()),
+                clear: args.iter().any(|v| v == "--clear"),
+                query: option_value(&args, "--query", "--query"),
+                limit: option_value(&args, "--limit", "--limit").and_then(|v| v.parse().ok()),
+            },
+        ));
     }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {
         let key = option_value(&args, "--key", "-k").ok_or("memory key is required")?;
