@@ -667,17 +667,19 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
         let claimant = |short_agent: &str, short_user: &str| -> Option<Claimant> {
             let agent = option_value(&args, "--agent", short_agent);
             let user = option_value(&args, "--user", short_user);
-            if let Some(id) = agent {
-                let at =
-                    option_value(&args, "--agent-type", "-t").unwrap_or_else(|| "coder".into());
+            if let Some(val) = agent {
+                let (at, id) = val.split_once(':').unwrap_or(("coder", val.as_str()));
                 Some(Claimant::agent {
-                    agent_id: id,
-                    agent_type: at,
+                    agent_id: id.into(),
+                    agent_type: at.into(),
                 })
             } else {
-                user.map(|name| Claimant::human {
-                    user_id: option_value(&args, "--user-id", "-U").unwrap_or_else(|| name.clone()),
-                    name,
+                user.map(|val| {
+                    let (uid, name) = val.split_once(':').unwrap_or((val.as_str(), val.as_str()));
+                    Claimant::human {
+                        user_id: uid.into(),
+                        name: name.into(),
+                    }
                 })
             }
         };
@@ -706,18 +708,11 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
                 _ => return Err("issues status requires --issue and --status".into()),
             },
             Some("handoff") => match (&issue, claimant("-a", "-u")) {
-                (Some(i), Some(to)) => {
-                    let from = claimant("--from-agent", "--from-user").unwrap_or(Claimant::human {
-                        user_id: "current".into(),
-                        name: "current".into(),
-                    });
-                    Iss::Handoff {
-                        issue: i.clone(),
-                        from,
-                        to,
-                        reason,
-                    }
-                }
+                (Some(i), Some(to)) => Iss::Handoff {
+                    issue: i.clone(),
+                    to,
+                    reason,
+                },
                 _ => return Err("issues handoff requires --issue and (--agent or --user)".into()),
             },
             Some("stealable") => Iss::Stealable {
