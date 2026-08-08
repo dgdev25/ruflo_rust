@@ -656,7 +656,11 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             let v3_config = root.join(".claude-flow").is_dir();
             let v2_memory = directory_has_entries(&root.join("data/memory"));
             let v2_sessions = directory_has_entries(&root.join("data/sessions"));
-            let needed = v2_config || v2_memory || v2_sessions;
+            let v2_agents = directory_has_entries(&root.join(".claude-flow/agents"));
+            let v2_hooks = root.join("src/hooks").is_dir();
+            let v2_workflows = directory_has_entries(&root.join(".claude-flow/workflows"));
+            let needed =
+                v2_config || v2_memory || v2_sessions || v2_agents || v2_hooks || v2_workflows;
             println!("Migration Status");
             println!(
                 "Config\t{}\t{}",
@@ -669,16 +673,19 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
                 },
                 if v2_config && !v3_config { "yes" } else { "no" }
             );
-            println!(
-                "Memory\t{}\t{}",
-                if v2_memory { "v2" } else { "missing" },
-                if v2_memory { "yes" } else { "no" }
-            );
-            println!(
-                "Sessions\t{}\t{}",
-                if v2_sessions { "v2" } else { "missing" },
-                if v2_sessions { "yes" } else { "no" }
-            );
+            for (label, found) in [
+                ("Memory", v2_memory),
+                ("Sessions", v2_sessions),
+                ("Agents", v2_agents),
+                ("Hooks", v2_hooks),
+                ("Workflows", v2_workflows),
+            ] {
+                println!(
+                    "{label}\t{}\t{}",
+                    if found { "v2" } else { "missing" },
+                    if found { "yes" } else { "no" }
+                );
+            }
             println!("Migration needed: {}", if needed { "yes" } else { "no" });
             ExitCode::SUCCESS
         }
@@ -1372,6 +1379,51 @@ fn migrate_v2_config(
     backup: bool,
     force: bool,
 ) -> Result<String, String> {
+    // Non-config targets are directory moves with optional backup.
+    match target {
+        "memory" => {
+            return migrate_directory(
+                root,
+                "data/memory",
+                ".claude-flow/memory",
+                dry_run,
+                backup,
+                force,
+            )
+        }
+        "sessions" => {
+            return migrate_directory(
+                root,
+                "data/sessions",
+                ".claude-flow/sessions",
+                dry_run,
+                backup,
+                force,
+            )
+        }
+        "agents" => {
+            return migrate_directory(
+                root,
+                ".claude-flow/agents",
+                "v3/agents",
+                dry_run,
+                backup,
+                force,
+            )
+        }
+        "hooks" => return migrate_directory(root, "src/hooks", "v3/hooks", dry_run, backup, force),
+        "workflows" => {
+            return migrate_directory(
+                root,
+                ".claude-flow/workflows",
+                "data/workflows",
+                dry_run,
+                backup,
+                force,
+            )
+        }
+        _ => {}
+    }
     let source = root.join("claude-flow.config.json");
     if !source.is_file() {
         return Err("no V2 configuration found at claude-flow.config.json".into());
@@ -1441,6 +1493,46 @@ fn migrate_v2_config(
     )
     .map_err(|error| error.to_string())?;
     Ok(format!("Config migrated to {}", destination.display()))
+}
+
+/// Move a V2 source directory to its V3 destination (dry-run, backup, force).
+fn migrate_directory(
+    root: &std::path::Path,
+    src_rel: &str,
+    dst_rel: &str,
+    dry_run: bool,
+    backup: bool,
+    force: bool,
+) -> Result<String, String> {
+    let source = root.join(src_rel);
+    let dest = root.join(dst_rel);
+    if !source.exists() {
+        return Err(format!("source not found: {src_rel}"));
+    }
+    if dest.exists() && !force {
+        return Err(format!(
+            "destination already exists: {dst_rel} (use --force to overwrite)"
+        ));
+    }
+    if dry_run {
+        return Ok(format!("Would migrate {src_rel} -> {dst_rel}"));
+    }
+    if backup && dest.exists() {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+        let backup_path = root.join(format!(".claude-flow/backup/v2-{stamp}/{src_rel}"));
+        if let Some(parent) = backup_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        std::fs::rename(&dest, &backup_path).map_err(|e| e.to_string())?;
+    }
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::rename(&source, &dest).map_err(|e| e.to_string())?;
+    Ok(format!("Migrated {src_rel} -> {dst_rel}"))
 }
 
 fn swarm_worker_plan(swarm: &lifecycle::SwarmRecord, objective: &str) -> Vec<String> {
