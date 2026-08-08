@@ -505,6 +505,355 @@ fn help(subcommand: Option<&str>) -> &'static str {
     }
 }
 
+// ─── funnel/precedence.ts + disclosure.ts + funnel.json (settings command) ───
+
+const TOGGLE_COOLDOWN_MS: u64 = 10 * 60 * 1000;
+const NOTIFIER_TTL_MS: u64 = 6 * 60 * 60 * 1000;
+
+pub fn funnel_state_dir_pub() -> PathBuf {
+    funnel_state_dir()
+}
+
+/// ADR-314 §D1 — toggle cooldown active when lastToggleAt is within 10 min.
+fn cooldown_active(last_toggle_at: Option<&str>, now: u64) -> bool {
+    let Some(ts) = last_toggle_at.and_then(parse_iso_millis) else {
+        return false;
+    };
+    now.saturating_sub(ts) < TOGGLE_COOLDOWN_MS
+}
+
+#[derive(Debug, Clone)]
+pub struct NotifierStatus {
+    pub limited: bool,
+    pub since: Option<String>,
+    pub cleared: Option<String>,
+    pub last_toggle_at: Option<String>,
+}
+
+impl NotifierStatus {
+    fn from_value(raw: &Value, field: &str) -> Self {
+        NotifierStatus {
+            limited: raw.get(field).and_then(Value::as_bool).unwrap_or(false),
+            since: raw.get("since").and_then(Value::as_str).map(str::to_owned),
+            cleared: raw
+                .get("cleared")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+            last_toggle_at: raw
+                .get("lastToggleAt")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+        }
+    }
+}
+
+/// Read a notifier status file, applying the 6h TTL auto-expire. `field` is the
+/// boolean flag key — "limited" for rate-limit, "low" for power-saver.
+fn read_notifier(file: &str, field: &str) -> NotifierStatus {
+    let now = unix_millis();
+    let mut status = read_state_json(file)
+        .map(|v| NotifierStatus::from_value(&v, field))
+        .unwrap_or(NotifierStatus {
+            limited: false,
+            since: None,
+            cleared: None,
+            last_toggle_at: None,
+        });
+    if status.limited {
+        if let Some(since) = status.since.as_deref().and_then(parse_iso_millis) {
+            if now.saturating_sub(since) >= NOTIFIER_TTL_MS {
+                status.limited = false;
+                status.cleared = Some(now_iso8601());
+            }
+        }
+    }
+    status
+}
+
+fn mark_notifier(file: &str, field: &str) -> bool {
+    let now = unix_millis();
+    let current = read_notifier(file, field);
+    if current.limited && current.since.is_some() {
+        return true; // already flagged, not a change
+    }
+    if cooldown_active(current.last_toggle_at.as_deref(), now) {
+        return false;
+    }
+    let mut rec = serde_json::Map::new();
+    rec.insert(field.to_string(), Value::Bool(true));
+    rec.insert(
+        "since".into(),
+        Value::String(current.since.clone().unwrap_or_else(now_iso8601)),
+    );
+    rec.insert("cleared".into(), Value::Null);
+    rec.insert("lastToggleAt".into(), Value::String(now_iso8601()));
+    write_state_json(file, &Value::Object(rec));
+    true
+}
+
+fn clear_notifier(file: &str, field: &str) -> bool {
+    let now = unix_millis();
+    let current = read_notifier(file, field);
+    if !current.limited {
+        return true; // already clear
+    }
+    if cooldown_active(current.last_toggle_at.as_deref(), now) {
+        return false;
+    }
+    let mut rec = serde_json::Map::new();
+    rec.insert(field.to_string(), Value::Bool(false));
+    rec.insert(
+        "since".into(),
+        current
+            .since
+            .clone()
+            .map(Value::String)
+            .unwrap_or(Value::Null),
+    );
+    rec.insert("cleared".into(), Value::String(now_iso8601()));
+    rec.insert("lastToggleAt".into(), Value::String(now_iso8601()));
+    write_state_json(file, &Value::Object(rec));
+    true
+}
+
+#[allow(dead_code)]
+pub fn read_rate_limit_status() -> NotifierStatus {
+    read_notifier("rate-limit-status.json", "limited")
+}
+pub fn mark_rate_limited() -> bool {
+    mark_notifier("rate-limit-status.json", "limited")
+}
+pub fn clear_rate_limit_status() -> bool {
+    clear_notifier("rate-limit-status.json", "limited")
+}
+#[allow(dead_code)]
+pub fn read_quota_low_status() -> NotifierStatus {
+    read_notifier("quota-status.json", "low")
+}
+pub fn mark_quota_low() -> bool {
+    mark_notifier("quota-status.json", "low")
+}
+pub fn clear_quota_low_status() -> bool {
+    clear_notifier("quota-status.json", "low")
+}
+
+// ─── disclosure.ts (3-state: never_seen / disclosed_enabled / disclosed_disabled) ─
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DisclosureState {
+    NeverSeen,
+    DisclosedEnabled,
+    DisclosedDisabled,
+}
+
+impl DisclosureState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            DisclosureState::NeverSeen => "never_seen",
+            DisclosureState::DisclosedEnabled => "disclosed_enabled",
+            DisclosureState::DisclosedDisabled => "disclosed_disabled",
+        }
+    }
+    fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "never_seen" => DisclosureState::NeverSeen,
+            "disclosed_enabled" => DisclosureState::DisclosedEnabled,
+            "disclosed_disabled" => DisclosureState::DisclosedDisabled,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DisclosureRecord {
+    pub state: DisclosureState,
+    pub first_shown_at: Option<String>,
+}
+
+pub fn get_disclosure() -> DisclosureRecord {
+    match read_state_json("funnel-disclosure.json") {
+        Some(v) => {
+            let state = v
+                .get("state")
+                .and_then(Value::as_str)
+                .and_then(DisclosureState::parse);
+            match state {
+                Some(state) => DisclosureRecord {
+                    state,
+                    first_shown_at: v
+                        .get("firstShownAt")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned),
+                },
+                None => DisclosureRecord {
+                    state: DisclosureState::NeverSeen,
+                    first_shown_at: None,
+                },
+            }
+        }
+        None => DisclosureRecord {
+            state: DisclosureState::NeverSeen,
+            first_shown_at: None,
+        },
+    }
+}
+
+pub fn record_disclosure_declined() {
+    let first = get_disclosure().first_shown_at;
+    let rec = json!({
+        "state": "disclosed_disabled",
+        "firstShownAt": first.unwrap_or_else(now_iso8601),
+    });
+    write_state_json("funnel-disclosure.json", &rec);
+}
+
+pub fn record_disclosure_reenabled() {
+    let rec = json!({ "state": "disclosed_enabled", "firstShownAt": now_iso8601() });
+    write_state_json("funnel-disclosure.json", &rec);
+}
+
+// ─── funnel.json user config + deleteFunnelData + resolveFunnelEnabled ──────
+
+pub fn set_user_config_enabled(enabled: bool) {
+    let mut cfg = read_state_json("funnel.json").unwrap_or(json!({}));
+    if !cfg.is_object() {
+        cfg = json!({});
+    }
+    if let Some(obj) = cfg.as_object_mut() {
+        obj.insert("enabled".into(), Value::Bool(enabled));
+    }
+    write_state_json("funnel.json", &cfg);
+}
+
+/// deleteFunnelData: drop the pseudonymous id + the local event queue (ADR-305).
+pub fn delete_funnel_data() {
+    let _ = fs::remove_file(state_path(FUNNEL_ID_FILE));
+    let _ = fs::remove_file(state_path(EVENTS_FILE));
+}
+
+#[derive(Debug, Clone)]
+pub struct FunnelEnabledDecision {
+    pub enabled: bool,
+    pub decided_by: &'static str,
+}
+
+fn env_disabled() -> bool {
+    std::env::var("RUFLO_FUNNEL")
+        .ok()
+        .map(|v| {
+            let t = v.trim().to_ascii_lowercase();
+            matches!(t.as_str(), "0" | "false" | "off" | "no")
+        })
+        .unwrap_or(false)
+}
+
+fn enterprise_policy_disabled() -> bool {
+    let mut candidates = Vec::new();
+    if let Some(p) = std::env::var_os("RUFLO_ENTERPRISE_POLICY") {
+        candidates.push(PathBuf::from(p));
+    }
+    if cfg!(target_os = "windows") {
+        // precedence.ts:30 — %ProgramData%\ruflo\policy.json
+        if let Some(program_data) = std::env::var_os("ProgramData") {
+            candidates.push(
+                PathBuf::from(program_data)
+                    .join("ruflo")
+                    .join("policy.json"),
+            );
+        }
+    } else {
+        candidates.push(PathBuf::from("/etc/ruflo/policy.json"));
+    }
+    for p in candidates {
+        if let Ok(raw) = fs::read_to_string(&p) {
+            if let Ok(v) = serde_json::from_str::<Value>(&raw) {
+                if v.get("funnel").and_then(|f| f.get("enabled")) == Some(&Value::Bool(false)) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+fn user_config_disabled() -> bool {
+    read_state_json("funnel.json").and_then(|c| c.get("enabled").and_then(Value::as_bool))
+        == Some(false)
+}
+
+fn project_config_disabled(cwd: &Path) -> bool {
+    fs::read_to_string(cwd.join("claude-flow.config.json"))
+        .ok()
+        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+        .and_then(|c| {
+            c.get("funnel")
+                .and_then(|f| f.get("enabled"))
+                .and_then(Value::as_bool)
+        })
+        == Some(false)
+}
+
+fn remote_policy_disabled() -> bool {
+    read_state_json("funnel-remote-policy.json")
+        .and_then(|p| p.get("funnelEnabled").and_then(Value::as_bool))
+        == Some(false)
+}
+
+/// ADR-305 precedence: env > enterprise > user-config > project-config >
+/// disclosure-declined > remote-policy > package-default. Strict AND chain.
+pub fn resolve_funnel_enabled(cwd: &Path) -> FunnelEnabledDecision {
+    if env_disabled() {
+        return FunnelEnabledDecision {
+            enabled: false,
+            decided_by: "env",
+        };
+    }
+    if enterprise_policy_disabled() {
+        return FunnelEnabledDecision {
+            enabled: false,
+            decided_by: "enterprise-policy",
+        };
+    }
+    if user_config_disabled() {
+        return FunnelEnabledDecision {
+            enabled: false,
+            decided_by: "user-config",
+        };
+    }
+    if project_config_disabled(cwd) {
+        return FunnelEnabledDecision {
+            enabled: false,
+            decided_by: "project-config",
+        };
+    }
+    if get_disclosure().state == DisclosureState::DisclosedDisabled {
+        return FunnelEnabledDecision {
+            enabled: false,
+            decided_by: "disclosure-declined",
+        };
+    }
+    if remote_policy_disabled() {
+        return FunnelEnabledDecision {
+            enabled: false,
+            decided_by: "remote-policy",
+        };
+    }
+    FunnelEnabledDecision {
+        enabled: true,
+        decided_by: "package-default",
+    }
+}
+
+/// Public consents map accessor for the settings overview.
+pub fn read_consents_pub() -> Value {
+    read_consents()
+}
+
+/// Public pseudonymous funnel-id accessor for `settings notices id`.
+pub fn get_funnel_id_pub() -> Option<String> {
+    get_funnel_id()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

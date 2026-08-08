@@ -10,6 +10,7 @@ mod config_file;
 mod deployment;
 mod funnel;
 mod lifecycle;
+mod settings;
 mod spinner;
 mod version;
 
@@ -279,6 +280,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         Ok(ParsedCommand::Advisor(command)) => ExitCode::from(funnel::run(command)),
         Ok(ParsedCommand::Announcements(command)) => ExitCode::from(announcements::run(command)),
         Ok(ParsedCommand::Spinner(command)) => ExitCode::from(spinner::run(command)),
+        Ok(ParsedCommand::Settings(command)) => {
+            ExitCode::from(settings::run(&current_directory(), command))
+        }
         Ok(ParsedCommand::MemoryStore {
             key,
             value,

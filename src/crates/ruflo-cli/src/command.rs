@@ -34,6 +34,7 @@ pub enum ParsedCommand {
     Advisor(crate::funnel::AdvisorCommand),
     Announcements(crate::announcements::AnnouncementsCommand),
     Spinner(crate::spinner::SpinnerCommand),
+    Settings(crate::settings::SettingsCommand),
     MemoryStore {
         key: String,
         value: String,
@@ -554,6 +555,34 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             Some(other) => return Err(format!("Unknown subcommand '{other}' for spinner")),
         };
         return Ok(ParsedCommand::Spinner(cmd));
+    }
+    if normalized.first() == Some(&"settings") {
+        use crate::settings::SettingsCommand as Set;
+        if args.iter().any(|v| matches!(v.as_str(), "--help" | "-h")) {
+            return Ok(ParsedCommand::Settings(Set::Help {
+                subcommand: normalized
+                    .get(1)
+                    .filter(|v| !v.starts_with('-'))
+                    .copied()
+                    .map(str::to_owned),
+            }));
+        }
+        // `settings notices ...`
+        if normalized.get(1).copied() == Some("notices") {
+            let clear = args.iter().any(|v| v == "--clear");
+            let cmd = match normalized.get(2).copied() {
+                None => Set::NoticesStatus,
+                Some("status") => Set::NoticesStatus,
+                Some("off") => Set::NoticesOff,
+                Some("on") => Set::NoticesOn,
+                Some("id") => Set::NoticesId,
+                Some("rate-limited") => Set::NoticesRateLimited { clear },
+                Some("quota-low") => Set::NoticesQuotaLow { clear },
+                Some(other) => return Err(format!("Unknown notices subcommand '{other}'")),
+            };
+            return Ok(ParsedCommand::Settings(cmd));
+        }
+        return Ok(ParsedCommand::Settings(Set::Overview));
     }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {
         let key = option_value(&args, "--key", "-k").ok_or("memory key is required")?;
