@@ -1,6 +1,6 @@
 use std::ffi::OsString;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParsedCommand {
     Version,
     VersionCommand {
@@ -59,6 +59,7 @@ pub enum ParsedCommand {
     Security(crate::security::SecurityCommand),
     Analyze(crate::analyze::AnalyzeCommand),
     Daemon(crate::daemon::DaemonCommand),
+    Embeddings(crate::embeddings::EmbeddingsCommand),
     TransferStore(crate::transfer_store::TransferStoreCommand),
     MemoryStore {
         key: String,
@@ -1140,6 +1141,34 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             plan_file: option_value(&args, "--plan-file", "--plan-file"),
             strict: args.iter().any(|v| v == "--strict"),
             json: args.iter().any(|v| v == "--json" || v == "--format=json"),
+        }));
+    }
+    if normalized.first() == Some(&"embeddings") || normalized.first() == Some(&"embed") {
+        let operation = normalized.get(1).copied().unwrap_or("").to_string();
+        return Ok(ParsedCommand::Embeddings(crate::embeddings::EmbeddingsCommand {
+            operation,
+            text: option_value(&args, "--text", "-t"),
+            provider: option_value(&args, "--provider", "-p"),
+            model: option_value(&args, "--model", "-m"),
+            output: option_value(&args, "--output", "-o"),
+            query: option_value(&args, "--query", "-q"),
+            collection: option_value(&args, "--collection", "-c"),
+            limit: option_value(&args, "--limit", "-l").and_then(|v| v.parse::<usize>().ok()),
+            threshold: option_value(&args, "--threshold", "-t").and_then(|v| v.parse::<f64>().ok()),
+            db_path: option_value(&args, "--db-path", "--db-path"),
+            text1: option_value(&args, "--text1", "--text1"),
+            text2: option_value(&args, "--text2", "--text2"),
+            metric: option_value(&args, "--metric", "-m"),
+            action: option_value(&args, "--action", "-a"),
+            name: option_value(&args, "--name", "-n"),
+            dim: option_value(&args, "--dim", "--dim").and_then(|v| v.parse::<usize>().ok()),
+            hyperbolic: !args.iter().any(|v| v == "--no-hyperbolic"),
+            curvature: option_value(&args, "--curvature", "-c").and_then(|v| v.parse::<f64>().ok()),
+            download: !args.iter().any(|v| v == "--no-download"),
+            cache_size: option_value(&args, "--cache-size", "--cache-size").and_then(|v| v.parse::<usize>().ok()),
+            ef_construction: option_value(&args, "--ef-construction", "--ef-construction").and_then(|v| v.parse::<usize>().ok()),
+            m_param: option_value(&args, "--m", "--m").and_then(|v| v.parse::<usize>().ok()),
+            json: args.iter().any(|v| v == "--json"),
         }));
     }
     if normalized.first() == Some(&"daemon") {

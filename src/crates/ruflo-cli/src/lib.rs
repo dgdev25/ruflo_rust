@@ -16,6 +16,7 @@ mod config_file;
 mod daemon;
 mod deployment;
 mod eject;
+mod embeddings;
 mod funnel;
 mod funnel_command;
 mod gaia_bench;
@@ -422,6 +423,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::Daemon(command)) => {
             ExitCode::from(daemon::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::Embeddings(command)) => {
+            ExitCode::from(embeddings::run(&current_directory(), command))
         }
         Ok(ParsedCommand::NativeOverview { name }) => {
             let root = current_directory();
