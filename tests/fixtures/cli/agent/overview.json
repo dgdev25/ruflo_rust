@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "agent"
+  ],
+  "exit": 0,
+  "stdout": "\nAgent Management Commands\n\nUsage: claude-flow agent <subcommand> [options]\n\nSubcommands:\n  - spawn         - Spawn a new agent\n  - list          - List all active agents\n  - status        - Show detailed agent status\n  - stop          - Stop a running agent\n  - metrics       - Show agent metrics\n  - pool          - Manage agent pool\n  - health        - Show agent health\n  - logs          - Show agent logs\n  - wasm-status   - Check WASM runtime availability\n  - wasm-create   - Create a WASM-sandboxed agent\n  - wasm-prompt   - Send a prompt to a WASM agent\n  - wasm-gallery  - List WASM agent gallery templates\n\nRun \"claude-flow agent <subcommand> --help\" for subcommand help\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "agent"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/agent.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:21Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

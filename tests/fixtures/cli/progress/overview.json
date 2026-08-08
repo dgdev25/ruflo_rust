@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "progress"
+  ],
+  "exit": 0,
+  "stdout": "\nV3 Implementation Progress\n\n[██████████████████████████████] 99%\n\nBreakdown:\n  cli: 100%\n  mcp: 100%\n  hooks: 100%\n  packages: 100%\n  ddd: 90%\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "progress"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/progress.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:30Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

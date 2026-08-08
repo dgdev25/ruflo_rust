@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "status"
+  ],
+  "exit": 0,
+  "stdout": "\nRuFlo V3 [STOPPED]\n\nSwarm\n\nAgents\n+--------+-------+\n| Status | Count |\n+--------+-------+\n| Active |     0 |\n| Idle   |     0 |\n| Total  |     0 |\n+--------+-------+\n\nTasks\n+-----------+-------+\n| Status    | Count |\n+-----------+-------+\n| Pending   |     0 |\n| Running   |     0 |\n| Completed |     0 |\n| Failed    |     0 |\n| Total     |     0 |\n+-----------+-------+\n\nMemory\n+----------------+--------+\n| Property       |  Value |\n+----------------+--------+\n| Backend        |   none |\n| Entries        |      0 |\n| Size           |    0 B |\n| Search Time    | 0.00ms |\n| Cache Hit Rate |   0.0% |\n+----------------+--------+\n\nMCP Server\n\n",
+  "stderr": "[INFO]   Swarm not running\n[INFO]   Not running\n",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "status"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/status.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:33Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "memory"
+  ],
+  "exit": 0,
+  "stdout": "\nMemory Management Commands\n\nUsage: claude-flow memory <subcommand> [options]\n\nSubcommands:\n  - init       - Initialize memory database (sql.js)\n  - store      - Store data in memory\n  - retrieve   - Retrieve data from memory\n  - search     - Semantic/vector search\n  - list       - List memory entries\n  - delete     - Delete memory entry\n  - stats      - Show statistics\n  - configure  - Configure backend\n  - cleanup    - Clean expired entries\n  - compress   - Compress database\n  - export     - Export memory to file\n  - import     - Import from file\n  - distill    - Distill memory_entries into structured intelligence (ADR-174)\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "memory"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/memory.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:28Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

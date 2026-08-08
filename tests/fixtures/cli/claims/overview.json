@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "claims"
+  ],
+  "exit": 0,
+  "stdout": "\nRuFlo Claims System\nFine-grained authorization and access control\n\nSubcommands:\n  - list     - List claims and permissions\n  - check    - Check if a claim is granted\n  - grant    - Grant a claim to user or role\n  - revoke   - Revoke a claim\n  - roles    - Manage roles and their claims\n  - policies - Manage claim policies\n\nClaim Types:\n  - swarm:*   - Swarm operations (create, delete, scale)\n  - agent:*   - Agent operations (spawn, terminate)\n  - memory:*  - Memory operations (read, write, delete)\n  - admin:*   - Administrative operations\n\nCreated with ❤️ by ruv.io\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "claims"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/claims.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:23Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

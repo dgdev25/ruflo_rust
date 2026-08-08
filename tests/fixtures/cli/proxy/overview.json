@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "proxy"
+  ],
+  "exit": 0,
+  "stdout": "Meta Proxy\n  Installation: not installed\n  Process: not running\n\nNext step\n  npx ruflo@latest proxy install --yes    Install signed Meta-Proxy v0.4.0\n\nAfter installation, start it in the background:\n  npx ruflo@latest proxy start --service\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "proxy"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/proxy.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:31Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

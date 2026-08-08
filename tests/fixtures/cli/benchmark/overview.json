@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "benchmark"
+  ],
+  "exit": 0,
+  "stdout": "\nRuFlo V3 Benchmark Suite\n──────────────────────────────────────────────────\n\nAvailable subcommands:\n  pretrain  - Benchmark self-learning pre-training (SONA, EWC++, MoE)\n  neural    - Benchmark neural operations (embeddings, WASM)\n  memory    - Benchmark memory operations (HNSW, store, search)\n  all       - Run all benchmark suites\n\nExamples:\n  claude-flow benchmark pretrain -i 200\n  claude-flow benchmark all --save results.json\n\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "benchmark"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/benchmark.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:23Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

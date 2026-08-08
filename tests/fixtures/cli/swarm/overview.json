@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "swarm"
+  ],
+  "exit": 0,
+  "stdout": "\nSwarm Coordination Commands\n\nUsage: claude-flow swarm <subcommand> [options]\n\nSubcommands:\n  - init        - Initialize a new swarm\n  - start       - Start swarm execution\n  - status      - Show swarm status\n  - stop        - Stop swarm execution\n  - scale       - Scale swarm agent count\n  - coordinate  - V3 15-agent coordination\n  - pheromone   - Inspect/update adaptive pheromone state\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "swarm"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/swarm.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:34Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

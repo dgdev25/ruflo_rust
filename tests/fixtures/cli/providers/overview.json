@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "providers"
+  ],
+  "exit": 0,
+  "stdout": "\nRuFlo Provider Management\nMulti-provider AI orchestration\n\nSubcommands:\n  - list      - List available providers and their status\n  - configure - Configure provider settings and API keys\n  - test      - Test provider connectivity\n  - models    - List and manage available models\n  - usage     - View usage statistics and costs\n\nSupported Providers:\n  - Anthropic (Claude models)\n  - OpenAI (GPT + embeddings)\n  - Transformers.js (local ONNX)\n  - Agentic Flow (optimized ONNX with SIMD)\n\nCreated with ❤️ by ruv.io\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "providers"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/providers.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:31Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

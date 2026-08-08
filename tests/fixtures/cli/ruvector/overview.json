@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "ruvector"
+  ],
+  "exit": 0,
+  "stdout": "\nRuVector PostgreSQL Bridge\n============================================================\n\n+------------------ RuVector PostgreSQL Bridge ------------------+\n| RuVector provides PostgreSQL integration for Claude Flow with: |\n|                                                                |\n|   - ruvector/pgvector extension for vector operations          |\n|   - Attention mechanism embeddings                             |\n|   - Graph Neural Network (GNN) support                         |\n|   - Hyperbolic embeddings (Poincare ball model)                |\n|   - HNSW indexing (150x-12,500x faster)                        |\n|                                                                |\n| Available subcommands:                                         |\n|                                                                |\n|   setup      Output Docker files and SQL for setup             |\n|   import     Import from sql.js/JSON to PostgreSQL             |\n|   init       Initialize RuVector in PostgreSQL                 |\n|   migrate    Run database migrations                           |\n|   status     Check connection and schema status                |\n|   benchmark  Run performance benchmarks                        |\n|   optimize   Analyze and optimize performance                  |\n|   backup     Backup and restore data                           |\n+----------------------------------------------------------------+\n\n\n",
+  "stderr": "[INFO] Run `claude-flow ruvector <command> --help` for details\n",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "ruvector"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/ruvector.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:31Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

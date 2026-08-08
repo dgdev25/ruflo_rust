@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "process"
+  ],
+  "exit": 0,
+  "stdout": "\n🔧 Process Management\n\nManage background processes, daemons, and workers.\n\nSubcommands:\n  daemon     - Manage background daemon process\n  monitor    - Real-time process monitoring\n  workers    - Manage background workers\n  signals    - Send signals to processes\n  logs       - View and manage process logs\n\nExamples:\n  claude-flow process daemon --action start\n  claude-flow process monitor --watch\n  claude-flow process workers --action spawn --type task --count 3\n  claude-flow process logs --follow --level error\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "process"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/process.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:30Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

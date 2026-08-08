@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "metaharness"
+  ],
+  "exit": 0,
+  "stdout": "npx ruflo metaharness <subcommand> [options]\n\nSubcommands:\n  score         5-dimension harness readiness scorecard\n  genome        7-section categorical readiness report\n  mcp-scan      static security scan of declared MCP surface\n  threat-model  enterprise-grade threat model\n  oia-audit     composite weekly audit (oia + threat + mcp) → memory\n  audit-list    enumerate timestamped audit records\n  audit-trend   diff two audit records (drift detection)\n  similarity    ADR-152 — weighted similarity between two harness fingerprints\n  drift-from-history  iter 53 — diff current state against most recent audit (1-command drift)\n  mint          scaffold a custom harness (dry-run by default)\n  redblue       adversarial red/blue LLM testing (init|run|patch|attack|report)\n  evolve        Darwin candidate evolution\n  bench         create or verify a stable benchmark suite\n  flywheel      receipt loop: run | status | receipts | history | promote\n\nEach subcommand accepts --format json|table and --help.\n\nADR-150 — runs as subprocess; graceful degradation if metaharness is not installed.\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "metaharness"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/metaharness.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:28Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "update"
+  ],
+  "exit": 0,
+  "stdout": "\n═══ Update Command ═══\n\nManage @claude-flow package updates with auto-update support.\n\nSubcommands:\n  - check       - Check for available updates\n  - all         - Update all packages\n  - history     - View update history\n  - rollback    - Rollback last update\n  - clear-cache - Clear update check cache\n\nEnvironment Variables:\n  - CLAUDE_FLOW_AUTO_UPDATE=false  - Disable auto-update\n  - CLAUDE_FLOW_FORCE_UPDATE=true - Force update check\n\nRun \"claude-flow update <subcommand> --help\" for subcommand help\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "update"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/update.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:35Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

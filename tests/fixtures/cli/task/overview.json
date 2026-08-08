@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "task"
+  ],
+  "exit": 0,
+  "stdout": "\nTask Management Commands\n\nUsage: claude-flow task <subcommand> [options]\n\nSubcommands:\n  - create  - Create a new task\n  - list    - List tasks\n  - status  - Get task details\n  - cancel  - Cancel a running task\n  - assign  - Assign task to agent(s)\n  - retry   - Retry a failed task\n\nRun \"claude-flow task <subcommand> --help\" for subcommand help\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "task"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/task.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:34Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

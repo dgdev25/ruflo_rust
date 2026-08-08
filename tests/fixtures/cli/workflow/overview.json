@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "workflow"
+  ],
+  "exit": 0,
+  "stdout": "\nWorkflow Commands\n\nUsage: claude-flow workflow <subcommand> [options]\n\nSubcommands:\n  - run       - Execute a workflow\n  - validate  - Validate workflow definition\n  - list      - List workflows\n  - status    - Show workflow status\n  - stop      - Stop running workflow\n  - template  - Manage templates\n\nRun \"claude-flow workflow <subcommand> --help\" for more info\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "workflow"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/workflow.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:35Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

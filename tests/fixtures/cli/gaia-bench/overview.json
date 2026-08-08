@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "gaia-bench"
+  ],
+  "exit": 0,
+  "stdout": "\nruflo gaia-bench\nGAIA benchmark harness -- measure agent pass-rate on real GAIA questions\n\nSUBCOMMANDS:\n  run             Run GAIA benchmark questions against one or more models\n\nEXAMPLES:\n  $ claude-flow gaia-bench run --level 1 --limit 10 --models claude-haiku-4-5 --output json\n    Mini Level-1 run with Haiku, JSON output\n  $ claude-flow gaia-bench run --smoke-only\n    Quick smoke test with built-in fixture (no HF token)\n  $ claude-flow gaia-bench run --level 1 --models claude-sonnet-4-6 --hardness-routing --output json\n    ADR-136 Track Q: tiered compute routing by predicted question difficulty\n  $ claude-flow gaia-bench run --level 1 --models claude-sonnet-4-6 --hardness-routing --enable-critic --planning-interval 4\n    Recommended config: all tracks active, ~$2/run estimated\n\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "gaia-bench"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/gaia-bench.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:26Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

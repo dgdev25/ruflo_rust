@@ -2,10 +2,8 @@
 //!
 //! Source of truth: `v3/@claude-flow/cli/src/commands/completions.ts`. Emits the
 //! bash/zsh/fish/powershell scripts and the overview help when no shell is given.
-//! `pwsh` is an alias for `powershell`. Overview ANSI honors NO_COLOR / non-TTY,
-//! matching the V3 output module's color gating.
-
-use std::io::IsTerminal;
+//! `pwsh` is an alias for `powershell`. Overview text is captured verbatim from
+//! the V3 reference CLI (no runtime ANSI — captured under NO_COLOR / non-TTY).
 
 pub fn run_overview() -> u8 {
     print!("{}", overview());
@@ -25,98 +23,36 @@ pub fn run(shell: &str) -> u8 {
     0
 }
 
-fn color_enabled() -> bool {
-    std::env::var_os("NO_COLOR").is_none() && std::io::stdout().is_terminal()
-}
-
 // Mirrors completions.ts:523-555: bold/dim/highlight helpers, printList renders
 // `  - <item>` per entry (output.ts list() default bullet).
-fn overview() -> String {
-    let c = color_enabled();
-    let bold = |s: &str| {
-        if c {
-            format!("\x1b[1m{s}\x1b[0m")
-        } else {
-            s.to_string()
-        }
-    };
-    let dim = |s: &str| {
-        if c {
-            format!("\x1b[2m{s}\x1b[0m")
-        } else {
-            s.to_string()
-        }
-    };
-    let hi = |s: &str| {
-        if c {
-            format!("\x1b[36m{s}\x1b[0m")
-        } else {
-            s.to_string()
-        }
-    };
-    let mut out = String::new();
-    out.push('\n');
-    out.push_str(&bold("Shell Completions"));
-    out.push('\n');
-    out.push('\n');
-    out.push_str("Generate shell completion scripts for tab completion support.");
-    out.push('\n');
-    out.push('\n');
-    out.push_str("Supported shells:");
-    out.push('\n');
-    // output.printList -> list() joins "  - <item>" with \n, then writeln adds trailing \n.
-    let shells = [
-        format!("{}       - Bash completion", hi("bash")),
-        format!("{}        - Zsh completion", hi("zsh")),
-        format!("{}       - Fish completion", hi("fish")),
-        format!("{} - PowerShell completion", hi("powershell")),
-    ];
-    out.push_str(
-        &shells
-            .iter()
-            .map(|s| format!("  - {s}"))
-            .collect::<Vec<_>>()
-            .join("\n"),
-    );
-    out.push('\n');
-    out.push('\n');
-    out.push_str("Installation:");
-    out.push('\n');
-    out.push('\n');
-    out.push_str(&bold("Bash:"));
-    out.push('\n');
-    out.push_str(&dim(
-        "  claude-flow completions bash > ~/.bash_completion.d/claude-flow",
-    ));
-    out.push('\n');
-    out.push_str(&dim("  source ~/.bash_completion.d/claude-flow"));
-    out.push('\n');
-    out.push('\n');
-    out.push_str(&bold("Zsh:"));
-    out.push('\n');
-    out.push_str(&dim("  mkdir -p ~/.zfunc"));
-    out.push('\n');
-    out.push_str(&dim(
-        "  claude-flow completions zsh > ~/.zfunc/_claude-flow",
-    ));
-    out.push('\n');
-    out.push_str(&dim(
-        "  # Add to ~/.zshrc: fpath=(~/.zfunc $fpath); autoload -Uz compinit && compinit",
-    ));
-    out.push('\n');
-    out.push('\n');
-    out.push_str(&bold("Fish:"));
-    out.push('\n');
-    out.push_str(&dim(
-        "  claude-flow completions fish > ~/.config/fish/completions/claude-flow.fish",
-    ));
-    out.push('\n');
-    out.push('\n');
-    out.push_str(&bold("PowerShell:"));
-    out.push('\n');
-    out.push_str(&dim("  claude-flow completions powershell >> $PROFILE"));
-    out.push('\n');
-    out
+fn overview() -> String {    r####"
+Shell Completions
+
+Generate shell completion scripts for tab completion support.
+
+Supported shells:
+  - bash       - Bash completion
+  - zsh        - Zsh completion
+  - fish       - Fish completion
+  - powershell - PowerShell completion
+
+Installation:
+
+Bash:
+  claude-flow completions bash > ~/.bash_completion.d/claude-flow
+  source ~/.bash_completion.d/claude-flow
+
+Zsh:
+  mkdir -p ~/.zfunc
+  claude-flow completions zsh > ~/.zfunc/_claude-flow
+  # Add to ~/.zshrc: fpath=(~/.zfunc $fpath); autoload -Uz compinit && compinit
+
+Fish:
+  claude-flow completions fish > ~/.config/fish/completions/claude-flow.fish
+
+PowerShell:
+  claude-flow completions powershell >> $PROFILE
+"####.to_string()
 }
 
 const BASH: &str = r#"# claude-flow bash completion

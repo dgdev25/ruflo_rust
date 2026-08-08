@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "config"
+  ],
+  "exit": 0,
+  "stdout": "\nConfiguration Management\n\nUsage: claude-flow config <subcommand> [options]\n\nSubcommands:\n  - init       - Initialize configuration\n  - get        - Get configuration value\n  - set        - Set configuration value\n  - providers  - Manage AI providers\n  - reset      - Reset to defaults\n  - export     - Export configuration\n  - import     - Import configuration\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "config"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/config.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:24Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

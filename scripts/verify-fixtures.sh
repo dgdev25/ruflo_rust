@@ -23,6 +23,7 @@ test -f "$fixtures_root/persistence/README.md"
 cargo test --test fixture_schema
 cargo test --test differential_cli
 cargo test --test differential_new_families
+cargo test --test differential_cli_overviews
 cargo test --test config_command
 cargo test --test cleanup_command
 cargo test --test transport_command

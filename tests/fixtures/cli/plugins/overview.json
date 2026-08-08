@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "plugins"
+  ],
+  "exit": 0,
+  "stdout": "\nRuFlo Plugin System\nDecentralized plugin marketplace via IPFS\n\nSubcommands:\n  - list      - List plugins from IPFS registry\n  - search    - Search plugins by query\n  - install   - Install a plugin from npm or local path\n  - uninstall - Remove an installed plugin\n  - upgrade   - Upgrade an installed plugin\n  - toggle    - Enable or disable a plugin\n  - info      - Show detailed plugin information\n  - create    - Scaffold a new plugin project\n\nIPFS-Based Features:\n  - Decentralized registry via IPNS for discoverability\n  - Content-addressed storage for integrity verification\n  - Ed25519 signatures for plugin verification\n  - Trust levels: unverified, community, verified, official\n  - Security audit tracking and vulnerability reporting\n\nOfficial Plugins:\n  - @claude-flow/neural              - Neural patterns and inference (WASM SIMD)\n  - @claude-flow/security            - Security scanning and CVE detection\n  - @claude-flow/embeddings          - Vector embeddings with hyperbolic support\n  - @claude-flow/claims              - Claims-based authorization\n  - @claude-flow/performance         - Performance profiling and benchmarks\n  - @claude-flow/plugin-gastown-bridge - Gas Town orchestrator integration (WASM-accelerated)\n\nRun \"claude-flow plugins list --official\" to see all official plugins\nCreated with ❤️ by ruv.io\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "plugins"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/plugins.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:29Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

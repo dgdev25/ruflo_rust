@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "migrate"
+  ],
+  "exit": 0,
+  "stdout": "\nV2 to V3 Migration Tools\n\nUsage: claude-flow migrate <subcommand> [options]\n\nSubcommands:\n  - status    - Check migration status\n  - run       - Run migration\n  - verify    - Verify migration integrity\n  - rollback  - Rollback to previous version\n  - breaking  - Show breaking changes\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "migrate"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/migrate.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:28Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

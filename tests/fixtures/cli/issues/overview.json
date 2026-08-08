@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "issues"
+  ],
+  "exit": 0,
+  "stdout": "\n📋 Issue Claims (ADR-016)\nCollaborative human-agent issue management\n\nCommands:\n  - list       - List all claims\n  - claim      - Claim an issue\n  - release    - Release a claim\n  - handoff    - Request handoff\n  - status     - Update status/progress\n  - stealable  - List stealable issues\n  - steal      - Steal an issue\n  - load       - View agent load\n  - rebalance  - Rebalance swarm\n  - board      - Visual board view\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "issues"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/issues.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:28Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

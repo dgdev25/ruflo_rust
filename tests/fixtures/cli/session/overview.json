@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "session"
+  ],
+  "exit": 0,
+  "stdout": "\nSession Management Commands\n\nUsage: claude-flow session <subcommand> [options]\n\nSubcommands:\n  - list    - List all sessions\n  - save    - Save current session state\n  - restore - Restore a saved session\n  - delete  - Delete a saved session\n  - export  - Export session to file\n  - import  - Import session from file\n  - current - Show current active session\n\nRun \"claude-flow session <subcommand> --help\" for subcommand help\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "session"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/session.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:32Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

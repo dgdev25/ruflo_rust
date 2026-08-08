@@ -1101,7 +1101,16 @@ mod tests {
     fn check_granted_via_default_policy() {
         let _g = lock();
         let project = tempfile::tempdir().unwrap();
+        // Isolate HOME so a concurrent test's ~/.config/claude-flow/claims.json
+        // can't flip the default policy mid-check.
+        let home = tempfile::tempdir().unwrap();
+        let prev = env::var_os("HOME");
+        env::set_var("HOME", home.path());
         let code = check(project.path(), Some("swarm:create".into()), None, None).unwrap();
+        match prev {
+            Some(v) => env::set_var("HOME", v),
+            None => env::remove_var("HOME"),
+        }
         assert_eq!(code, 0);
     }
 
@@ -1109,7 +1118,14 @@ mod tests {
     fn check_denied_admin_claim() {
         let _g = lock();
         let project = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        let prev = env::var_os("HOME");
+        env::set_var("HOME", home.path());
         let code = check(project.path(), Some("admin:delete".into()), None, None).unwrap();
+        match prev {
+            Some(v) => env::set_var("HOME", v),
+            None => env::remove_var("HOME"),
+        }
         assert_eq!(code, 1);
     }
 

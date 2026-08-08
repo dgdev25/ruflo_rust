@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "spinner"
+  ],
+  "exit": 0,
+  "stdout": "Consent: granted\nspinnerVerbs.mode in settings.json: append\n\nRuflo pool (37 verbs, available):\n  • Consulting the memory graph\n  • Warming the HNSW index\n  • Recalling similar patterns\n  • Searching semantic memory\n  • Reranking with MMR\n  • Traversing knowledge graph\n  • Loading trajectory context\n  • Optimizing your prompt\n  • Sharpening the plan\n  • Compacting the context\n  • Distilling the trajectory\n  • Reducing token spend\n  • Compressing the working set\n  • Learning from the trajectory\n  • Training the router\n  • Judging past verdicts\n  • Consolidating memories\n  • Reasoning through the graph\n  • Predicting the next step\n  • Auditing for CVEs\n  • Scanning dependencies\n  • Verifying signatures\n  • Guarding against injection\n  • Spawning subagents\n  • Coordinating the swarm\n  • Reaching consensus\n  • Balancing the workload\n  • Routing to the best model\n  • Warming background workers\n  • Analyzing the diff\n  • Sharpening the review\n  • Consulting Cognitum\n  • Checking Cognitum credits\n  • Routing via Cognitum\n  • Fetching a Cognitum tip\n  • Warming Cognitum cache\n  • Weighing Cognitum options\n\nCurrently installed ruflo verbs (37):\n  • Consulting the memory graph\n  • Warming the HNSW index\n  • Recalling similar patterns\n  • Searching semantic memory\n  • Reranking with MMR\n  • Traversing knowledge graph\n  • Loading trajectory context\n  • Optimizing your prompt\n  • Sharpening the plan\n  • Compacting the context\n  • Distilling the trajectory\n  • Reducing token spend\n  • Compressing the working set\n  • Learning from the trajectory\n  • Training the router\n  • Judging past verdicts\n  • Consolidating memories\n  • Reasoning through the graph\n  • Predicting the next step\n  • Auditing for CVEs\n  • Scanning dependencies\n  • Verifying signatures\n  • Guarding against injection\n  • Spawning subagents\n  • Coordinating the swarm\n  • Reaching consensus\n  • Balancing the workload\n  • Routing to the best model\n  • Warming background workers\n  • Analyzing the diff\n  • Sharpening the review\n  • Consulting Cognitum\n  • Checking Cognitum credits\n  • Routing via Cognitum\n  • Fetching a Cognitum tip\n  • Warming Cognitum cache\n  • Weighing Cognitum options\n\nUser-authored verbs (0, untouched by ruflo):\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "spinner"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/spinner.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:33Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

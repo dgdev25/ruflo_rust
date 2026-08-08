@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "autopilot"
+  ],
+  "exit": 0,
+  "stdout": "Autopilot — Persistent Swarm Completion\nKeeps agents working until ALL tasks are done\n\n  - status    — Show state, iterations, and task progress\n  - enable    — Enable persistent completion\n  - disable   — Disable re-engagement loop\n  - config    — Configure max iterations, timeout, sources\n  - reset     — Reset iteration counter and timer\n  - log       — View autopilot event log\n  - learn     — Discover success patterns\n  - history   — Search past completion episodes\n  - predict   — Predict optimal next action\n  - check     — Run completion check (stop hook)\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "autopilot"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/autopilot.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:22Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

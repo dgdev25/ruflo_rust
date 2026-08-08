@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "start"
+  ],
+  "exit": 0,
+  "stdout": "\nStarting RuFlo V3\n\nSwarm initialized (hierarchical-mesh)\nHealth checks passed\n\n[OK] RuFlo V3 is running!\n\n+------------ System Status ------------+\n| Swarm ID:  swarm-1786224213550-tj58j1 |\n| Topology:  hierarchical-mesh          |\n| Max Agents: 15                        |\n| MCP Server: disabled                  |\n| Mode:      Foreground                 |\n| Health:    healthy                    |\n+---------------------------------------+\n\nQuick Commands:\n  - claude-flow status - View system status\n  - claude-flow agent spawn -t coder - Spawn an agent\n  - claude-flow swarm status - View swarm details\n  - claude-flow stop - Stop the system\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "start"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/start.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:33Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

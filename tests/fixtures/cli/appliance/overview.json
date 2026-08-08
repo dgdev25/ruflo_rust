@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "appliance"
+  ],
+  "exit": 0,
+  "stdout": "\nRuflo Appliance (RVFA)\nSelf-contained deployment format for the full Ruflo platform.\n\nSubcommands:\n  - build     - Build a self-contained ruflo.rvf appliance\n  - inspect   - Show appliance header and section manifest\n  - verify    - Verify appliance integrity and run capability tests\n  - extract   - Extract all sections from an appliance\n  - run       - Boot and run an RVFA appliance\n  - sign      - Sign an appliance with Ed25519 for tamper detection\n  - publish   - Publish an appliance to IPFS via Pinata\n  - update    - Hot-patch a section in an appliance\n\nProfiles:\n  - cloud    - API-only, smallest footprint (~15 MB)\n  - hybrid   - API + local fallback models (~500 MB)\n  - offline  - Fully air-gapped with bundled models (~4 GB)\n\nUse \"ruflo appliance <subcommand> --help\" for details.\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "appliance"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/appliance.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:22Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

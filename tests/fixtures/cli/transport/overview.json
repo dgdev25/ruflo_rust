@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "transport"
+  ],
+  "exit": 0,
+  "stdout": "\nAGNTCY/SLIM Transport\n============================================================\n\n+------------------------------ AGNTCY/SLIM Transport ------------------------------+\n| Local transport (in-process hooks routing) is the default.                        |\n|                                                                                   |\n| Subcommands:                                                                      |\n|                                                                                   |\n|   use <name>   Switch the active transport (currently: slim)                      |\n|                                                                                   |\n| See ADR-380 for setup: v3/docs/adr/ADR-380-agntcy-outshift-runtime-integration.md |\n+-----------------------------------------------------------------------------------+\n\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "transport"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/transport.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:34Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

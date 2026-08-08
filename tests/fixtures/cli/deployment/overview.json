@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "deployment"
+  ],
+  "exit": 0,
+  "stdout": "\nRuFlo Deployment\nMulti-environment deployment management\n\nSubcommands:\n  - deploy       - Deploy to target environment\n  - status       - Check deployment status\n  - rollback     - Rollback to previous version\n  - history      - View deployment history\n  - environments - Manage deployment environments\n  - logs         - View deployment logs\n  - release      - Create a new release\n\nFeatures:\n  - Zero-downtime rolling deployments\n  - Automatic rollback on failure\n  - Environment-specific configurations\n  - Deployment previews for PRs\n\nCreated with love by ruv.io\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "deployment"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/deployment.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:24Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

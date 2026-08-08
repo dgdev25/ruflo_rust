@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "announcements"
+  ],
+  "exit": 0,
+  "stdout": "Consent: not-granted\n\nRuflo pool (12 announcements, available):\n  • 🧠 Ruflo intelligence is learning from your work — try `ruflo intelligence stats` to see progress.\n  • 📊 Statusline promo row is on — `ruflo funnel status` to manage.\n  • 🔧 12 background workers help maintain your codebase — `ruflo daemon start` to enable.\n  • 🔍 Semantic memory search across projects — try `ruflo memory search --query \"auth\"`.\n  • 🩺 Run `ruflo doctor --fix` if something feels off.\n  • ✨ 37 spinner verbs available — `ruflo spinner list` to see the pool.\n  • 🛡 Security scanner is available — `ruflo security scan --depth deep`.\n  • 💾 Nightly memory backups keep your intelligence safe — `ruflo daemon status`.\n  • 🎯 3-tier model routing keeps spend down — `ruflo cost report` for details.\n  • 📣 Ruflo is sponsored by Cognitum — visit cognitum.one to learn more.\n  • 💳 Check your Cognitum credits: `ruflo proxy status`.\n  • ⚡ Cognitum handles overflow routing when your model hits limits.\n\nCurrently installed ruflo announcements (0):\n  (none — run `ruflo announcements enable --yes` to install)\n\nUser-authored announcements (0, untouched by ruflo):\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "announcements"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/announcements.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:21Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

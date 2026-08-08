@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "route"
+  ],
+  "exit": 0,
+  "stdout": "\nQ-Learning Agent Router\nIntelligent task-to-agent routing using reinforcement learning\n\nUsage: claude-flow route <task> [options]\n       claude-flow route <subcommand>\n\nSubcommands:\n  - task         - Route a task to optimal agent\n  - list-agents  - List available agent types\n  - stats        - Show router statistics\n  - feedback     - Provide routing feedback\n  - reset        - Reset router state\n  - export       - Export Q-table\n  - import       - Import Q-table\n\nHow It Works:\n  - Analyzes task description using hash-based state encoding\n  - Uses Q-Learning to learn from routing outcomes\n  - Epsilon-greedy exploration for continuous improvement\n  - Provides confidence scores and alternatives\n\nBackend Status:\n  - RuVector: Available\n  - Backend: ruvector-native\n\nRun \"claude-flow route <subcommand> --help\" for more info\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "route"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/route.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:31Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

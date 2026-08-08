@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "guidance"
+  ],
+  "exit": 0,
+  "stdout": "\nGuidance Control Plane\n──────────────────────────────────────────────────\n\nAvailable subcommands:\n  compile   Compile CLAUDE.md into policy bundle\n  retrieve  Retrieve task-relevant guidance shards\n  gates     Evaluate enforcement gates\n  status    Show control plane status\n  optimize  Analyze and optimize CLAUDE.md\n  ab-test   Run A/B behavioral comparison\n\nUse claude-flow guidance <subcommand> --help for details\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "guidance"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/guidance.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:26Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "performance"
+  ],
+  "exit": 0,
+  "stdout": "\nRuFlo Performance Suite\nAdvanced performance profiling and optimization\n\nSubcommands:\n  - benchmark  - Run performance benchmarks (WASM, neural, search)\n  - profile    - Profile CPU, memory, I/O usage\n  - metrics    - View and export performance metrics\n  - optimize   - Get optimization recommendations\n  - bottleneck - Identify performance bottlenecks\n\nPerformance Targets:\n  - HNSW Search: 150x-12,500x faster than brute force\n  - Flash Attention: 2.49x-7.47x target (in progress; ships JS reference impl)\n  - Memory: 50-75% reduction with quantization\n\nCreated with ❤️ by ruv.io\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "performance"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/performance.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:29Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}

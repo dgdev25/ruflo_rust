@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "node",
+    "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+    "transfer-store"
+  ],
+  "exit": 0,
+  "stdout": "\nRuFlo Pattern Store\nDecentralized pattern marketplace via IPFS\n\nSubcommands:\n  - list      - List patterns from registry\n  - search    - Search patterns\n  - download  - Download a pattern\n  - publish   - Publish a pattern\n  - info      - Show pattern details\n\nExample:\n  claude-flow hooks transfer store list --featured\n  claude-flow hooks transfer store search -q \"routing\"\n  claude-flow hooks transfer store download -n seraphine-genesis\n",
+  "stderr": "",
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_command": [
+      "node",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js",
+      "transfer-store"
+    ],
+    "source_paths": [
+      "v3/@claude-flow/cli/src/commands/transfer-store.ts"
+    ],
+    "redactions": [
+      "environment omitted"
+    ]
+  },
+  "recording": {
+    "recorded_at": "2026-08-08T21:23:34Z",
+    "recorded_by": "scripts/capture-reference-contract.sh",
+    "harness": "fixture-capture"
+  }
+}
