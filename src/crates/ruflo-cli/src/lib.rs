@@ -278,6 +278,42 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             }
             Err(error) => ruflo_error(error),
         },
+        Ok(ParsedCommand::MemoryPurge {
+            namespace,
+            dry_run,
+            force,
+            path,
+        }) => match open_memory_store(path.as_deref()).and_then(|store| {
+            let count = store.count_namespace(&namespace)?;
+            if dry_run {
+                return Ok((count, None));
+            }
+            if !force {
+                return Err(ruflo_types::RufloError::invalid_input(
+                    "memory.purge.force",
+                    "refusing non-interactive purge without --force; use --dry-run to preview",
+                ));
+            }
+            store
+                .purge_namespace(&namespace)
+                .map(|deleted| (count, Some(deleted)))
+        }) {
+            Ok((count, None)) => {
+                println!(
+                    "Would permanently delete {count} entr{} from namespace \"{namespace}\" (dry run — nothing deleted)",
+                    if count == 1 { "y" } else { "ies" }
+                );
+                ExitCode::SUCCESS
+            }
+            Ok((_count, Some(deleted))) => {
+                println!(
+                    "Purged {deleted} entr{} from namespace \"{namespace}\"",
+                    if deleted == 1 { "y" } else { "ies" }
+                );
+                ExitCode::SUCCESS
+            }
+            Err(error) => ruflo_error(error),
+        },
         Ok(ParsedCommand::Help) => {
             print!("{HELP}");
             ExitCode::SUCCESS

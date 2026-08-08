@@ -50,6 +50,12 @@ pub enum ParsedCommand {
     MemoryStats {
         path: Option<String>,
     },
+    MemoryPurge {
+        namespace: String,
+        dry_run: bool,
+        force: bool,
+        path: Option<String>,
+    },
     Help,
     Init,
     Status,
@@ -285,6 +291,19 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
     }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "stats" {
         return Ok(ParsedCommand::MemoryStats {
+            path: option_value(&args, "--path", "--path"),
+        });
+    }
+    if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "purge" {
+        return Ok(ParsedCommand::MemoryPurge {
+            namespace: option_value(&args, "--namespace", "-n")
+                .ok_or("memory purge requires --namespace")?,
+            dry_run: args
+                .iter()
+                .any(|argument| argument == "--dry-run" || argument == "-d"),
+            force: args
+                .iter()
+                .any(|argument| argument == "--force" || argument == "-f"),
             path: option_value(&args, "--path", "--path"),
         });
     }
@@ -798,6 +817,11 @@ mod tests {
             parse(argv(&["memory", "stats"])),
             Ok(ParsedCommand::MemoryStats { .. })
         ));
+        assert!(matches!(
+            parse(argv(&["memory", "purge", "-n", "plans", "--dry-run"])),
+            Ok(ParsedCommand::MemoryPurge { namespace, dry_run: true, force: false, .. }) if namespace == "plans"
+        ));
+        assert!(parse(argv(&["memory", "purge", "--force"])).is_err());
         assert!(parse(argv(&["memory", "search", "-q", "ship", "-l", "0"])).is_err());
     }
 }

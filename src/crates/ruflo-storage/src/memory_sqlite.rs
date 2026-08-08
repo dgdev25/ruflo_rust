@@ -322,6 +322,36 @@ impl SqliteMemoryStore {
             .map_err(map_sqlite("memory.stats"))
     }
 
+    pub fn count_namespace(&self, namespace: &str) -> Result<u64, RufloError> {
+        self.connection
+            .query_row(
+                "SELECT COUNT(*) FROM memory_entries WHERE namespace = ?1 AND status = 'active'",
+                params![namespace],
+                |row| row.get::<_, i64>(0).map(|count| count as u64),
+            )
+            .map_err(map_sqlite("memory.count_namespace"))
+    }
+
+    /// Permanently removes the metadata projection for one namespace. Vector
+    /// segments remain under the upstream RVF adapter's lifecycle; results
+    /// referencing purged metadata are ignored by the semantic facade.
+    pub fn purge_namespace(&self, namespace: &str) -> Result<u64, RufloError> {
+        if namespace.trim().is_empty() {
+            return Err(RufloError::invalid_input(
+                "memory.namespace",
+                "namespace must not be empty",
+            ));
+        }
+        let deleted = self
+            .connection
+            .execute(
+                "DELETE FROM memory_entries WHERE namespace = ?1",
+                params![namespace],
+            )
+            .map_err(map_sqlite("memory.purge"))?;
+        Ok(deleted as u64)
+    }
+
     fn find(&self, namespace: &str, key: &str) -> Result<Option<MemoryEntry>, RufloError> {
         self.connection
             .query_row(
@@ -479,5 +509,23 @@ mod tests {
         let stats = store.stats().unwrap();
         assert_eq!(stats.total_entries, 1);
         assert_eq!(stats.total_content_bytes, 5);
+    }
+
+    #[test]
+    fn purge_is_explicitly_namespace_scoped() {
+        let project = tempfile::tempdir().unwrap();
+        let store = SqliteMemoryStore::open(project.path(), ".swarm/memory.db").unwrap();
+        store.store(&input("a", "alpha")).unwrap();
+        store
+            .store(&MemoryStoreInput {
+                namespace: "other".into(),
+                ..input("b", "bravo")
+            })
+            .unwrap();
+        assert_eq!(store.count_namespace("test").unwrap(), 1);
+        assert_eq!(store.purge_namespace("test").unwrap(), 1);
+        assert!(store.list(Some("test"), 10).unwrap().is_empty());
+        assert_eq!(store.count_namespace("other").unwrap(), 1);
+        assert!(store.purge_namespace(" ").is_err());
     }
 }
