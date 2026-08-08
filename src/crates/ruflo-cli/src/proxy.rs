@@ -165,7 +165,6 @@ fn consent_enable(domain: &str, surface: &str, config_field: &str, label: &str, 
     }
     funnel::record_consent(domain, true, surface);
     write_config_line(config_field, "true");
-    funnel::record_funnel_event("sponsor_mode_enabled", "statusline");
     println!("\u{2714} {label} enabled.");
     0
 }
@@ -173,7 +172,6 @@ fn consent_enable(domain: &str, surface: &str, config_field: &str, label: &str, 
 fn consent_disable(domain: &str, surface: &str, config_field: &str, label: &str) -> u8 {
     funnel::revoke_consent(domain, surface);
     write_config_line(config_field, "false");
-    funnel::record_funnel_event("sponsor_mode_disabled", "statusline");
     println!("\u{2714} {label} disabled.");
     0
 }
