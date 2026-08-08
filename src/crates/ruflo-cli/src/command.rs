@@ -38,6 +38,7 @@ pub enum ParsedCommand {
     Funnel(crate::funnel_command::FunnelCommand),
     Eject(crate::eject::EjectCommand),
     Issues(crate::issues::IssuesCommand),
+    Benchmark(crate::benchmark::BenchmarkCommand),
     MemoryStore {
         key: String,
         value: String,
@@ -728,6 +729,59 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             Some(other) => return Err(format!("Unknown subcommand '{other}' for issues")),
         };
         return Ok(ParsedCommand::Issues(cmd));
+    }
+    if normalized.first() == Some(&"benchmark") {
+        use crate::benchmark::BenchmarkCommand as Bench;
+        if args.iter().any(|v| matches!(v.as_str(), "--help" | "-h")) {
+            return Ok(ParsedCommand::Benchmark(Bench::Help {
+                subcommand: normalized
+                    .get(1)
+                    .filter(|v| !v.starts_with('-'))
+                    .copied()
+                    .map(str::to_owned),
+            }));
+        }
+        let it = |d: usize| {
+            option_value(&args, "--iterations", "-i")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(d)
+        };
+        let output = option_value(&args, "--output", "-o").unwrap_or_else(|| "text".into());
+        let save = option_value(&args, "--save", "-s");
+        let cmd = match normalized.get(1).copied() {
+            None => Bench::Overview,
+            Some("pretrain") => Bench::Pretrain {
+                iterations: it(100),
+                warmup: option_value(&args, "--warmup", "-w")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(10),
+                output,
+                save,
+            },
+            Some("neural") => Bench::Neural {
+                iterations: it(100),
+                dimension: option_value(&args, "--dimension", "-d")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(384),
+                vectors: option_value(&args, "--vectors", "-n")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(1000),
+                output,
+                save,
+            },
+            Some("memory") => Bench::Memory {
+                iterations: it(100),
+                output,
+                save,
+            },
+            Some("all") => Bench::All {
+                iterations: it(50),
+                output,
+                save,
+            },
+            Some(other) => return Err(format!("Unknown subcommand '{other}' for benchmark")),
+        };
+        return Ok(ParsedCommand::Benchmark(cmd));
     }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {
         let key = option_value(&args, "--key", "-k").ok_or("memory key is required")?;

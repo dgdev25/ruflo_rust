@@ -1,6 +1,7 @@
 //! Shared native CLI entrypoint for thin Ruflo-compatible binaries.
 
 mod announcements;
+mod benchmark;
 mod claims;
 mod cleanup;
 mod command;
@@ -294,6 +295,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::Issues(command)) => {
             ExitCode::from(issues::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::Benchmark(command)) => {
+            ExitCode::from(benchmark::run(&current_directory(), command))
         }
         Ok(ParsedCommand::MemoryStore {
             key,
