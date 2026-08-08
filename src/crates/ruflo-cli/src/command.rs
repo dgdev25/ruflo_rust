@@ -54,6 +54,7 @@ pub enum ParsedCommand {
     GaiaBench(crate::gaia_bench::GaiaBenchCommand),
     ProcessCmd(crate::process_cmd::ProcessCommand),
     Workflow(crate::workflow::WorkflowCommand),
+    Route(crate::route::RouteCommand),
     TransferStore(crate::transfer_store::TransferStoreCommand),
     MemoryStore {
         key: String,

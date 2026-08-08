@@ -26,6 +26,7 @@ mod policy;
 mod process_cmd;
 mod providers;
 mod proxy;
+mod route;
 mod settings;
 mod spinner;
 mod transfer_store;
