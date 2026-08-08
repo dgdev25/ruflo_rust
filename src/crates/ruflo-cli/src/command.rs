@@ -60,6 +60,7 @@ pub enum ParsedCommand {
     Analyze(crate::analyze::AnalyzeCommand),
     Daemon(crate::daemon::DaemonCommand),
     Embeddings(crate::embeddings::EmbeddingsCommand),
+    HiveMind(crate::hive_mind::HiveMindCommand),
     TransferStore(crate::transfer_store::TransferStoreCommand),
     MemoryStore {
         key: String,
@@ -1141,6 +1142,45 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             plan_file: option_value(&args, "--plan-file", "--plan-file"),
             strict: args.iter().any(|v| v == "--strict"),
             json: args.iter().any(|v| v == "--json" || v == "--format=json"),
+        }));
+    }
+    if normalized.first() == Some(&"hive-mind") || normalized.first() == Some(&"hive") {
+        let operation = normalized.get(1).copied().unwrap_or("").to_string();
+        return Ok(ParsedCommand::HiveMind(crate::hive_mind::HiveMindCommand {
+            operation,
+            topology: option_value(&args, "--topology", "-t"),
+            consensus: option_value(&args, "--consensus", "-c"),
+            max_agents: option_value(&args, "--max-agents", "-m")
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(15),
+            persist: !args.iter().any(|v| v == "--no-persist"),
+            memory_backend: option_value(&args, "--memory-backend", "--memory-backend"),
+            count: option_value(&args, "--count", "--count")
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(1),
+            role: option_value(&args, "--role", "--role"),
+            agent_type: option_value(&args, "--type", "--type"),
+            prefix: option_value(&args, "--prefix", "--prefix"),
+            claude: args.iter().any(|v| v == "--claude"),
+            objective: option_value(&args, "--objective", "--objective"),
+            dry_run: args.iter().any(|v| v == "--dry-run"),
+            mcp_config: option_value(&args, "--mcp-config", "--mcp-config"),
+            detailed: args.iter().any(|v| matches!(v.as_str(), "--detailed" | "-d")),
+            watch: args.iter().any(|v| v == "--watch"),
+            description: option_value(&args, "--description", "--description"),
+            priority: option_value(&args, "--priority", "--priority"),
+            require_consensus: args.iter().any(|v| v == "--require-consensus"),
+            agent_id: option_value(&args, "--agent-id", "--agent-id"),
+            action: option_value(&args, "--action", "-a"),
+            proposal_id: option_value(&args, "--proposal-id", "--proposal-id"),
+            vote: option_value(&args, "--vote", "--vote"),
+            voter_id: option_value(&args, "--voter-id", "--voter-id"),
+            strategy: option_value(&args, "--strategy", "-s"),
+            quorum_preset: option_value(&args, "--quorum-preset", "--quorum-preset"),
+            message: option_value(&args, "--message", "-m"),
+            key: option_value(&args, "--key", "-k"),
+            value: option_value(&args, "--value", "--value"),
+            json: args.iter().any(|v| v == "--json"),
         }));
     }
     if normalized.first() == Some(&"embeddings") || normalized.first() == Some(&"embed") {

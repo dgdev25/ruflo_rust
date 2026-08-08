@@ -21,6 +21,7 @@ mod funnel;
 mod funnel_command;
 mod gaia_bench;
 mod guidance;
+mod hive_mind;
 mod issues;
 mod lifecycle;
 mod metaharness;
@@ -426,6 +427,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::Embeddings(command)) => {
             ExitCode::from(embeddings::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::HiveMind(command)) => {
+            ExitCode::from(hive_mind::run(&current_directory(), command))
         }
         Ok(ParsedCommand::NativeOverview { name }) => {
             let root = current_directory();
