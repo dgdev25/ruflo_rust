@@ -74,6 +74,10 @@ named compatibility evidence and focused verification.
   `ruflo.toml`; `config get` reads the existing typed precedence layer for
   policy and limits keys. V3 `set`, providers, reset, export/import, broader
   config schema, and source fixtures remain open.
+- Migration increment: native `migrate status` identifies V2 configuration,
+  memory, and session artifacts without modifying the project. `migrate run`
+  must next compose the existing transactional storage migration primitives
+  with V3-specific transforms and source fixtures.
 - Then migrate every remaining command family from the original registry,
   capturing source fixtures before implementation and exercising real local
   Codex swarm deployment before release.

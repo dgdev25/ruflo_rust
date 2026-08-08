@@ -62,6 +62,7 @@ pub enum ParsedCommand {
     ConfigGet {
         key: Option<String>,
     },
+    MigrateStatus,
     Help,
     Init,
     Status,
@@ -324,6 +325,9 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
         return Ok(ParsedCommand::ConfigGet {
             key: option_value(&args, "--key", "-k").or_else(|| config_positional(&args, 2)),
         });
+    }
+    if normalized.as_slice() == ["migrate", "status"] {
+        return Ok(ParsedCommand::MigrateStatus);
     }
     if normalized.starts_with(&["agent", "spawn"]) {
         let agent_type = option_value(&args, "--type", "-t").ok_or("agent type is required")?;
@@ -858,6 +862,10 @@ mod tests {
         assert!(matches!(
             parse(argv(&["config", "get", "limits.max_request_bytes"])),
             Ok(ParsedCommand::ConfigGet { key: Some(key) }) if key == "limits.max_request_bytes"
+        ));
+        assert!(matches!(
+            parse(argv(&["migrate", "status"])),
+            Ok(ParsedCommand::MigrateStatus)
         ));
         assert!(parse(argv(&["memory", "search", "-q", "ship", "-l", "0"])).is_err());
     }

@@ -152,7 +152,7 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             }
         }
         Ok(ParsedCommand::Progress) => {
-            println!("Native V3 command migration progress\nTop-level families: 14 initial native commands; 53 required for parity\nStatus: in progress — source differential fixtures remain mandatory");
+            println!("Native V3 command migration progress\nTop-level families: 15 initial native commands; 53 required for parity\nStatus: in progress — source differential fixtures remain mandatory");
             ExitCode::SUCCESS
         }
         Ok(ParsedCommand::MemoryStore {
@@ -346,6 +346,38 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             },
             Err(error) => ruflo_error(error),
         },
+        Ok(ParsedCommand::MigrateStatus) => {
+            let root = current_directory();
+            let v2_config = root.join("claude-flow.config.json").is_file();
+            let v3_config = root.join(".claude-flow").is_dir();
+            let v2_memory = directory_has_entries(&root.join("data/memory"));
+            let v2_sessions = directory_has_entries(&root.join("data/sessions"));
+            let needed = v2_config || v2_memory || v2_sessions;
+            println!("Migration Status");
+            println!(
+                "Config\t{}\t{}",
+                if v2_config {
+                    "v2"
+                } else if v3_config {
+                    "v3"
+                } else {
+                    "missing"
+                },
+                if v2_config && !v3_config { "yes" } else { "no" }
+            );
+            println!(
+                "Memory\t{}\t{}",
+                if v2_memory { "v2" } else { "missing" },
+                if v2_memory { "yes" } else { "no" }
+            );
+            println!(
+                "Sessions\t{}\t{}",
+                if v2_sessions { "v2" } else { "missing" },
+                if v2_sessions { "yes" } else { "no" }
+            );
+            println!("Migration needed: {}", if needed { "yes" } else { "no" });
+            ExitCode::SUCCESS
+        }
         Ok(ParsedCommand::Help) => {
             print!("{HELP}");
             ExitCode::SUCCESS
@@ -898,6 +930,13 @@ fn config_value(
         Some("limits.max_duration_ms") => Ok(config.limits.max_duration_ms.to_string()),
         Some(key) => Err(key.into()),
     }
+}
+
+fn directory_has_entries(path: &std::path::Path) -> bool {
+    std::fs::read_dir(path)
+        .ok()
+        .and_then(|mut entries| entries.next())
+        .is_some()
 }
 
 fn swarm_worker_plan(swarm: &lifecycle::SwarmRecord, objective: &str) -> Vec<String> {
