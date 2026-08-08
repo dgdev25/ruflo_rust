@@ -16,6 +16,20 @@ pub enum ParsedCommand {
         daemon: bool,
     },
     Progress,
+    Cleanup {
+        force: bool,
+        keep_config: bool,
+    },
+    CleanupHelp,
+    TransportOverview,
+    TransportHelp,
+    TransportUseHelp,
+    TransportUse {
+        name: Option<String>,
+        quiet: bool,
+    },
+    Deployment(crate::deployment::DeploymentCommand),
+    Claims(crate::claims::ClaimsCommand),
     MemoryStore {
         key: String,
         value: String,
@@ -58,9 +72,39 @@ pub enum ParsedCommand {
     },
     ConfigInit {
         force: bool,
+        sparc: bool,
+        v3: bool,
     },
     ConfigGet {
         key: Option<String>,
+        json: bool,
+    },
+    ConfigSet {
+        key: String,
+        value: String,
+    },
+    ConfigProviders {
+        add: Option<String>,
+        remove: Option<String>,
+        enable: Option<String>,
+        disable: Option<String>,
+        json: bool,
+    },
+    ConfigReset {
+        force: bool,
+        section: Option<String>,
+    },
+    ConfigExport {
+        output: String,
+        format: String,
+    },
+    ConfigImport {
+        file: String,
+        merge: bool,
+    },
+    ConfigOverview,
+    ConfigHelp {
+        subcommand: Option<String>,
     },
     MigrateStatus,
     MigrateRun {
@@ -179,11 +223,52 @@ pub enum ParsedCommand {
 }
 
 pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, String> {
-    let args = argv
+    let mut args = argv
         .into_iter()
         .skip(1)
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect::<Vec<_>>();
+    if args
+        .iter()
+        .any(|value| matches!(value.as_str(), "--version" | "-V"))
+    {
+        return Ok(ParsedCommand::Version);
+    }
+    if let Some(index) = args.iter().position(|value| {
+        matches!(
+            value.as_str(),
+            "config" | "transport" | "cleanup" | "clean" | "deployment" | "deploy" | "claims"
+        )
+    }) {
+        if index > 0 {
+            let prefix = args[..index].to_vec();
+            let valid_prefix = prefix.iter().enumerate().all(|(position, value)| {
+                matches!(
+                    value.as_str(),
+                    "--no-color"
+                        | "-v"
+                        | "--verbose"
+                        | "-Q"
+                        | "--quiet"
+                        | "-n"
+                        | "--dry-run"
+                        | "-f"
+                        | "--force"
+                        | "--no-force"
+                        | "-k"
+                        | "--keep-config"
+                        | "--no-keep-config"
+                ) || value == "--format"
+                    || position > 0 && prefix[position - 1] == "--format"
+                    || value.starts_with("--format=")
+            });
+            if valid_prefix {
+                let mut reordered = args[index..].to_vec();
+                reordered.extend_from_slice(&prefix);
+                args = reordered;
+            }
+        }
+    }
     let normalized = args.iter().map(String::as_str).collect::<Vec<_>>();
 
     if normalized.first() == Some(&"version") {
@@ -222,6 +307,178 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
     }
     if normalized.first() == Some(&"progress") {
         return Ok(ParsedCommand::Progress);
+    }
+    if matches!(normalized.first(), Some(&"cleanup" | &"clean")) {
+        if normalized
+            .iter()
+            .skip(1)
+            .any(|value| *value == "--help" || *value == "-h")
+        {
+            return Ok(ParsedCommand::CleanupHelp);
+        }
+        return Ok(ParsedCommand::Cleanup {
+            force: boolean_option(&args, "--force", "-f", false),
+            keep_config: boolean_option(&args, "--keep-config", "-k", false),
+        });
+    }
+    if normalized.first() == Some(&"transport") {
+        let quiet = args
+            .iter()
+            .any(|value| matches!(value.as_str(), "--quiet" | "-Q"));
+        if normalized.get(1) == Some(&"use") {
+            if normalized
+                .iter()
+                .any(|value| matches!(*value, "--help" | "-h"))
+            {
+                return Ok(ParsedCommand::TransportUseHelp);
+            }
+            let name = option_value(&args, "--transport", "--transport")
+                .or_else(|| {
+                    config_positionals(&args, 2, &["--transport", "--format"])
+                        .first()
+                        .cloned()
+                })
+                .map(|value| value.trim().to_lowercase());
+            return Ok(ParsedCommand::TransportUse { name, quiet });
+        }
+        if normalized
+            .iter()
+            .any(|value| matches!(*value, "--help" | "-h"))
+        {
+            return Ok(ParsedCommand::TransportHelp);
+        }
+        return Ok(ParsedCommand::TransportOverview);
+    }
+    if matches!(normalized.first(), Some(&"deployment" | &"deploy")) {
+        use crate::deployment::DeploymentCommand as Deployment;
+
+        let subcommand = normalized.get(1).copied();
+        if normalized
+            .iter()
+            .any(|value| matches!(*value, "--help" | "-h"))
+        {
+            return Ok(ParsedCommand::Deployment(Deployment::Help {
+                subcommand: subcommand
+                    .filter(|value| !value.starts_with('-'))
+                    .map(str::to_owned),
+            }));
+        }
+        match subcommand {
+            None => return Ok(ParsedCommand::Deployment(Deployment::Overview)),
+            Some("deploy") => {
+                return Ok(ParsedCommand::Deployment(Deployment::Deploy {
+                    env: option_value(&args, "--env", "-e").unwrap_or_else(|| "staging".into()),
+                    version: option_value(&args, "--version", "-v"),
+                    dry_run: boolean_option(&args, "--dry-run", "-d", false),
+                    description: option_value(&args, "--description", "--description"),
+                }));
+            }
+            Some("status") => {
+                return Ok(ParsedCommand::Deployment(Deployment::Status {
+                    env: option_value(&args, "--env", "-e"),
+                }));
+            }
+            Some("rollback") => {
+                return Ok(ParsedCommand::Deployment(Deployment::Rollback {
+                    env: option_value(&args, "--env", "-e").unwrap_or_default(),
+                    version: option_value(&args, "--version", "-v"),
+                    steps: deployment_number(&args, "--steps", "-s", 1, "rollback steps")?,
+                }));
+            }
+            Some("history") => {
+                return Ok(ParsedCommand::Deployment(Deployment::History {
+                    env: option_value(&args, "--env", "-e"),
+                    limit: deployment_number(&args, "--limit", "-l", 10, "history limit")?,
+                }));
+            }
+            Some("environments" | "envs") => {
+                return Ok(ParsedCommand::Deployment(Deployment::Environments {
+                    action: option_value(&args, "--action", "-a").unwrap_or_else(|| "list".into()),
+                    name: option_value(&args, "--name", "-n"),
+                    env_type: option_value(&args, "--type", "-t").unwrap_or_else(|| "local".into()),
+                    url: option_value(&args, "--url", "-u"),
+                }));
+            }
+            Some("logs") => {
+                return Ok(ParsedCommand::Deployment(Deployment::Logs {
+                    deployment: option_value(&args, "--deployment", "-d"),
+                    env: option_value(&args, "--env", "-e"),
+                    lines: deployment_number(&args, "--lines", "-n", 50, "log lines")?,
+                }));
+            }
+            Some("release") => {
+                return Ok(ParsedCommand::Deployment(Deployment::Release {
+                    version: option_value(&args, "--version", "-v"),
+                    env: option_value(&args, "--env", "-e").unwrap_or_else(|| "production".into()),
+                    description: option_value(&args, "--description", "-d"),
+                }));
+            }
+            Some(other) => return Err(format!("Unknown subcommand '{other}' for deployment")),
+        }
+    }
+    if normalized.first() == Some(&"claims") {
+        use crate::claims::ClaimsCommand as Claims;
+
+        let subcommand = normalized.get(1).copied();
+        if normalized
+            .iter()
+            .any(|value| matches!(*value, "--help" | "-h"))
+        {
+            return Ok(ParsedCommand::Claims(Claims::Help {
+                subcommand: subcommand
+                    .filter(|value| !value.starts_with('-'))
+                    .map(str::to_owned),
+            }));
+        }
+        let claim = || option_value(&args, "--claim", "-c");
+        let user = || option_value(&args, "--user", "-u");
+        let role = || option_value(&args, "--role", "-r");
+        match subcommand {
+            None => return Ok(ParsedCommand::Claims(Claims::Overview)),
+            Some("list") => {
+                return Ok(ParsedCommand::Claims(Claims::List {
+                    user: user(),
+                    role: role(),
+                    resource: option_value(&args, "--resource", "--resource"),
+                }));
+            }
+            Some("check") => {
+                return Ok(ParsedCommand::Claims(Claims::Check {
+                    claim: claim(),
+                    user: user(),
+                    resource: option_value(&args, "--resource", "-r"),
+                }));
+            }
+            Some("grant") => {
+                return Ok(ParsedCommand::Claims(Claims::Grant {
+                    claim: claim(),
+                    user: user(),
+                    role: role(),
+                    scope: option_value(&args, "--scope", "-s").unwrap_or_else(|| "global".into()),
+                    expires: option_value(&args, "--expires", "-e"),
+                }));
+            }
+            Some("revoke") => {
+                return Ok(ParsedCommand::Claims(Claims::Revoke {
+                    claim: claim(),
+                    user: user(),
+                    role: role(),
+                }));
+            }
+            Some("roles") => {
+                return Ok(ParsedCommand::Claims(Claims::Roles {
+                    action: option_value(&args, "--action", "-a").unwrap_or_else(|| "list".into()),
+                    name: option_value(&args, "--name", "-n"),
+                }));
+            }
+            Some("policies") => {
+                return Ok(ParsedCommand::Claims(Claims::Policies {
+                    action: option_value(&args, "--action", "-a").unwrap_or_else(|| "list".into()),
+                    name: option_value(&args, "--name", "-n"),
+                }));
+            }
+            Some(other) => return Err(format!("Unknown subcommand '{other}' for claims")),
+        }
     }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {
         let key = option_value(&args, "--key", "-k").ok_or("memory key is required")?;
@@ -320,17 +577,124 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             path: option_value(&args, "--path", "--path"),
         });
     }
+    if normalized.first() == Some(&"config") {
+        if normalized
+            .iter()
+            .any(|value| matches!(*value, "--version" | "-V"))
+        {
+            return Ok(ParsedCommand::Version);
+        }
+        if normalized
+            .iter()
+            .any(|value| matches!(*value, "--help" | "-h"))
+        {
+            return Ok(ParsedCommand::ConfigHelp {
+                subcommand: normalized
+                    .get(1)
+                    .filter(|value| !value.starts_with('-'))
+                    .map(|value| (*value).to_string()),
+            });
+        }
+        if normalized.len() == 1 {
+            return Ok(ParsedCommand::ConfigOverview);
+        }
+        if let Some(format) = option_value(&args, "--format", "--format") {
+            if !matches!(format.as_str(), "text" | "json" | "table") {
+                return Err(format!(
+                    "Invalid value for --format: {format}. Must be one of: text, json, table"
+                ));
+            }
+        }
+    }
     if normalized.len() >= 2 && normalized[0] == "config" && normalized[1] == "init" {
         return Ok(ParsedCommand::ConfigInit {
-            force: args
-                .iter()
-                .any(|argument| argument == "--force" || argument == "-f"),
+            force: boolean_option(&args, "--force", "-f", false),
+            sparc: boolean_option(&args, "--sparc", "--sparc", false),
+            v3: boolean_option(&args, "--v3", "--v3", true),
         });
     }
     if normalized.len() >= 2 && normalized[0] == "config" && normalized[1] == "get" {
         return Ok(ParsedCommand::ConfigGet {
-            key: option_value(&args, "--key", "-k").or_else(|| config_positional(&args, 2)),
+            key: option_value(&args, "--key", "-k").or_else(|| {
+                config_positionals(&args, 2, &["--key", "-k", "--format"])
+                    .first()
+                    .cloned()
+            }),
+            json: option_value(&args, "--format", "--format").as_deref() == Some("json"),
         });
+    }
+    if normalized.len() >= 2 && normalized[0] == "config" && normalized[1] == "set" {
+        let key = option_value(&args, "--key", "-k");
+        let value = option_value(&args, "--value", "-v");
+        let (key, value) = match (key, value) {
+            (Some(key), Some(value)) => (key, value),
+            (None, None) => {
+                return Err(
+                    "Required option missing: --key\n[ERROR] Required option missing: --value"
+                        .into(),
+                )
+            }
+            (None, Some(_)) => return Err("Required option missing: --key".into()),
+            (Some(_), None) => return Err("Required option missing: --value".into()),
+        };
+        return Ok(ParsedCommand::ConfigSet { key, value });
+    }
+    if normalized.len() >= 2 && normalized[0] == "config" && normalized[1] == "providers" {
+        return Ok(ParsedCommand::ConfigProviders {
+            add: option_value(&args, "--add", "-a"),
+            remove: option_value(&args, "--remove", "-r"),
+            enable: option_value(&args, "--enable", "--enable"),
+            disable: option_value(&args, "--disable", "--disable"),
+            json: option_value(&args, "--format", "--format").as_deref() == Some("json"),
+        });
+    }
+    if normalized.len() >= 2 && normalized[0] == "config" && normalized[1] == "reset" {
+        let section = option_value(&args, "--section", "--section");
+        if let Some(value) = section.as_deref() {
+            if !matches!(
+                value,
+                "agents" | "swarm" | "memory" | "mcp" | "providers" | "all"
+            ) {
+                return Err(
+                    "config reset section must be agents, swarm, memory, mcp, providers, or all"
+                        .into(),
+                );
+            }
+        }
+        return Ok(ParsedCommand::ConfigReset {
+            force: boolean_option(&args, "--force", "-f", false),
+            section,
+        });
+    }
+    if normalized.len() >= 2 && normalized[0] == "config" && normalized[1] == "export" {
+        let positionals = config_positionals(&args, 2, &["--output", "-o", "--format", "-f"]);
+        let format = option_value(&args, "--format", "-f").unwrap_or_else(|| "json".into());
+        if matches!(format.as_str(), "text" | "table") {
+            return Err(format!(
+                "Invalid value for --format: {format}. Must be one of: json, yaml"
+            ));
+        }
+        if format != "json" {
+            return Err(format!(
+                "Invalid value for --format: {format}. Must be one of: text, json, table"
+            ));
+        }
+        return Ok(ParsedCommand::ConfigExport {
+            output: option_value(&args, "--output", "-o")
+                .or_else(|| positionals.first().cloned())
+                .unwrap_or_else(|| "claude-flow.config.export.json".into()),
+            format,
+        });
+    }
+    if normalized.len() >= 2 && normalized[0] == "config" && normalized[1] == "import" {
+        let file = option_value(&args, "--file", "-f").ok_or("Required option missing: --file")?;
+        return Ok(ParsedCommand::ConfigImport {
+            file,
+            merge: boolean_option(&args, "--merge", "--merge", false),
+        });
+    }
+    if normalized.first() == Some(&"config") {
+        return Ok(ParsedCommand::ConfigOverview);
     }
     if normalized.as_slice() == ["migrate", "status"] {
         return Ok(ParsedCommand::MigrateStatus);
@@ -649,10 +1013,63 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
 }
 
 fn option_value(args: &[String], long: &str, short: &str) -> Option<String> {
-    args.iter()
-        .position(|arg| arg == long || arg == short)
-        .and_then(|index| args.get(index + 1))
-        .cloned()
+    args.iter().enumerate().rev().find_map(|(index, argument)| {
+        if argument == long || argument == short {
+            args.get(index + 1).cloned()
+        } else {
+            argument
+                .strip_prefix(&format!("{long}="))
+                .or_else(|| argument.strip_prefix(&format!("{short}=")))
+                .map(str::to_owned)
+        }
+    })
+}
+
+fn boolean_option(args: &[String], long: &str, short: &str, default: bool) -> bool {
+    let no_flag = format!("--no-{}", long.trim_start_matches("--"));
+    for (index, argument) in args.iter().enumerate().rev() {
+        if argument == &no_flag {
+            return false;
+        }
+        if argument == long || argument == short {
+            return args
+                .get(index + 1)
+                .and_then(|value| match value.as_str() {
+                    "true" => Some(true),
+                    "false" => Some(false),
+                    _ => None,
+                })
+                .unwrap_or(true);
+        }
+        if let Some(value) = argument.strip_prefix(&format!("{long}=")) {
+            return value != "false";
+        }
+        if short.len() == 2
+            && argument.starts_with('-')
+            && !argument.starts_with("--")
+            && argument[1..].contains(&short[1..])
+        {
+            return true;
+        }
+    }
+    default
+}
+
+fn deployment_number(
+    args: &[String],
+    long: &str,
+    short: &str,
+    default: i64,
+    label: &str,
+) -> Result<i64, String> {
+    option_value(args, long, short)
+        .map(|value| {
+            value
+                .parse::<i64>()
+                .map_err(|_| format!("{label} must be a number"))
+        })
+        .transpose()
+        .map(|value| value.unwrap_or(default))
 }
 
 fn memory_positionals(args: &[String]) -> Vec<String> {
@@ -706,11 +1123,24 @@ fn parse_positive_usize(
     Ok(parsed)
 }
 
-fn config_positional(args: &[String], first_argument_index: usize) -> Option<String> {
-    args.iter()
-        .skip(first_argument_index)
-        .find(|value| !value.starts_with('-'))
-        .cloned()
+fn config_positionals(
+    args: &[String],
+    first_argument_index: usize,
+    value_options: &[&str],
+) -> Vec<String> {
+    let mut values = Vec::new();
+    let mut index = first_argument_index;
+    while index < args.len() {
+        if value_options.contains(&args[index].as_str()) || args[index] == "--format" {
+            index += 2;
+        } else if args[index].starts_with('-') {
+            index += 1;
+        } else {
+            values.push(args[index].clone());
+            index += 1;
+        }
+    }
+    values
 }
 
 #[cfg(test)]
@@ -871,20 +1301,153 @@ mod tests {
         assert!(parse(argv(&["memory", "purge", "--force"])).is_err());
         assert!(matches!(
             parse(argv(&["config", "init", "--force"])),
-            Ok(ParsedCommand::ConfigInit { force: true })
+            Ok(ParsedCommand::ConfigInit { force: true, .. })
         ));
         assert!(matches!(
             parse(argv(&["config", "get", "-k", "policy.allow"])),
-            Ok(ParsedCommand::ConfigGet { key: Some(key) }) if key == "policy.allow"
+            Ok(ParsedCommand::ConfigGet { key: Some(key), .. }) if key == "policy.allow"
         ));
         assert!(matches!(
             parse(argv(&["config", "get", "limits.max_request_bytes"])),
-            Ok(ParsedCommand::ConfigGet { key: Some(key) }) if key == "limits.max_request_bytes"
+            Ok(ParsedCommand::ConfigGet { key: Some(key), .. }) if key == "limits.max_request_bytes"
         ));
         assert!(matches!(
             parse(argv(&["migrate", "status"])),
             Ok(ParsedCommand::MigrateStatus)
         ));
         assert!(parse(argv(&["memory", "search", "-q", "ship", "-l", "0"])).is_err());
+    }
+
+    #[test]
+    fn config_v3_subcommands_and_options_parse() {
+        assert!(matches!(
+            parse(argv(&["config", "set", "-k", "swarm.maxAgents", "-v", "20"])),
+            Ok(ParsedCommand::ConfigSet { key, value }) if key == "swarm.maxAgents" && value == "20"
+        ));
+        assert!(parse(argv(&["config", "set", "swarm.maxAgents", "20"])).is_err());
+        assert!(matches!(
+            parse(argv(&["config", "providers", "--add", "local", "--format", "json"])),
+            Ok(ParsedCommand::ConfigProviders { add: Some(name), json: true, .. }) if name == "local"
+        ));
+        assert!(matches!(
+            parse(argv(&["config", "reset", "--section", "memory", "--force"])),
+            Ok(ParsedCommand::ConfigReset { force: true, section: Some(section) }) if section == "memory"
+        ));
+        assert!(matches!(
+            parse(argv(&["config", "export", "backup.json", "--format", "json"])),
+            Ok(ParsedCommand::ConfigExport { output, format }) if output == "backup.json" && format == "json"
+        ));
+        assert_eq!(
+            parse(argv(&["config", "export", "-f", "text"])),
+            Err("Invalid value for --format: text. Must be one of: json, yaml".into())
+        );
+        assert_eq!(
+            parse(argv(&["config", "export", "-f", "yaml"])),
+            Err("Invalid value for --format: yaml. Must be one of: text, json, table".into())
+        );
+        assert!(matches!(
+            parse(argv(&["config", "import", "--file", "backup.json", "--merge"])),
+            Ok(ParsedCommand::ConfigImport { file, merge: true }) if file == "backup.json"
+        ));
+    }
+
+    #[test]
+    fn cleanup_aliases_and_force_precedence_parse() {
+        assert!(matches!(
+            parse(argv(&["cleanup", "--dry-run", "--force", "--keep-config"])),
+            Ok(ParsedCommand::Cleanup {
+                force: true,
+                keep_config: true
+            })
+        ));
+        assert!(matches!(
+            parse(argv(&["clean", "-n"])),
+            Ok(ParsedCommand::Cleanup {
+                force: false,
+                keep_config: false
+            })
+        ));
+        assert!(matches!(
+            parse(argv(&["clean", "--help"])),
+            Ok(ParsedCommand::CleanupHelp)
+        ));
+        assert!(matches!(
+            parse(argv(&["cleanup", "--unknown"])),
+            Ok(ParsedCommand::Cleanup { force: false, .. })
+        ));
+        assert!(matches!(
+            parse(argv(&["--no-color", "cleanup", "-fk"])),
+            Ok(ParsedCommand::Cleanup {
+                force: true,
+                keep_config: true
+            })
+        ));
+        assert!(matches!(
+            parse(argv(&["cleanup", "--force", "false"])),
+            Ok(ParsedCommand::Cleanup { force: false, .. })
+        ));
+        assert!(matches!(
+            parse(argv(&["cleanup", "--force", "--no-force"])),
+            Ok(ParsedCommand::Cleanup { force: false, .. })
+        ));
+        assert!(matches!(
+            parse(argv(&["cleanup", "--version"])),
+            Ok(ParsedCommand::Version)
+        ));
+    }
+
+    #[test]
+    fn transport_surface_accepts_positional_and_flag_names() {
+        assert!(matches!(
+            parse(argv(&["transport"])),
+            Ok(ParsedCommand::TransportOverview)
+        ));
+        assert!(
+            matches!(parse(argv(&["transport", "use", "SLIM"])), Ok(ParsedCommand::TransportUse { name: Some(name), .. }) if name == "slim")
+        );
+        assert!(
+            matches!(parse(argv(&["--quiet", "transport", "use", "--transport=slim"])), Ok(ParsedCommand::TransportUse { name: Some(name), quiet: true }) if name == "slim")
+        );
+        assert!(matches!(
+            parse(argv(&["transport", "use", "--help"])),
+            Ok(ParsedCommand::TransportUseHelp)
+        ));
+    }
+
+    #[test]
+    fn deployment_aliases_subcommands_and_options_parse() {
+        use crate::deployment::DeploymentCommand as Deployment;
+
+        assert!(matches!(
+            parse(argv(&["deployment"])),
+            Ok(ParsedCommand::Deployment(Deployment::Overview))
+        ));
+        assert!(matches!(
+            parse(argv(&["deploy", "deploy", "-e", "prod", "-v", "3.5.0", "-d", "--description", "ship"])),
+            Ok(ParsedCommand::Deployment(Deployment::Deploy { env, version: Some(version), dry_run: true, description: Some(description) }))
+                if env == "prod" && version == "3.5.0" && description == "ship"
+        ));
+        assert!(matches!(
+            parse(argv(&["deployment", "envs", "-a", "add", "-n", "preview", "-t", "staging", "-u", "https://preview"])),
+            Ok(ParsedCommand::Deployment(Deployment::Environments { action, name: Some(name), env_type, url: Some(url) }))
+                if action == "add" && name == "preview" && env_type == "staging" && url == "https://preview"
+        ));
+        assert!(matches!(
+            parse(argv(&["--no-color", "deployment", "history", "--limit=3"])),
+            Ok(ParsedCommand::Deployment(Deployment::History {
+                limit: 3,
+                ..
+            }))
+        ));
+        assert!(matches!(
+            parse(argv(&["deployment", "rollback", "-e", "prod", "-s", "2"])),
+            Ok(ParsedCommand::Deployment(Deployment::Rollback { env, steps: 2, .. })) if env == "prod"
+        ));
+        assert!(matches!(
+            parse(argv(&["deployment", "logs", "--help"])),
+            Ok(ParsedCommand::Deployment(Deployment::Help { subcommand: Some(name) })) if name == "logs"
+        ));
+        assert!(parse(argv(&["deployment", "history", "-l", "many"])).is_err());
+        assert!(parse(argv(&["deployment", "unknown"])).is_err());
     }
 }

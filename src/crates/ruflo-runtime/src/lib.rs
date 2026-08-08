@@ -1,6 +1,7 @@
 mod agent;
 mod swarm;
 mod task;
+mod transport;
 mod workflow;
 
 use std::collections::HashMap;
@@ -13,6 +14,9 @@ use swarm::SwarmHandle as StoredSwarmHandle;
 pub use swarm::{NewSwarm, SwarmHandle, SwarmId, SwarmState};
 pub use task::{NewTask, TaskAuditEntry, TaskAuditKind, TaskHandle, TaskId, TaskState};
 use task::{TaskHandle as StoredTaskHandle, TaskTransition};
+pub use transport::{
+    activate_slim, NoSlimTransportAdapter, SlimTransportAdapter, TransportOutcome,
+};
 pub use workflow::{WorkflowHandle, WorkflowId, WorkflowState};
 
 #[derive(Debug, Clone, PartialEq, Eq)]

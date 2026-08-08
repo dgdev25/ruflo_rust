@@ -1,0 +1,29 @@
+{
+  "environment": { "RUFLO_DAEMON_AUTOSTART": "0", "NO_COLOR": "1" },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_paths": ["/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/src/commands/cleanup.ts"],
+    "recorded_at": "2026-08-08T07:00:00Z"
+  },
+  "cases": [
+    {
+      "argv": ["cleanup"],
+      "exit": 0,
+      "stdout": "\nClaude Flow Cleanup (dry run)\n\nNo claude-flow artifacts found in the current directory.\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["cleanup", "-n", "--unknown"],
+      "exit": 0,
+      "stdout": "\nClaude Flow Cleanup (dry run)\n\nNo claude-flow artifacts found in the current directory.\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["cleanup", "--help"],
+      "exit": 0,
+      "stdout": "\nruflo cleanup\nRemove project artifacts created by claude-flow/ruflo\n\nOPTIONS:\n  -n, --dry-run             Show what would be removed without deleting (default behavior) [default: true]\n  -f, --force               Actually delete the artifacts [default: false]\n  -k, --keep-config         Preserve claude-flow.config.json and .claude/settings.json [default: false]\n\nEXAMPLES:\n  $ cleanup\n    Show what would be removed (dry run)\n  $ cleanup --force\n    Remove all claude-flow artifacts\n  $ cleanup --force --keep-config\n    Remove artifacts but keep configuration files\n",
+      "stderr": ""
+    }
+  ]
+}

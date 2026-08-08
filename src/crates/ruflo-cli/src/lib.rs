@@ -1,7 +1,11 @@
 //! Shared native CLI entrypoint for thin Ruflo-compatible binaries.
 
+mod claims;
+mod cleanup;
 mod command;
 mod compressor;
+mod config_file;
+mod deployment;
 mod lifecycle;
 
 use std::ffi::OsString;
@@ -94,7 +98,40 @@ Created with ❤️ by ruv.io
 "#;
 
 const ERROR_EXIT: u8 = 2;
-const DEFAULT_RUFLO_CONFIG: &str = "# Native Ruflo configuration\n\n[policy]\nallow = []\ndeny = []\n\n[limits]\nmax_request_bytes = 65536\nmax_concurrent_executions = 4\nmax_duration_ms = 30000\n";
+const CLEANUP_HELP: &str = r#"
+ruflo cleanup
+Remove project artifacts created by claude-flow/ruflo
+
+OPTIONS:
+  -n, --dry-run             Show what would be removed without deleting (default behavior) [default: true]
+  -f, --force               Actually delete the artifacts [default: false]
+  -k, --keep-config         Preserve claude-flow.config.json and .claude/settings.json [default: false]
+
+EXAMPLES:
+  $ cleanup
+    Show what would be removed (dry run)
+  $ cleanup --force
+    Remove all claude-flow artifacts
+  $ cleanup --force --keep-config
+    Remove artifacts but keep configuration files
+"#;
+const CONFIG_OVERVIEW: &str = r#"
+Configuration Management
+
+Usage: claude-flow config <subcommand> [options]
+
+Subcommands:
+  - init       - Initialize configuration
+  - get        - Get configuration value
+  - set        - Set configuration value
+  - providers  - Manage AI providers
+  - reset      - Reset to defaults
+  - export     - Export configuration
+  - import     - Import configuration
+"#;
+const TRANSPORT_OVERVIEW: &str = "\nAGNTCY/SLIM Transport\n============================================================\n\n+------------------------------ AGNTCY/SLIM Transport ------------------------------+\n| Local transport (in-process hooks routing) is the default.                        |\n|                                                                                   |\n| Subcommands:                                                                      |\n|                                                                                   |\n|   use <name>   Switch the active transport (currently: slim)                      |\n|                                                                                   |\n| See ADR-380 for setup: v3/docs/adr/ADR-380-agntcy-outshift-runtime-integration.md |\n+-----------------------------------------------------------------------------------+\n\n";
+const TRANSPORT_HELP: &str = "\nruflo transport\nManage the active swarm/hive-mind coordination transport (ADR-380 §2)\n\nSUBCOMMANDS:\n  use             Switch the active swarm/hive-mind transport (e.g. slim) — ADR-380 §2\n\nEXAMPLES:\n  $ ruflo transport use slim\n    Switch coordination transport to SLIM\n";
+const TRANSPORT_USE_HELP: &str = "\nruflo transport use\nSwitch the active swarm/hive-mind transport (e.g. slim) — ADR-380 §2\n\nEXAMPLES:\n  $ ruflo transport use slim\n    Switch coordination transport to SLIM (opt-in, degrades to local)\n";
 
 pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
     match command::parse(argv) {
@@ -154,6 +191,101 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         Ok(ParsedCommand::Progress) => {
             println!("Native V3 command migration progress\nTop-level families: 15 initial native commands; 53 required for parity\nStatus: in progress — source differential fixtures remain mandatory");
             ExitCode::SUCCESS
+        }
+        Ok(ParsedCommand::CleanupHelp) => {
+            print!("{CLEANUP_HELP}");
+            ExitCode::SUCCESS
+        }
+        Ok(ParsedCommand::Cleanup { force, keep_config }) => {
+            let result = cleanup::run(&current_directory(), force, keep_config);
+            println!(
+                "\n{}\n",
+                if force {
+                    "Claude Flow Cleanup"
+                } else {
+                    "Claude Flow Cleanup (dry run)"
+                }
+            );
+            if result.artifacts.is_empty() {
+                println!("No claude-flow artifacts found in the current directory.");
+                return ExitCode::SUCCESS;
+            }
+            println!("Artifacts found:\n");
+            let failed = result
+                .failures
+                .iter()
+                .map(|(item, message)| (item.path, message.as_str()))
+                .collect::<std::collections::BTreeMap<_, _>>();
+            let mut skipped_count = 0;
+            for item in &result.artifacts {
+                let label = if item.kind == cleanup::ArtifactKind::Directory {
+                    "dir "
+                } else {
+                    "file"
+                };
+                let size = cleanup::format_size(item.size);
+                if item.skipped {
+                    println!(
+                        "  [skip] {label}  {}  ({size}) - {}",
+                        item.path, item.description
+                    );
+                    skipped_count += 1;
+                } else if !force {
+                    println!(
+                        "  [would remove] {label}  {}  ({size}) - {}",
+                        item.path, item.description
+                    );
+                } else if let Some(message) = failed.get(item.path) {
+                    println!("  [failed] {label}  {}  - {message}", item.path);
+                } else {
+                    println!(
+                        "  [removed] {label}  {}  ({size}) - {}",
+                        item.path, item.description
+                    );
+                }
+            }
+            println!("\nSummary:");
+            if force {
+                println!(
+                    "  Removed {} artifact(s) totaling {}",
+                    result.removed_count,
+                    cleanup::format_size(result.removed_size)
+                );
+                if skipped_count > 0 {
+                    println!("  Preserved {skipped_count} item(s) (--keep-config)");
+                }
+            } else {
+                let actionable = result.artifacts.len() - skipped_count;
+                println!(
+                    "  Found {actionable} artifact(s) totaling {}",
+                    cleanup::format_size(result.total_size)
+                );
+                if skipped_count > 0 {
+                    println!("  {skipped_count} item(s) would be preserved (--keep-config)");
+                }
+                println!("\n  This was a dry run. Use --force to actually remove artifacts.");
+            }
+            println!();
+            ExitCode::SUCCESS
+        }
+        Ok(ParsedCommand::TransportOverview) => {
+            print!("{TRANSPORT_OVERVIEW}");
+            ExitCode::SUCCESS
+        }
+        Ok(ParsedCommand::TransportHelp) => {
+            print!("{TRANSPORT_HELP}");
+            ExitCode::SUCCESS
+        }
+        Ok(ParsedCommand::TransportUseHelp) => {
+            print!("{TRANSPORT_USE_HELP}");
+            ExitCode::SUCCESS
+        }
+        Ok(ParsedCommand::TransportUse { name, quiet }) => transport_use(name.as_deref(), quiet),
+        Ok(ParsedCommand::Deployment(command)) => {
+            ExitCode::from(deployment::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::Claims(command)) => {
+            ExitCode::from(claims::run(&current_directory(), command))
         }
         Ok(ParsedCommand::MemoryStore {
             key,
@@ -315,37 +447,198 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             }
             Err(error) => ruflo_error(error),
         },
-        Ok(ParsedCommand::ConfigInit { force }) => {
-            let path = current_directory().join("ruflo.toml");
-            if path.exists() && !force {
-                eprintln!(
-                    "configuration already exists: {}; use --force to overwrite",
-                    path.display()
-                );
-                ExitCode::from(1)
-            } else {
-                match std::fs::write(&path, DEFAULT_RUFLO_CONFIG) {
-                    Ok(()) => {
-                        println!("Configuration created: {}", path.display());
-                        ExitCode::SUCCESS
-                    }
-                    Err(error) => task_error(error),
-                }
-            }
-        }
-        Ok(ParsedCommand::ConfigGet { key }) => match ruflo_config::EffectiveConfig::load() {
-            Ok(config) => match config_value(&config, key.as_deref()) {
-                Ok(value) => {
-                    println!("{value}");
+        Ok(ParsedCommand::ConfigInit { force, .. }) => {
+            match config_file::create(&current_directory(), force) {
+                Ok(path) => {
+                    println!("\nConfiguration created: {}\n", path.display());
+                    println!("Key defaults:");
+                    println!("  swarm.topology     = hierarchical");
+                    println!("  swarm.maxAgents    = 8");
+                    println!("  memory.backend     = hybrid");
+                    println!("  mcp.transportType  = stdio");
                     ExitCode::SUCCESS
                 }
-                Err(message) => {
-                    eprintln!("Configuration key not found: {message}");
-                    ExitCode::from(1)
+                Err(error) => task_error_with_exit(error, 1),
+            }
+        }
+        Ok(ParsedCommand::ConfigOverview) => {
+            print!("{CONFIG_OVERVIEW}");
+            ExitCode::SUCCESS
+        }
+        Ok(ParsedCommand::ConfigHelp { subcommand }) => {
+            print!("{}", config_help(subcommand.as_deref()));
+            ExitCode::SUCCESS
+        }
+        Ok(ParsedCommand::ConfigGet { key, json }) => match config_file::load(&current_directory())
+        {
+            Ok(config) => {
+                if let Some(key) = key {
+                    match config_file::get(&config, &key) {
+                        Some(value) if json => {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(
+                                    &serde_json::json!({"key": key, "value": value})
+                                )
+                                .expect("JSON value")
+                            );
+                            ExitCode::SUCCESS
+                        }
+                        Some(value) => {
+                            println!("{key} = {}", display_json_value(value));
+                            ExitCode::SUCCESS
+                        }
+                        None => {
+                            eprintln!("[ERROR] Configuration key not found: {key}");
+                            ExitCode::from(1)
+                        }
+                    }
+                } else {
+                    let flattened = serde_json::Value::Object(config_file::flattened(&config));
+                    if json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&flattened).expect("JSON value")
+                        );
+                    } else if let Some(entries) = flattened.as_object() {
+                        println!("\nCurrent Configuration\n");
+                        let rows = entries
+                            .iter()
+                            .map(|(key, value)| vec![key.clone(), display_table_value(value)])
+                            .collect::<Vec<_>>();
+                        println!(
+                            "{}",
+                            text_table(&[("Key", 25, false), ("Value", 30, false)], &rows)
+                        );
+                    }
+                    ExitCode::SUCCESS
                 }
-            },
-            Err(error) => ruflo_error(error),
+            }
+            Err(error) => task_error_with_exit(error, 1),
         },
+        Ok(ParsedCommand::ConfigSet { key, value }) => {
+            match config_file::set(&current_directory(), &key, config_file::parse_value(&value)) {
+                Ok(_) => {
+                    println!("Set {key} = {value}");
+                    ExitCode::SUCCESS
+                }
+                Err(error) => task_error_with_exit(error, 1),
+            }
+        }
+        Ok(ParsedCommand::ConfigProviders {
+            add,
+            remove,
+            enable,
+            disable,
+            json,
+        }) => {
+            match config_file::providers(
+                &current_directory(),
+                add.as_deref(),
+                remove.as_deref(),
+                enable.as_deref(),
+                disable.as_deref(),
+            ) {
+                Ok(result) => {
+                    for message in &result.messages {
+                        println!("{message}");
+                    }
+                    if let Some(failure) = result.failure {
+                        eprintln!("[ERROR] {failure}");
+                        return ExitCode::from(1);
+                    }
+                    let providers = result.providers;
+                    if result.messages.is_empty() && json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&providers).expect("JSON value")
+                        );
+                    } else if result.messages.is_empty() {
+                        let rows = providers.as_array().expect("providers are always an array");
+                        println!("\nAI Providers\n");
+                        let rows = rows
+                            .iter()
+                            .map(|provider| {
+                                vec![
+                                    provider
+                                        .get("name")
+                                        .and_then(serde_json::Value::as_str)
+                                        .unwrap_or("")
+                                        .into(),
+                                    provider
+                                        .get("model")
+                                        .and_then(serde_json::Value::as_str)
+                                        .unwrap_or("")
+                                        .into(),
+                                    provider
+                                        .get("priority")
+                                        .map(display_json_value)
+                                        .unwrap_or_default(),
+                                    provider
+                                        .get("status")
+                                        .and_then(serde_json::Value::as_str)
+                                        .unwrap_or_else(|| {
+                                            if provider
+                                                .get("enabled")
+                                                .and_then(serde_json::Value::as_bool)
+                                                .unwrap_or(true)
+                                            {
+                                                "Active"
+                                            } else {
+                                                "Disabled"
+                                            }
+                                        })
+                                        .into(),
+                                ]
+                            })
+                            .collect::<Vec<_>>();
+                        println!(
+                            "{}",
+                            text_table(
+                                &[
+                                    ("Provider", 12, false),
+                                    ("Model", 25, false),
+                                    ("Priority", 10, true),
+                                    ("Status", 10, false)
+                                ],
+                                &rows,
+                            )
+                        );
+                        println!("\nUse --add, --remove, --enable, --disable to manage providers");
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(error) => task_error_with_exit(error, 1),
+            }
+        }
+        Ok(ParsedCommand::ConfigReset { section, .. }) => {
+            match config_file::reset(&current_directory(), section.as_deref()) {
+                Ok(path) => {
+                    println!("Configuration reset to defaults: {}", path.display());
+                    ExitCode::SUCCESS
+                }
+                Err(error) => task_error_with_exit(error, 1),
+            }
+        }
+        Ok(ParsedCommand::ConfigExport { output, format: _ }) => {
+            match config_file::export(&current_directory(), std::path::Path::new(&output)) {
+                Ok(path) => {
+                    println!("Configuration exported to: {}", path.display());
+                    ExitCode::SUCCESS
+                }
+                Err(error) => task_error_with_exit(error, 1),
+            }
+        }
+        Ok(ParsedCommand::ConfigImport { file, merge }) => {
+            match config_file::import(&current_directory(), std::path::Path::new(&file), merge) {
+                Ok(_) => {
+                    let path = current_directory().join(&file);
+                    println!("Configuration imported from: {}", path.display());
+                    ExitCode::SUCCESS
+                }
+                Err(error) => task_error_with_exit(error, 1),
+            }
+        }
         Ok(ParsedCommand::MigrateStatus) => {
             let root = current_directory();
             let v2_config = root.join("claude-flow.config.json").is_file();
@@ -865,8 +1158,8 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             }
         }
         Err(error) => {
-            eprintln!("error: {error}");
-            ExitCode::from(ERROR_EXIT)
+            eprintln!("[ERROR] {error}");
+            ExitCode::from(1)
         }
     }
 }
@@ -883,6 +1176,56 @@ fn completion_script(shell: &str) -> &'static str {
         "powershell" => "Register-ArgumentCompleter -CommandName ruflo,claude-flow -ScriptBlock { param($w,$a,$c) 'init','start','status','agent','swarm','memory','task','session','mcp','config','doctor','completions','version' | Where-Object { $_ -like \"$w*\" } }\n",
         _ => unreachable!("parser validates shell"),
     }
+}
+
+fn config_help(subcommand: Option<&str>) -> &'static str {
+    match subcommand {
+        Some("init") => "\nruflo config init\nInitialize configuration\n\nOPTIONS:\n  -f, --force               Overwrite existing configuration [default: false]\n      --sparc               Initialize with SPARC methodology [default: false]\n      --v3                  Initialize V3 configuration [default: true]\n",
+        Some("get") => "\nruflo config get\nGet configuration value\n\nOPTIONS:\n  -k, --key                 Configuration key (dot notation)\n\nEXAMPLES:\n  $ claude-flow config get swarm.topology\n    Get swarm topology\n  $ claude-flow config get -k memory.backend\n    Get memory backend\n",
+        Some("set") => "\nruflo config set\nSet configuration value\n\nOPTIONS:\n  -k, --key                 Configuration key (required)\n  -v, --value               Configuration value (required)\n\nEXAMPLES:\n  $ claude-flow config set swarm.maxAgents 20\n    Set max agents\n  $ claude-flow config set -k memory.backend -v agentdb\n    Set memory backend\n",
+        Some("providers") => "\nruflo config providers\nManage AI providers\n\nOPTIONS:\n  -a, --add                 Add provider\n  -r, --remove              Remove provider\n      --enable              Enable provider\n      --disable             Disable provider\n",
+        Some("reset") => "\nruflo config reset\nReset configuration to defaults\n\nOPTIONS:\n  -f, --force               Skip confirmation [default: false]\n      --section             Reset specific section only\n",
+        Some("export") => "\nruflo config export\nExport configuration\n\nOPTIONS:\n  -o, --output              Output file path\n  -f, --format              Export format (json, yaml) [default: json]\n",
+        Some("import") => "\nruflo config import\nImport configuration\n\nOPTIONS:\n  -f, --file                Configuration file path (required)\n      --merge               Merge with existing configuration [default: false]\n",
+        _ => "\nruflo config\nConfiguration management\n\nSUBCOMMANDS:\n  init            Initialize configuration\n  get             Get configuration value\n  set             Set configuration value\n  providers       Manage AI providers\n  reset           Reset configuration to defaults\n  export          Export configuration\n  import          Import configuration\n\nEXAMPLES:\n  $ claude-flow config init --v3\n    Initialize V3 config\n  $ claude-flow config get swarm.topology\n    Get config value\n  $ claude-flow config set swarm.maxAgents 20\n    Set config value\n",
+    }
+}
+
+fn transport_use(name: Option<&str>, quiet: bool) -> ExitCode {
+    let Some(name) = name.filter(|value| !value.is_empty()) else {
+        eprintln!("[ERROR] Transport name required. Usage: ruflo transport use <name> (e.g. slim)");
+        return ExitCode::from(1);
+    };
+    if name != "slim" {
+        eprintln!("[ERROR] Unknown transport \"{name}\". Supported: slim.");
+        if !quiet {
+            eprintln!("[INFO] Local transport remains the default and needs no explicit \"use\".");
+        }
+        return ExitCode::from(1);
+    }
+    let endpoint = std::env::var("RUFLO_AGNTCY_SLIM_ENDPOINT").ok();
+    match ruflo_runtime::activate_slim(endpoint.as_deref(), &ruflo_runtime::NoSlimTransportAdapter)
+    {
+        ruflo_runtime::TransportOutcome::SlimActivated { endpoint } => {
+            println!("[OK] Active transport switched to: slim ({endpoint})");
+        }
+        ruflo_runtime::TransportOutcome::LocalFallback {
+            reason,
+            activation_error: true,
+        } => {
+            eprintln!("[ERROR] Failed to activate SLIM transport: {reason}");
+            if !quiet {
+                eprintln!("[INFO] Falling back to local transport.");
+            }
+        }
+        ruflo_runtime::TransportOutcome::LocalFallback { .. } => {
+            if !quiet {
+                eprintln!("[INFO] AGNTCY/SLIM transport is not configured — see ADR-380 (v3/docs/adr/ADR-380-agntcy-outshift-runtime-integration.md) for setup. Falling back to local transport.");
+                eprintln!("[INFO] Active transport remains: local (in-process hooks routing).");
+            }
+        }
+    }
+    ExitCode::SUCCESS
 }
 
 fn read_project_message_file(
@@ -910,6 +1253,91 @@ fn task_error(error: std::io::Error) -> ExitCode {
     ExitCode::from(ERROR_EXIT)
 }
 
+fn task_error_with_exit(error: std::io::Error, code: u8) -> ExitCode {
+    eprintln!("[ERROR] {error}");
+    ExitCode::from(code)
+}
+
+fn display_json_value(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(value) => value.clone(),
+        serde_json::Value::Null => "null".into(),
+        other => other.to_string(),
+    }
+}
+
+fn display_table_value(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Array(values) => values
+            .iter()
+            .map(display_json_value)
+            .collect::<Vec<_>>()
+            .join(","),
+        serde_json::Value::Object(_) => "[object Object]".into(),
+        value => display_json_value(value),
+    }
+}
+
+fn text_table(columns: &[(&str, usize, bool)], rows: &[Vec<String>]) -> String {
+    let widths = columns
+        .iter()
+        .enumerate()
+        .map(|(index, (header, limit, _))| {
+            let widest = rows
+                .iter()
+                .filter_map(|row| row.get(index))
+                .map(String::len)
+                .max()
+                .unwrap_or(0);
+            header.len().max(widest).min(*limit)
+        })
+        .collect::<Vec<_>>();
+    let border = format!(
+        "+{}+",
+        widths
+            .iter()
+            .map(|width| "-".repeat(width + 2))
+            .collect::<Vec<_>>()
+            .join("+")
+    );
+    let render = |values: Vec<String>| {
+        format!(
+            "|{}|",
+            values
+                .into_iter()
+                .enumerate()
+                .map(|(index, value)| {
+                    let width = widths[index];
+                    let value = if value.len() > width {
+                        format!("{}...", &value[..width.saturating_sub(3)])
+                    } else {
+                        value
+                    };
+                    if columns[index].2 {
+                        format!(" {:>width$} ", value, width = width)
+                    } else {
+                        format!(" {:<width$} ", value, width = width)
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("|")
+        )
+    };
+    let mut lines = vec![
+        border.clone(),
+        render(
+            columns
+                .iter()
+                .map(|(header, _, _)| (*header).into())
+                .collect(),
+        ),
+        border.clone(),
+    ];
+    lines.extend(rows.iter().cloned().map(render));
+    lines.push(border);
+    lines.join("\n")
+}
+
 fn ruflo_error(error: ruflo_types::RufloError) -> ExitCode {
     eprintln!("error: {error}");
     ExitCode::from(ERROR_EXIT)
@@ -923,28 +1351,6 @@ fn open_memory_store(
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| root.join(".swarm/memory.db"));
     ruflo_storage::SqliteMemoryStore::open(root, path)
-}
-
-fn config_value(
-    config: &ruflo_config::EffectiveConfig,
-    key: Option<&str>,
-) -> Result<String, String> {
-    match key {
-        None => Ok(format!(
-            "policy.allow = {:?}\npolicy.deny = {:?}\nlimits.max_request_bytes = {}\nlimits.max_concurrent_executions = {}\nlimits.max_duration_ms = {}",
-            config.policy.allow,
-            config.policy.deny,
-            config.limits.max_request_bytes,
-            config.limits.max_concurrent_executions,
-            config.limits.max_duration_ms,
-        )),
-        Some("policy.allow") => Ok(format!("{:?}", config.policy.allow)),
-        Some("policy.deny") => Ok(format!("{:?}", config.policy.deny)),
-        Some("limits.max_request_bytes") => Ok(config.limits.max_request_bytes.to_string()),
-        Some("limits.max_concurrent_executions") => Ok(config.limits.max_concurrent_executions.to_string()),
-        Some("limits.max_duration_ms") => Ok(config.limits.max_duration_ms.to_string()),
-        Some(key) => Err(key.into()),
-    }
 }
 
 fn directory_has_entries(path: &std::path::Path) -> bool {

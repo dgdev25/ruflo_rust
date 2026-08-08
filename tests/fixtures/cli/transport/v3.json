@@ -1,0 +1,25 @@
+{
+  "environment": { "RUFLO_DAEMON_AUTOSTART": "0", "NO_COLOR": "1" },
+  "provenance": {
+    "kind": "source-oracle",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_paths": [
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/src/commands/agntcy/transport.ts",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/src/commands/agntcy/runtime.ts"
+    ],
+    "recorded_at": "2026-08-08T07:10:00Z"
+  },
+  "cases": [
+    { "argv": ["transport"], "exit": 0, "stdout": "\nAGNTCY/SLIM Transport\n============================================================\n\n+------------------------------ AGNTCY/SLIM Transport ------------------------------+\n| Local transport (in-process hooks routing) is the default.                        |\n|                                                                                   |\n| Subcommands:                                                                      |\n|                                                                                   |\n|   use <name>   Switch the active transport (currently: slim)                      |\n|                                                                                   |\n| See ADR-380 for setup: v3/docs/adr/ADR-380-agntcy-outshift-runtime-integration.md |\n+-----------------------------------------------------------------------------------+\n\n", "stderr": "" },
+    { "argv": ["transport", "--help"], "exit": 0, "stdout": "\nruflo transport\nManage the active swarm/hive-mind coordination transport (ADR-380 §2)\n\nSUBCOMMANDS:\n  use             Switch the active swarm/hive-mind transport (e.g. slim) — ADR-380 §2\n\nEXAMPLES:\n  $ ruflo transport use slim\n    Switch coordination transport to SLIM\n", "stderr": "" },
+    { "argv": ["transport", "use", "--help"], "exit": 0, "stdout": "\nruflo transport use\nSwitch the active swarm/hive-mind transport (e.g. slim) — ADR-380 §2\n\nEXAMPLES:\n  $ ruflo transport use slim\n    Switch coordination transport to SLIM (opt-in, degrades to local)\n", "stderr": "" },
+    { "argv": ["transport", "use"], "exit": 1, "stdout": "", "stderr": "[ERROR] Transport name required. Usage: ruflo transport use <name> (e.g. slim)\n" },
+    { "argv": ["transport", "use", "bogus"], "exit": 1, "stdout": "", "stderr": "[ERROR] Unknown transport \"bogus\". Supported: slim.\n[INFO] Local transport remains the default and needs no explicit \"use\".\n" },
+    { "argv": ["transport", "use", "slim"], "exit": 0, "stdout": "", "stderr": "[INFO] AGNTCY/SLIM transport is not configured — see ADR-380 (v3/docs/adr/ADR-380-agntcy-outshift-runtime-integration.md) for setup. Falling back to local transport.\n[INFO] Active transport remains: local (in-process hooks routing).\n" },
+    { "argv": ["transport", "use", "SLIM"], "exit": 0, "stdout": "", "stderr": "[INFO] AGNTCY/SLIM transport is not configured — see ADR-380 (v3/docs/adr/ADR-380-agntcy-outshift-runtime-integration.md) for setup. Falling back to local transport.\n[INFO] Active transport remains: local (in-process hooks routing).\n" },
+    { "argv": ["transport", "use", "--transport", "slim"], "exit": 0, "stdout": "", "stderr": "[INFO] AGNTCY/SLIM transport is not configured — see ADR-380 (v3/docs/adr/ADR-380-agntcy-outshift-runtime-integration.md) for setup. Falling back to local transport.\n[INFO] Active transport remains: local (in-process hooks routing).\n" },
+    { "argv": ["--quiet", "transport", "use", "slim"], "exit": 0, "stdout": "", "stderr": "" },
+    { "argv": ["--quiet", "transport", "use", "bogus"], "exit": 1, "stdout": "", "stderr": "[ERROR] Unknown transport \"bogus\". Supported: slim.\n" },
+    { "argv": ["transport", "use", "slim", "--format", "json"], "exit": 0, "stdout": "", "stderr": "[INFO] AGNTCY/SLIM transport is not configured — see ADR-380 (v3/docs/adr/ADR-380-agntcy-outshift-runtime-integration.md) for setup. Falling back to local transport.\n[INFO] Active transport remains: local (in-process hooks routing).\n" }
+  ]
+}

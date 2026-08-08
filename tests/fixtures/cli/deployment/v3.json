@@ -1,0 +1,51 @@
+{
+  "source": "v3/@claude-flow/cli/src/commands/deployment.ts",
+  "source_sha256": "be3867a465b6a124f6cb0e8e39dc51e49ccdd207f5ad7318dc2e9e9aac926ea7",
+  "environment": {
+    "NO_COLOR": "1"
+  },
+  "cases": [
+    {
+      "argv": ["deployment"],
+      "exit": 0,
+      "stdout": "\nRuFlo Deployment\nMulti-environment deployment management\n\nSubcommands:\n  - deploy       - Deploy to target environment\n  - status       - Check deployment status\n  - rollback     - Rollback to previous version\n  - history      - View deployment history\n  - environments - Manage deployment environments\n  - logs         - View deployment logs\n  - release      - Create a new release\n\nFeatures:\n  - Zero-downtime rolling deployments\n  - Automatic rollback on failure\n  - Environment-specific configurations\n  - Deployment previews for PRs\n\nCreated with love by ruv.io\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["deployment", "environments"],
+      "exit": 0,
+      "stdout": "\nDeployment Environments\n\nNo environments configured. Use --action add to create one.\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["deploy", "rollback"],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "[ERROR] Environment is required\n  Use --env or -e to specify\n"
+    },
+    {
+      "argv": ["deployment", "release"],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "[ERROR] Version is required\n  Use --version or -v, or ensure package.json has a version field\n"
+    },
+    {
+      "argv": ["deployment", "envs", "--action", "invalid"],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "[ERROR] Unknown action 'invalid'\n  Valid actions: list, add, remove\n"
+    },
+    {
+      "argv": ["deployment", "logs"],
+      "exit": 0,
+      "stdout": "\nDeployment Logs\n\nNo deployment logs found\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["deployment", "history", "--env", "prod"],
+      "exit": 0,
+      "stdout": "\nDeployment History\nFiltered by environment: prod\n\nNo deployment history found\n",
+      "stderr": ""
+    }
+  ]
+}

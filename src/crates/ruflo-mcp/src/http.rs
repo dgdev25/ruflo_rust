@@ -364,7 +364,6 @@ async fn handle_mcp_inner(
             let tool_name = name.to_string();
             let tool_args = arguments.clone();
             let timeout_ms = state.limits.request_timeout_ms;
-            let active_executions = active_executions;
             let request_bytes = bytes.len();
             let identity = identity.clone();
             let elapsed_before_dispatch = started.elapsed().as_millis() as u64;

@@ -7,8 +7,7 @@ Usage:
   scripts/capture-reference-contract.sh [--replace] <fixture-path> -- <command> [args...]
 
 Approved fixture paths:
-  tests/fixtures/cli/version.json
-  tests/fixtures/cli/help.json
+  tests/fixtures/cli/**/*.json
 EOF
 }
 
@@ -32,8 +31,13 @@ if [[ "${1:-}" != "--" ]]; then
 fi
 shift
 
+if [[ "$fixture_path" == /* || "$fixture_path" == ../* || "$fixture_path" == *"/../"* ]]; then
+  echo "refusing unsafe fixture path: $fixture_path" >&2
+  exit 65
+fi
+
 case "$fixture_path" in
-  tests/fixtures/cli/version.json|tests/fixtures/cli/help.json)
+  tests/fixtures/cli/*.json|tests/fixtures/cli/*/*.json|tests/fixtures/cli/*/*/*.json)
     ;;
   tests/fixtures/mcp/tools-list.json)
     echo "refusing to capture reduced-schema fixture with CLI recorder: $fixture_path" >&2

@@ -82,7 +82,7 @@ fn handle_request(
         Err(error) => json!({
             "jsonrpc": "2.0",
             "id": id,
-            "error": error.into_json()
+            "error": (*error).into_json()
         }),
     }
 }
@@ -91,38 +91,38 @@ fn request_to_response(
     dispatcher: &Dispatcher,
     request: &Value,
     request_context: RequestContext,
-) -> Result<Value, crate::dispatcher::ErrorObject> {
+) -> Result<Value, Box<crate::dispatcher::ErrorObject>> {
     if request.get("jsonrpc") != Some(&Value::String("2.0".to_string())) {
-        return Err(invalid_request("jsonrpc must equal `2.0`"));
+        return Err(Box::new(invalid_request("jsonrpc must equal `2.0`")));
     }
 
     let method = request
         .get("method")
         .and_then(Value::as_str)
-        .ok_or_else(|| invalid_request("method must be a string"))?;
+        .ok_or_else(|| Box::new(invalid_request("method must be a string")))?;
     let params = request.get("params").cloned().unwrap_or_else(|| json!({}));
     if !params.is_object() {
-        return Err(invalid_request("params must be an object"));
+        return Err(Box::new(invalid_request("params must be an object")));
     }
 
     match method {
         "tools/list" => Ok(dispatcher.list_tools(&request_context)),
         "tools/call" => {
             let name = params.get("name").and_then(Value::as_str).ok_or_else(|| {
-                map_error(RufloError::invalid_input(
+                Box::new(map_error(RufloError::invalid_input(
                     "tool.invalid_name",
                     "missing tools/call name",
-                ))
+                )))
             })?;
             let arguments = params
                 .get("arguments")
                 .cloned()
                 .unwrap_or_else(|| json!({}));
             if !arguments.is_object() {
-                return Err(map_error(RufloError::invalid_input(
+                return Err(Box::new(map_error(RufloError::invalid_input(
                     "tool.invalid_arguments",
                     "tools/call arguments must be an object",
-                )));
+                ))));
             }
 
             dispatcher
@@ -134,9 +134,9 @@ fn request_to_response(
                     },
                 )
                 .map(|result| result.into_json())
-                .map_err(map_error)
+                .map_err(|error| Box::new(map_error(error)))
         }
-        _ => Err(method_not_found(method)),
+        _ => Err(Box::new(method_not_found(method))),
     }
 }
 

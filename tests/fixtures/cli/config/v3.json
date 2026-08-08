@@ -1,0 +1,70 @@
+{
+  "environment": { "RUFLO_DAEMON_AUTOSTART": "0" },
+  "provenance": {
+    "kind": "source-oracle-sequence",
+    "source": "managed:ruflo-cli@3.34.0",
+    "source_paths": [
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/src/commands/config.ts",
+      "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/src/services/config-file-manager.ts"
+    ],
+    "recorded_at": "2026-08-08T06:50:00Z",
+    "redactions": ["temporary project path replaced with <PROJECT>"]
+  },
+  "cases": [
+    {
+      "argv": ["config"],
+      "exit": 0,
+      "stdout": "\nConfiguration Management\n\nUsage: claude-flow config <subcommand> [options]\n\nSubcommands:\n  - init       - Initialize configuration\n  - get        - Get configuration value\n  - set        - Set configuration value\n  - providers  - Manage AI providers\n  - reset      - Reset to defaults\n  - export     - Export configuration\n  - import     - Import configuration\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["config", "--help"],
+      "exit": 0,
+      "stdout": "\nruflo config\nConfiguration management\n\nSUBCOMMANDS:\n  init            Initialize configuration\n  get             Get configuration value\n  set             Set configuration value\n  providers       Manage AI providers\n  reset           Reset configuration to defaults\n  export          Export configuration\n  import          Import configuration\n\nEXAMPLES:\n  $ claude-flow config init --v3\n    Initialize V3 config\n  $ claude-flow config get swarm.topology\n    Get config value\n  $ claude-flow config set swarm.maxAgents 20\n    Set config value\n",
+      "stderr": ""
+    },
+    {
+      "argv": ["config", "init", "--v3"],
+      "exit": 0,
+      "stdout": "\nConfiguration created: <PROJECT>/claude-flow.config.json\n\nKey defaults:\n  swarm.topology     = hierarchical\n  swarm.maxAgents    = 8\n  memory.backend     = hybrid\n  mcp.transportType  = stdio\n",
+      "stderr": ""
+    },
+    { "argv": ["config", "get", "swarm.topology"], "exit": 0, "stdout": "swarm.topology = hierarchical\n", "stderr": "" },
+    { "argv": ["config", "set", "-k", "swarm.maxAgents", "-v", "20"], "exit": 0, "stdout": "Set swarm.maxAgents = 20\n", "stderr": "" },
+    { "argv": ["config", "providers", "--add", "local"], "exit": 0, "stdout": "Added provider: local\n", "stderr": "" },
+    { "argv": ["config", "providers", "--disable", "local"], "exit": 0, "stdout": "Disabled provider: local\n", "stderr": "" },
+    { "argv": ["config", "export", "--output", "backup.json", "--format", "json"], "exit": 0, "stdout": "Configuration exported to: <PROJECT>/backup.json\n", "stderr": "" },
+    { "argv": ["config", "reset", "--force", "--section", "swarm"], "exit": 0, "stdout": "Configuration reset to defaults: <PROJECT>/claude-flow.config.json\n", "stderr": "" },
+    { "argv": ["config", "import", "--file", "backup.json", "--merge"], "exit": 0, "stdout": "Configuration imported from: <PROJECT>/backup.json\n", "stderr": "" },
+    { "argv": ["config", "get", "swarm.maxAgents", "--format", "json"], "exit": 0, "stdout": "{\n  \"key\": \"swarm.maxAgents\",\n  \"value\": 20\n}\n", "stderr": "" },
+    { "argv": ["config", "export", "-f", "text"], "exit": 1, "stdout": "", "stderr": "[ERROR] Invalid value for --format: text. Must be one of: json, yaml\n" },
+    { "argv": ["config", "export", "-f", "table"], "exit": 1, "stdout": "", "stderr": "[ERROR] Invalid value for --format: table. Must be one of: json, yaml\n" },
+    { "argv": ["config", "export", "-f", "yaml"], "exit": 1, "stdout": "", "stderr": "[ERROR] Invalid value for --format: yaml. Must be one of: text, json, table\n" },
+    { "argv": ["config", "set", "swarm.maxAgents", "20"], "exit": 1, "stdout": "", "stderr": "[ERROR] Required option missing: --key\n[ERROR] Required option missing: --value\n" },
+    { "argv": ["config", "get", "missing.key"], "exit": 1, "stdout": "", "stderr": "[ERROR] Configuration key not found: missing.key\n" },
+    { "argv": ["config", "import", "--file", "missing.json"], "exit": 1, "stdout": "", "stderr": "[ERROR] Import file not found: <PROJECT>/missing.json\n" },
+    { "argv": ["config", "providers", "--remove", "missing"], "exit": 1, "stdout": "", "stderr": "[ERROR] Provider 'missing' not found\n" }
+  ],
+  "final_files": {
+    "claude-flow.config.json": {
+      "version": "3.5",
+      "agents": { "defaultType": "coder", "autoSpawn": false, "maxConcurrent": 8, "timeout": 300000, "providers": [] },
+      "swarm": { "topology": "hierarchical", "maxAgents": 20, "autoScale": false, "coordinationStrategy": "leader", "healthCheckInterval": 30000 },
+      "memory": { "backend": "hybrid", "persistPath": "./data/memory", "cacheSize": 1000, "enableHNSW": true, "vectorDimension": 384 },
+      "mcp": { "serverHost": "localhost", "serverPort": 3000, "autoStart": false, "transportType": "stdio", "tools": [] },
+      "cli": { "colorOutput": true, "interactive": true, "verbosity": "normal", "outputFormat": "text", "progressStyle": "spinner" },
+      "hooks": { "enabled": true, "autoExecute": true, "hooks": [] },
+      "providers": [{ "name": "local", "enabled": false, "priority": 1 }]
+    },
+    "backup.json": {
+      "version": "3.5",
+      "agents": { "defaultType": "coder", "autoSpawn": false, "maxConcurrent": 8, "timeout": 300000, "providers": [] },
+      "swarm": { "topology": "hierarchical", "maxAgents": 20, "autoScale": false, "coordinationStrategy": "leader", "healthCheckInterval": 30000 },
+      "memory": { "backend": "hybrid", "persistPath": "./data/memory", "cacheSize": 1000, "enableHNSW": true, "vectorDimension": 384 },
+      "mcp": { "serverHost": "localhost", "serverPort": 3000, "autoStart": false, "transportType": "stdio", "tools": [] },
+      "cli": { "colorOutput": true, "interactive": true, "verbosity": "normal", "outputFormat": "text", "progressStyle": "spinner" },
+      "hooks": { "enabled": true, "autoExecute": true, "hooks": [] },
+      "providers": [{ "name": "local", "enabled": false, "priority": 1 }]
+    }
+  }
+}
