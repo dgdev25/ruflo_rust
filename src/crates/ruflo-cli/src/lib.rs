@@ -16,6 +16,7 @@ mod deployment;
 mod eject;
 mod funnel;
 mod funnel_command;
+mod gaia_bench;
 mod guidance;
 mod issues;
 mod lifecycle;
@@ -390,6 +391,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::Performance(command)) => {
             ExitCode::from(performance::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::GaiaBench(command)) => {
+            ExitCode::from(gaia_bench::run(&current_directory(), command))
         }
         Ok(ParsedCommand::NativeOverview { name }) => {
             let root = current_directory();

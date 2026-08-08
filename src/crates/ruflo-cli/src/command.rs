@@ -51,6 +51,7 @@ pub enum ParsedCommand {
     Appliance(crate::appliance::ApplianceCommand),
     Guidance(crate::guidance::GuidanceCommand),
     Performance(crate::performance::PerformanceCommand),
+    GaiaBench(crate::gaia_bench::GaiaBenchCommand),
     TransferStore(crate::transfer_store::TransferStoreCommand),
     MemoryStore {
         key: String,
