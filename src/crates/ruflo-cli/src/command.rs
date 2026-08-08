@@ -62,6 +62,7 @@ pub enum ParsedCommand {
     Embeddings(crate::embeddings::EmbeddingsCommand),
     HiveMind(crate::hive_mind::HiveMindCommand),
     Neural(crate::neural::NeuralCommand),
+    Hooks(crate::hooks::HooksCommand),
     TransferStore(crate::transfer_store::TransferStoreCommand),
     MemoryStore {
         key: String,
@@ -1143,6 +1144,28 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             plan_file: option_value(&args, "--plan-file", "--plan-file"),
             strict: args.iter().any(|v| v == "--strict"),
             json: args.iter().any(|v| v == "--json" || v == "--format=json"),
+        }));
+    }
+    if normalized.first() == Some(&"hooks") {
+        let operation = normalized.get(1).copied().unwrap_or("").to_string();
+        return Ok(ParsedCommand::Hooks(crate::hooks::HooksCommand {
+            operation,
+            task: option_value(&args, "--task", "-t").or_else(|| {
+                // `hooks worker-dispatch <trigger>` positional.
+                normalized.get(2).map(|s| s.to_string())
+            }),
+            description: option_value(&args, "--description", "-d"),
+            file_path: option_value(&args, "--file", "--file"),
+            command: option_value(&args, "--command", "-c"),
+            agent: option_value(&args, "--agent", "-a"),
+            task_id: option_value(&args, "--task-id", "--task-id"),
+            model: option_value(&args, "--model", "-m"),
+            outcome: option_value(&args, "--outcome", "--outcome"),
+            enabled: args.iter().any(|v| matches!(v.as_str(), "--enabled" | "-e")),
+            hook_type: option_value(&args, "--type", "-t"),
+            json: args.iter().any(|v| v == "--json" || v == "--format=json"),
+            verbose: args.iter().any(|v| matches!(v.as_str(), "--verbose" | "-v")),
+            positional: vec![],
         }));
     }
     if normalized.first() == Some(&"neural") {

@@ -21,6 +21,7 @@ mod funnel;
 mod funnel_command;
 mod gaia_bench;
 mod guidance;
+mod hooks;
 mod hive_mind;
 mod issues;
 mod lifecycle;
@@ -434,6 +435,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::Neural(command)) => {
             ExitCode::from(neural::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::Hooks(command)) => {
+            ExitCode::from(hooks::run(&current_directory(), command))
         }
         Ok(ParsedCommand::NativeOverview { name }) => {
             let root = current_directory();
