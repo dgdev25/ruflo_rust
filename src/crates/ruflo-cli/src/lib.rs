@@ -184,8 +184,33 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             }
         }
         Ok(ParsedCommand::Progress) => {
-            println!("Native V3 command migration progress\nTop-level families: 15 initial native commands; 53 required for parity\nStatus: in progress — source differential fixtures remain mandatory");
-            ExitCode::SUCCESS
+            let metrics_path = current_directory().join(".claude-flow/metrics/v3-progress.json");
+            if let Ok(raw) = std::fs::read_to_string(&metrics_path) {
+                if let Ok(data) = serde_json::from_str::<serde_json::Value>(&raw) {
+                    let pct = data
+                        .get("overall")
+                        .or_else(|| data.get("progress"))
+                        .and_then(|v| v.as_u64().or(v.as_f64().map(|f| f as u64)))
+                        .unwrap_or(0);
+                    println!("\nV3 Implementation Progress");
+                    println!();
+                    let filled = (pct as usize) * 30 / 100;
+                    println!("[{}{}] {pct}%", "█".repeat(filled), "░".repeat(30 - filled));
+                    if let Some(last) = data.get("lastUpdated").and_then(serde_json::Value::as_str)
+                    {
+                        println!("\nLast updated: {last}");
+                    }
+                    ExitCode::SUCCESS
+                } else {
+                    println!("Progress metrics file is malformed");
+                    ExitCode::from(1)
+                }
+            } else {
+                println!("\nV3 Implementation Progress");
+                println!("\nNo metrics file found at .claude-flow/metrics/v3-progress.json");
+                println!("Run 'ruflo progress sync' to calculate and persist progress.");
+                ExitCode::SUCCESS
+            }
         }
         Ok(ParsedCommand::CleanupHelp) => {
             print!("{CLEANUP_HELP}");
