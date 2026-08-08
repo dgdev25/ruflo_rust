@@ -1,6 +1,7 @@
 //! Shared native CLI entrypoint for thin Ruflo-compatible binaries.
 
 mod announcements;
+mod auth;
 mod benchmark;
 mod claims;
 mod cleanup;
@@ -358,6 +359,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::Providers(command)) => {
             ExitCode::from(providers::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::Auth(command)) => {
+            ExitCode::from(auth::run(&current_directory(), command))
         }
         Ok(ParsedCommand::NativeOverview { name }) => {
             let root = current_directory();

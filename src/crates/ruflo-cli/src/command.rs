@@ -44,6 +44,7 @@ pub enum ParsedCommand {
     Policy(crate::policy::PolicyCommand),
     UpdateCmd(crate::update_cmd::UpdateCommand),
     Providers(crate::providers::ProvidersCommand),
+    Auth(crate::auth::AuthCommand),
     MemoryStore {
         key: String,
         value: String,
@@ -897,6 +898,17 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
                 json: args.iter().any(|v| v == "--json"),
             },
         ));
+    }
+    if normalized.first() == Some(&"auth") {
+        let operation = normalized.get(1).copied().unwrap_or("status").to_string();
+        return Ok(ParsedCommand::Auth(crate::auth::AuthCommand {
+            operation,
+            profile: option_value(&args, "--profile", "--profile"),
+            no_browser: args.iter().any(|v| v == "--no-browser"),
+            token_stdin: args.iter().any(|v| v == "--token-stdin"),
+            all: args.iter().any(|v| v == "--all"),
+            json: args.iter().any(|v| v == "--json"),
+        }));
     }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {
         let key = option_value(&args, "--key", "-k").ok_or("memory key is required")?;
