@@ -39,6 +39,7 @@ pub enum ParsedCommand {
     Eject(crate::eject::EjectCommand),
     Issues(crate::issues::IssuesCommand),
     Benchmark(crate::benchmark::BenchmarkCommand),
+    MetaHarness(crate::metaharness::MetaCommand),
     MemoryStore {
         key: String,
         value: String,
@@ -782,6 +783,16 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             Some(other) => return Err(format!("Unknown subcommand '{other}' for benchmark")),
         };
         return Ok(ParsedCommand::Benchmark(cmd));
+    }
+    if normalized.first() == Some(&"metaharness") {
+        let sub = normalized.get(1).copied().map(str::to_owned);
+        let extra = args.iter().skip(2).cloned().collect::<Vec<_>>();
+        return Ok(ParsedCommand::MetaHarness(
+            crate::metaharness::MetaCommand {
+                subcommand: sub,
+                extra_args: extra,
+            },
+        ));
     }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {
         let key = option_value(&args, "--key", "-k").ok_or("memory key is required")?;

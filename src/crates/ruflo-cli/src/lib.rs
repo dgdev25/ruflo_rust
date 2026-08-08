@@ -14,6 +14,7 @@ mod funnel;
 mod funnel_command;
 mod issues;
 mod lifecycle;
+mod metaharness;
 mod settings;
 mod spinner;
 mod version;
@@ -298,6 +299,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::Benchmark(command)) => {
             ExitCode::from(benchmark::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::MetaHarness(command)) => {
+            ExitCode::from(metaharness::run(&current_directory(), command))
         }
         Ok(ParsedCommand::MemoryStore {
             key,

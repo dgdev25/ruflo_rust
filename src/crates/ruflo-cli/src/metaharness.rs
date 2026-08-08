@@ -1,0 +1,108 @@
+//! Native V3 `metaharness` command — ADR-150 deep integration delegator.
+//!
+//! Source: `v3/@claude-flow/cli/src/commands/metaharness.ts`. Thin delegator
+//! that spawns the plugin scripts at `plugins/ruflo-metaharness/scripts/`.
+//! Graceful degradation (exit 0) when the plugin is absent. The flywheel
+//! in-process branch needs ADR-322 transaction services (deferred).
+
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+const SUBCOMMANDS: &[(&str, &str)] = &[
+    ("score", "score.mjs"),
+    ("genome", "genome.mjs"),
+    ("mcp-scan", "mcp-scan.mjs"),
+    ("threat-model", "threat-model.mjs"),
+    ("oia-audit", "oia-audit.mjs"),
+    ("audit-trend", "audit-trend.mjs"),
+    ("audit-list", "audit-list.mjs"),
+    ("similarity", "similarity.mjs"),
+    ("drift-from-history", "drift-from-history.mjs"),
+    ("mint", "mint.mjs"),
+    ("redblue", "redblue.mjs"),
+    ("learn", "learn.mjs"),
+    ("gepa", "gepa.mjs"),
+    ("evolve", "evolve.mjs"),
+    ("bench", "bench.mjs"),
+];
+
+const OVERVIEW: &str = "\nnpx ruflo metaharness <subcommand> [options]\n\nSubcommands:\n  score         5-dimension harness readiness scorecard\n  genome        7-section categorical readiness report\n  mcp-scan      static security scan of declared MCP surface\n  threat-model  enterprise-grade threat model\n  oia-audit     composite weekly audit (oia + threat + mcp) -> memory\n  audit-list    enumerate timestamped audit records\n  audit-trend   diff two audit records (drift detection)\n  similarity    ADR-152 -- weighted similarity between two harness fingerprints\n  drift-from-history  1-command drift detection against most recent audit\n  mint          scaffold a custom harness (dry-run by default)\n  redblue       adversarial red/blue LLM testing (init|run|patch|attack|report)\n  evolve        Darwin candidate evolution\n  bench         create or verify a stable benchmark suite\n  flywheel      receipt loop: run | status | receipts | history | promote\n\nEach subcommand accepts --format json|table and --help.\n\nADR-150 -- runs as subprocess; graceful degradation if metaharness is not installed.\n";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MetaCommand {
+    pub subcommand: Option<String>,
+    pub extra_args: Vec<String>,
+}
+
+pub fn run(_root: &Path, command: MetaCommand) -> u8 {
+    let sub = command.subcommand.as_deref();
+    if sub.is_none() || matches!(sub, Some("help") | Some("--help") | Some("-h")) {
+        print!("{OVERVIEW}");
+        return 0;
+    }
+    let sub = sub.unwrap();
+    if sub == "flywheel" {
+        eprintln!("[ERROR] metaharness flywheel requires the ADR-322 transaction service (not yet ported to native).");
+        eprintln!("  Available operations: status | run | receipts | history | promote");
+        return 1;
+    }
+    let script_name = match SUBCOMMANDS.iter().find(|(name, _)| *name == sub) {
+        Some((_, script)) => *script,
+        None => {
+            eprintln!("[ERROR] Unknown subcommand: {sub}");
+            eprintln!(
+                "  Valid: {}",
+                SUBCOMMANDS
+                    .iter()
+                    .map(|(n, _)| *n)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            return 2;
+        }
+    };
+    let script_dir = locate_plugin_scripts(script_name);
+    let Some(dir) = script_dir else {
+        eprintln!("[WARN] metaharness: plugins/ruflo-metaharness/scripts/ not found. Install ruflo with `npm i ruflo` or run from the ruflo repo.");
+        eprintln!("  (ADR-150 graceful degradation: this command is a thin delegator over the plugin; the plugin must be present.)");
+        return 0; // feature-not-available, not a runtime failure
+    };
+    let script_path = dir.join(script_name);
+    let rest = if command.extra_args.is_empty() {
+        Vec::new()
+    } else {
+        command.extra_args.clone()
+    };
+    let status = Command::new("node").arg(&script_path).args(&rest).status();
+    match status {
+        Ok(s) => s.code().unwrap_or(1) as u8,
+        Err(_) => {
+            eprintln!("[ERROR] metaharness: failed to spawn node for {script_name}");
+            1
+        }
+    }
+}
+
+/// Walk up from cwd to find `plugins/ruflo-metaharness/scripts/` containing
+/// `_harness.mjs` and the required script.
+fn locate_plugin_scripts(required_script: &str) -> Option<PathBuf> {
+    let cwd = std::env::current_dir().ok()?;
+    let mut candidates = Vec::new();
+    // from cwd and each parent (up to 8 levels)
+    let mut p = cwd.clone();
+    for _ in 0..8 {
+        candidates.push(p.join("plugins/ruflo-metaharness/scripts"));
+        candidates.push(p.join("node_modules/@claude-flow/cli/plugins/ruflo-metaharness/scripts"));
+        if let Some(parent) = p.parent() {
+            p = parent.to_path_buf();
+        } else {
+            break;
+        }
+    }
+    for dir in &candidates {
+        if dir.join("_harness.mjs").exists() && dir.join(required_script).exists() {
+            return Some(dir.clone());
+        }
+    }
+    None
+}
