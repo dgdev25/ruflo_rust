@@ -338,7 +338,16 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
         let quiet = args
             .iter()
             .any(|value| matches!(value.as_str(), "--quiet" | "-Q"));
-        if normalized.get(1) == Some(&"use") {
+        // Find "use" after "transport", skipping any global flags (--quiet/-Q).
+        let use_pos = normalized
+            .iter()
+            .skip(1)
+            .position(|v| !matches!(*v, "--quiet" | "-Q" | "--verbose" | "-v"))
+            .and_then(|offset| {
+                let idx = offset + 1;
+                (normalized.get(idx).copied() == Some("use")).then_some(idx)
+            });
+        if use_pos.is_some() {
             if normalized
                 .iter()
                 .any(|value| matches!(*value, "--help" | "-h"))
