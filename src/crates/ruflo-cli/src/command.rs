@@ -16,6 +16,32 @@ pub enum ParsedCommand {
         daemon: bool,
     },
     Progress,
+    MemoryStore {
+        key: String,
+        value: String,
+        namespace: String,
+        tags_json: Option<String>,
+        provenance_type: String,
+        upsert: bool,
+        path: Option<String>,
+    },
+    MemoryRetrieve {
+        key: String,
+        namespace: String,
+        value_only: bool,
+        path: Option<String>,
+    },
+    MemorySearch {
+        query: String,
+        namespace: Option<String>,
+        limit: usize,
+        path: Option<String>,
+    },
+    MemoryList {
+        namespace: Option<String>,
+        limit: usize,
+        path: Option<String>,
+    },
     Help,
     Init,
     Status,
@@ -170,7 +196,72 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
     if normalized.first() == Some(&"progress") {
         return Ok(ParsedCommand::Progress);
     }
-
+    if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {
+        let key = option_value(&args, "--key", "-k").ok_or("memory key is required")?;
+        let value = option_value(&args, "--value", "--value")
+            .or_else(|| memory_positionals(&args).into_iter().next())
+            .ok_or("memory value is required")?;
+        return Ok(ParsedCommand::MemoryStore {
+            key,
+            value,
+            namespace: option_value(&args, "--namespace", "-n").unwrap_or_else(|| "default".into()),
+            tags_json: option_value(&args, "--tags", "--tags").map(|tags| {
+                serde_json::to_string(
+                    &tags
+                        .split(',')
+                        .map(str::trim)
+                        .filter(|tag| !tag.is_empty())
+                        .collect::<Vec<_>>(),
+                )
+                .expect("tag serialization is infallible")
+            }),
+            provenance_type: option_value(&args, "--provenance", "--provenance")
+                .unwrap_or_else(|| "unknown".into()),
+            upsert: !args.iter().any(|argument| argument == "--no-upsert"),
+            path: option_value(&args, "--path", "--path"),
+        });
+    }
+    if normalized.len() >= 2
+        && normalized[0] == "memory"
+        && matches!(normalized[1], "retrieve" | "get")
+    {
+        let key = option_value(&args, "--key", "-k")
+            .or_else(|| memory_positionals(&args).into_iter().next())
+            .ok_or("memory key is required")?;
+        return Ok(ParsedCommand::MemoryRetrieve {
+            key,
+            namespace: option_value(&args, "--namespace", "-n").unwrap_or_else(|| "default".into()),
+            value_only: args.iter().any(|argument| argument == "--value-only"),
+            path: option_value(&args, "--path", "--path"),
+        });
+    }
+    if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "search" {
+        let query = option_value(&args, "--query", "-q")
+            .or_else(|| memory_positionals(&args).into_iter().next())
+            .ok_or("memory search query is required")?;
+        return Ok(ParsedCommand::MemorySearch {
+            query,
+            namespace: option_value(&args, "--namespace", "-n"),
+            limit: parse_positive_usize(
+                option_value(&args, "--limit", "-l"),
+                10,
+                "memory search limit",
+            )?,
+            path: option_value(&args, "--path", "--path"),
+        });
+    }
+    if normalized.len() >= 2 && normalized[0] == "memory" && matches!(normalized[1], "list" | "ls")
+    {
+        return Ok(ParsedCommand::MemoryList {
+            namespace: option_value(&args, "--namespace", "-n"),
+            limit: parse_positive_usize(
+                option_value(&args, "--limit", "-l"),
+                50,
+                "memory list limit",
+            )?,
+            path: option_value(&args, "--path", "--path"),
+        });
+    }
     if normalized.starts_with(&["agent", "spawn"]) {
         let agent_type = option_value(&args, "--type", "-t").ok_or("agent type is required")?;
         let name =
@@ -479,6 +570,57 @@ fn option_value(args: &[String], long: &str, short: &str) -> Option<String> {
         .cloned()
 }
 
+fn memory_positionals(args: &[String]) -> Vec<String> {
+    const VALUE_OPTIONS: &[&str] = &[
+        "--key",
+        "-k",
+        "--value",
+        "--namespace",
+        "-n",
+        "--tags",
+        "--provenance",
+        "--path",
+        "--query",
+        "-q",
+        "--limit",
+        "-l",
+        "--threshold",
+        "--type",
+        "-t",
+    ];
+    let mut positionals = Vec::new();
+    let mut index = 2;
+    while index < args.len() {
+        if VALUE_OPTIONS.contains(&args[index].as_str()) {
+            index += 2;
+        } else if args[index].starts_with('-') {
+            index += 1;
+        } else {
+            positionals.push(args[index].clone());
+            index += 1;
+        }
+    }
+    positionals
+}
+
+fn parse_positive_usize(
+    value: Option<String>,
+    default: usize,
+    name: &str,
+) -> Result<usize, String> {
+    let value = match value {
+        Some(value) => value,
+        None => return Ok(default),
+    };
+    let parsed = value
+        .parse::<usize>()
+        .map_err(|_| format!("{name} must be a positive integer"))?;
+    if parsed == 0 {
+        return Err(format!("{name} must be a positive integer"));
+    }
+    Ok(parsed)
+}
+
 #[cfg(test)]
 mod tests {
     use std::ffi::OsString;
@@ -601,5 +743,27 @@ mod tests {
             Ok(ParsedCommand::AgentLogs { agent_id, tail: 25, level, follow: true, since: Some(since) })
                 if agent_id == "coder-1" && level == "warn" && since == "30m"
         ));
+    }
+
+    #[test]
+    fn memory_core_subcommands_preserve_v3_aliases_and_options() {
+        assert!(matches!(
+            parse(argv(&["memory", "store", "-k", "goal", "--value", "ship", "-n", "plans", "--tags", "v3,rust", "--provenance", "user_claim"])),
+            Ok(ParsedCommand::MemoryStore { key, value, namespace, tags_json: Some(tags), provenance_type, upsert: true, .. })
+                if key == "goal" && value == "ship" && namespace == "plans" && tags == r#"["v3","rust"]"# && provenance_type == "user_claim"
+        ));
+        assert!(matches!(
+            parse(argv(&["memory", "get", "-k", "goal", "--value-only"])),
+            Ok(ParsedCommand::MemoryRetrieve { key, value_only: true, .. }) if key == "goal"
+        ));
+        assert!(matches!(
+            parse(argv(&["memory", "search", "-q", "ship", "-n", "plans", "-l", "3"])),
+            Ok(ParsedCommand::MemorySearch { query, namespace: Some(namespace), limit: 3, .. }) if query == "ship" && namespace == "plans"
+        ));
+        assert!(matches!(
+            parse(argv(&["memory", "ls", "-n", "plans", "-l", "2"])),
+            Ok(ParsedCommand::MemoryList { namespace: Some(namespace), limit: 2, .. }) if namespace == "plans"
+        ));
+        assert!(parse(argv(&["memory", "search", "-q", "ship", "-l", "0"])).is_err());
     }
 }

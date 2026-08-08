@@ -14,6 +14,7 @@ path = "src/lib.rs"
 ruflo-config = { path = "../ruflo-config" }
 ruflo-codex-cli = { path = "../ruflo-codex-cli" }
 ruflo-mcp = { path = "../ruflo-mcp" }
+ruflo-storage = { path = "../ruflo-storage" }
 ruflo-types = { path = "../ruflo-types" }
 serde = { workspace = true }
 serde_json = { workspace = true }

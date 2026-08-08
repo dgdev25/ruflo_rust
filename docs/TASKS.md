@@ -58,11 +58,15 @@ named compatibility evidence and focused verification.
   snapshot and restore durable agent/task/swarm records. Memory remains on the
   existing storage boundary. This is incomplete pending source fixtures and
   optional selection-flag/MCP parity.
-- Memory increment: `ruflo-memory` now composes existing SQLite metadata with
-  the upstream AgentDB/RVF adapter and verifies store, close/reopen, semantic
-  search, and vector upsert. It deliberately requires an injected real
-  embedding provider; production 384-dimension embedding selection, MCP
-  wiring, source fixtures, and command parity remain open.
+- Memory increment: `ruflo-memory` composes the durable metadata projection
+  with the upstream AgentDB/RVF adapter and verifies store, close/reopen,
+  semantic search, and vector upsert. The native CLI now implements
+  `memory store`, `retrieve`/`get`, `search`, and `list`/`ls`, with namespace,
+  project-contained `--path`, tags, provenance, upsert, and value-only
+  handling. Its CLI search is deliberately keyword-projection behavior until
+  production 384-dimension embedding selection is wired through the existing
+  semantic facade; remaining memory subcommands, MCP parity, and source
+  fixtures remain open.
 - Then migrate every remaining command family from the original registry,
   capturing source fixtures before implementation and exercising real local
   Codex swarm deployment before release.

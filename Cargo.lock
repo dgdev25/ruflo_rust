@@ -643,6 +643,7 @@ dependencies = [
  "ruflo-codex-cli",
  "ruflo-config",
  "ruflo-mcp",
+ "ruflo-storage",
  "ruflo-types",
  "serde",
  "serde_json",

@@ -151,9 +151,99 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             }
         }
         Ok(ParsedCommand::Progress) => {
-            println!("Native V3 command migration progress\nTop-level families: 11 initial native commands; 53 required for parity\nStatus: in progress — source differential fixtures remain mandatory");
+            println!("Native V3 command migration progress\nTop-level families: 13 initial native commands; 53 required for parity\nStatus: in progress — source differential fixtures remain mandatory");
             ExitCode::SUCCESS
         }
+        Ok(ParsedCommand::MemoryStore {
+            key,
+            value,
+            namespace,
+            tags_json,
+            provenance_type,
+            upsert,
+            path,
+        }) => match open_memory_store(path.as_deref()).and_then(|store| {
+            store.store(&ruflo_storage::MemoryStoreInput {
+                key,
+                namespace,
+                content: value,
+                memory_type: "semantic".into(),
+                tags_json,
+                provenance_type,
+                upsert,
+            })
+        }) {
+            Ok(entry) => {
+                println!(
+                    "Data stored successfully\n{}/{}",
+                    entry.namespace, entry.key
+                );
+                ExitCode::SUCCESS
+            }
+            Err(error) => ruflo_error(error),
+        },
+        Ok(ParsedCommand::MemoryRetrieve {
+            key,
+            namespace,
+            value_only,
+            path,
+        }) => match open_memory_store(path.as_deref())
+            .and_then(|store| store.retrieve(&namespace, &key))
+        {
+            Ok(Some(entry)) if value_only => {
+                print!("{}", entry.content);
+                ExitCode::SUCCESS
+            }
+            Ok(Some(entry)) => {
+                println!(
+                    "Namespace: {}\nKey: {}\nValue:\n{}",
+                    entry.namespace, entry.key, entry.content
+                );
+                ExitCode::SUCCESS
+            }
+            Ok(None) => {
+                eprintln!("Key not found: {key}");
+                ExitCode::from(1)
+            }
+            Err(error) => ruflo_error(error),
+        },
+        Ok(ParsedCommand::MemorySearch {
+            query,
+            namespace,
+            limit,
+            path,
+        }) => match open_memory_store(path.as_deref())
+            .and_then(|store| store.search_keyword(namespace.as_deref(), &query, limit))
+        {
+            Ok(entries) => {
+                for entry in &entries {
+                    println!("{}\t{}\t{}", entry.namespace, entry.key, entry.content);
+                }
+                println!("Found {} result(s) via keyword search", entries.len());
+                ExitCode::SUCCESS
+            }
+            Err(error) => ruflo_error(error),
+        },
+        Ok(ParsedCommand::MemoryList {
+            namespace,
+            limit,
+            path,
+        }) => match open_memory_store(path.as_deref())
+            .and_then(|store| store.list(namespace.as_deref(), limit))
+        {
+            Ok(entries) => {
+                for entry in &entries {
+                    println!("{}\t{}\t{}", entry.namespace, entry.key, entry.memory_type);
+                }
+                println!(
+                    "{} memory entr{}",
+                    entries.len(),
+                    if entries.len() == 1 { "y" } else { "ies" }
+                );
+                ExitCode::SUCCESS
+            }
+            Err(error) => ruflo_error(error),
+        },
         Ok(ParsedCommand::Help) => {
             print!("{HELP}");
             ExitCode::SUCCESS
@@ -669,6 +759,21 @@ fn read_project_message_file(
 fn task_error(error: std::io::Error) -> ExitCode {
     eprintln!("error: {error}");
     ExitCode::from(ERROR_EXIT)
+}
+
+fn ruflo_error(error: ruflo_types::RufloError) -> ExitCode {
+    eprintln!("error: {error}");
+    ExitCode::from(ERROR_EXIT)
+}
+
+fn open_memory_store(
+    path: Option<&str>,
+) -> Result<ruflo_storage::SqliteMemoryStore, ruflo_types::RufloError> {
+    let root = current_directory();
+    let path = path
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| root.join(".swarm/memory.db"));
+    ruflo_storage::SqliteMemoryStore::open(root, path)
 }
 
 fn swarm_worker_plan(swarm: &lifecycle::SwarmRecord, objective: &str) -> Vec<String> {
