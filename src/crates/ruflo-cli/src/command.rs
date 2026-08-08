@@ -40,6 +40,7 @@ pub enum ParsedCommand {
     Issues(crate::issues::IssuesCommand),
     Benchmark(crate::benchmark::BenchmarkCommand),
     MetaHarness(crate::metaharness::MetaCommand),
+    Verify(crate::verify::VerifyCommand),
     MemoryStore {
         key: String,
         value: String,
@@ -827,6 +828,17 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
                 extra_args: extra,
             },
         ));
+    }
+    if normalized.first() == Some(&"verify") {
+        let branch =
+            option_value(&args, "--branch", "-b").unwrap_or_else(|| "fix/issues-may-1-3".into());
+        let manifest = option_value(&args, "--manifest", "-m");
+        let json = args.iter().any(|v| v == "--json");
+        return Ok(ParsedCommand::Verify(crate::verify::VerifyCommand {
+            branch,
+            manifest,
+            json,
+        }));
     }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {
         let key = option_value(&args, "--key", "-k").ok_or("memory key is required")?;

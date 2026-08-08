@@ -17,6 +17,7 @@ mod lifecycle;
 mod metaharness;
 mod settings;
 mod spinner;
+mod verify;
 mod version;
 
 use std::ffi::OsString;
@@ -342,6 +343,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::MetaHarness(command)) => {
             ExitCode::from(metaharness::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::Verify(command)) => {
+            ExitCode::from(verify::run(&current_directory(), command))
         }
         Ok(ParsedCommand::NativeOverview { name }) => {
             let root = current_directory();
