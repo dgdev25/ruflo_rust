@@ -23,6 +23,7 @@ mod lifecycle;
 mod metaharness;
 mod performance;
 mod policy;
+mod process_cmd;
 mod providers;
 mod proxy;
 mod settings;
@@ -394,6 +395,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::GaiaBench(command)) => {
             ExitCode::from(gaia_bench::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::ProcessCmd(command)) => {
+            ExitCode::from(process_cmd::run(&current_directory(), command))
         }
         Ok(ParsedCommand::NativeOverview { name }) => {
             let root = current_directory();

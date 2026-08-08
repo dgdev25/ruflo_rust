@@ -52,6 +52,7 @@ pub enum ParsedCommand {
     Guidance(crate::guidance::GuidanceCommand),
     Performance(crate::performance::PerformanceCommand),
     GaiaBench(crate::gaia_bench::GaiaBenchCommand),
+    ProcessCmd(crate::process_cmd::ProcessCommand),
     TransferStore(crate::transfer_store::TransferStoreCommand),
     MemoryStore {
         key: String,
@@ -1045,6 +1046,22 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
                     .unwrap_or(30),
                 component: option_value(&args, "--component", "-c"),
                 json: args.iter().any(|v| v == "--json"),
+            },
+        ));
+    }
+    if matches!(
+        normalized.first().copied(),
+        Some("process") | Some("proc") | Some("ps")
+    ) {
+        let operation = normalized.get(1).copied().unwrap_or("").to_string();
+        return Ok(ParsedCommand::ProcessCmd(
+            crate::process_cmd::ProcessCommand {
+                operation,
+                action: option_value(&args, "--action", "-a"),
+                lines: option_value(&args, "--lines", "-n")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(50),
+                worker: option_value(&args, "--worker", "-w"),
             },
         ));
     }
