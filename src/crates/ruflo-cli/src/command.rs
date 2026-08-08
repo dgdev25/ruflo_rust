@@ -56,6 +56,7 @@ pub enum ParsedCommand {
     Workflow(crate::workflow::WorkflowCommand),
     Route(crate::route::RouteCommand),
     Plugins(crate::plugins::PluginsCommand),
+    Security(crate::security::SecurityCommand),
     TransferStore(crate::transfer_store::TransferStoreCommand),
     MemoryStore {
         key: String,
@@ -1093,6 +1094,50 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
                 .any(|v| v == "--enable")
                 .then_some(true)
                 .or_else(|| args.iter().any(|v| v == "--disable").then_some(false)),
+        }));
+    }
+    if normalized.first() == Some(&"security") {
+        let operation = normalized.get(1).copied().unwrap_or("").to_string();
+        let target = option_value(&args, "--target", "-t").unwrap_or_default();
+        return Ok(ParsedCommand::Security(crate::security::SecurityCommand {
+            operation,
+            target,
+            depth: option_value(&args, "--depth", "-d"),
+            scan_type: option_value(&args, "--type", "--type"),
+            output: option_value(&args, "--output", "-o"),
+            fix: args.iter().any(|v| matches!(v.as_str(), "--fix" | "-f")),
+            check: option_value(&args, "--check", "-c"),
+            list: args.iter().any(|v| matches!(v.as_str(), "--list" | "-l")),
+            severity: option_value(&args, "--severity", "-s"),
+            model: option_value(&args, "--model", "-m"),
+            scope: option_value(&args, "--scope", "-s"),
+            export_format: option_value(&args, "--export", "-e"),
+            action: option_value(&args, "--action", "-a"),
+            limit: option_value(&args, "--limit", "-l")
+                .and_then(|v| v.parse::<usize>().ok()),
+            filter: option_value(&args, "--filter", "-f"),
+            path_opt: option_value(&args, "--path", "-p"),
+            ignore: option_value(&args, "--ignore", "-i"),
+            input: option_value(&args, "--input", "-i"),
+            file: option_value(&args, "--file", "-f"),
+            quick: args.iter().any(|v| matches!(v.as_str(), "--quick" | "-Q")),
+            stats: args.iter().any(|v| matches!(v.as_str(), "--stats" | "-s")),
+            min_fragment: option_value(&args, "--min-fragment", "--min-fragment")
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(20),
+            top: option_value(&args, "--top", "--top")
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(20),
+            tools_json: option_value(&args, "--tools-json", "--tools-json"),
+            message: option_value(&args, "--message", "-m"),
+            message_file: option_value(&args, "--message-file", "--message-file"),
+            min_encoded_len: option_value(&args, "--min-encoded-len", "--min-encoded-len")
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(80),
+            plan: option_value(&args, "--plan", "-p"),
+            plan_file: option_value(&args, "--plan-file", "--plan-file"),
+            strict: args.iter().any(|v| v == "--strict"),
+            json: args.iter().any(|v| v == "--json" || v == "--format=json"),
         }));
     }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {
