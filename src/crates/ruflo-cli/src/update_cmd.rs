@@ -124,17 +124,16 @@ fn check(_root: &Path, command: &UpdateCommand) -> u8 {
     } else if results.is_empty() {
         println!("No packages found.");
     } else {
-            for r in &results {
-                let pkg = r["package"].as_str().unwrap_or("?");
-                let inst = r["installed"].as_str().unwrap_or("not installed");
-                let latest = r["latest"].as_str().unwrap_or("?");
-                let avail = if r["updateAvailable"].as_bool() == Some(true) {
-                    "  → update available"
-                } else {
-                    ""
-                };
-                println!("  {pkg}: {inst} (latest: {latest}){avail}");
-            }
+        for r in &results {
+            let pkg = r["package"].as_str().unwrap_or("?");
+            let inst = r["installed"].as_str().unwrap_or("not installed");
+            let latest = r["latest"].as_str().unwrap_or("?");
+            let avail = if r["updateAvailable"].as_bool() == Some(true) {
+                "  → update available"
+            } else {
+                ""
+            };
+            println!("  {pkg}: {inst} (latest: {latest}){avail}");
         }
     }
     0
