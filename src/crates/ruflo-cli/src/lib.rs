@@ -161,10 +161,25 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         Ok(ParsedCommand::CompletionsOverview) => ExitCode::from(completions::run_overview()),
         Ok(ParsedCommand::Doctor) => {
             let root = current_directory();
-            let config = root.join(".claude-flow/config.yaml").is_file();
+            let config = root.join(".claude-flow/config.json").is_file()
+                || root.join(".claude-flow/config.yaml").is_file();
             let swarm = root.join(".swarm/state.json").is_file();
+            let memory =
+                root.join(".claude-flow/memory").is_dir() || root.join("data/memory").is_dir();
+            let mcp_cfg = root.join(".claude-flow/mcp.json").is_file();
+            let agents = root.join(".claude-flow/agents").is_dir();
+            let sessions = root.join(".claude-flow/sessions").is_dir();
+            let claims = root.join(".claude-flow/claims").is_dir();
+            let hooks = root.join(".claude-flow/hooks.json").is_file()
+                || root.join(".claude/settings.json").is_file();
             println!("Config File\t{}", if config { "pass" } else { "warn" });
             println!("Swarm State\t{}", if swarm { "pass" } else { "warn" });
+            println!("Memory\t{}", if memory { "pass" } else { "warn" });
+            println!("MCP Config\t{}", if mcp_cfg { "pass" } else { "warn" });
+            println!("Agents\t{}", if agents { "pass" } else { "warn" });
+            println!("Sessions\t{}", if sessions { "pass" } else { "warn" });
+            println!("Claims\t{}", if claims { "pass" } else { "warn" });
+            println!("Hooks/Settings\t{}", if hooks { "pass" } else { "warn" });
             println!("Native CLI\tpass");
             ExitCode::SUCCESS
         }
