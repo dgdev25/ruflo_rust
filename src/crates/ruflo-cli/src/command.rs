@@ -48,6 +48,7 @@ pub enum ParsedCommand {
     Autopilot(crate::autopilot::AutopilotCommand),
     Proxy(crate::proxy::ProxyCommand),
     ApplianceAdvanced(crate::appliance_advanced::ApplianceAdvancedCommand),
+    Appliance(crate::appliance::ApplianceCommand),
     MemoryStore {
         key: String,
         value: String,
@@ -957,6 +958,21 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
                     .unwrap_or_else(|| "0.0.1".into()),
                 no_backup: args.iter().any(|v| v == "--no-backup"),
                 public_key: option_value(&args, "--public-key", "--public-key"),
+            },
+        ));
+    }
+    if normalized.first() == Some(&"appliance") && normalized.get(1) != Some(&"advanced") {
+        let operation = normalized.get(1).copied().unwrap_or("").to_string();
+        return Ok(ParsedCommand::Appliance(
+            crate::appliance::ApplianceCommand {
+                operation,
+                file: option_value(&args, "--file", "-f"),
+                output: option_value(&args, "--output", "-o"),
+                profile: option_value(&args, "--profile", "-p"),
+                arch: option_value(&args, "--arch", "--arch"),
+                json: args.iter().any(|v| v == "--json"),
+                quick: args.iter().any(|v| matches!(v.as_str(), "--quick" | "-q")),
+                target_dir: option_value(&args, "--target", "--target"),
             },
         ));
     }
