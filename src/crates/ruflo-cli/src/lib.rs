@@ -122,6 +122,10 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             }
             ExitCode::SUCCESS
         }
+        Ok(ParsedCommand::Completions { shell }) => {
+            print!("{}", completion_script(&shell));
+            ExitCode::SUCCESS
+        }
         Ok(ParsedCommand::Help) => {
             print!("{HELP}");
             ExitCode::SUCCESS
@@ -602,6 +606,16 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
 
 fn current_directory() -> std::path::PathBuf {
     std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+}
+
+fn completion_script(shell: &str) -> &'static str {
+    match shell {
+        "bash" => "# ruflo bash completion\n_ruflo(){ COMPREPLY=( $(compgen -W 'init start status agent swarm memory task session mcp config doctor completions version' -- \"${COMP_WORDS[COMP_CWORD]}\") ); }\ncomplete -F _ruflo ruflo claude-flow\n",
+        "zsh" => "#compdef ruflo claude-flow\n_arguments '1:command:(init start status agent swarm memory task session mcp config doctor completions version)'\n",
+        "fish" => "complete -c ruflo -f -a 'init start status agent swarm memory task session mcp config doctor completions version'\ncomplete -c claude-flow -f -a 'init start status agent swarm memory task session mcp config doctor completions version'\n",
+        "powershell" => "Register-ArgumentCompleter -CommandName ruflo,claude-flow -ScriptBlock { param($w,$a,$c) 'init','start','status','agent','swarm','memory','task','session','mcp','config','doctor','completions','version' | Where-Object { $_ -like \"$w*\" } }\n",
+        _ => unreachable!("parser validates shell"),
+    }
 }
 
 fn read_project_message_file(

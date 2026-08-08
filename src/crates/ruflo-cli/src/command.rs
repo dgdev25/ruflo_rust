@@ -7,6 +7,9 @@ pub enum ParsedCommand {
         explain: bool,
         require_catalog_gte: Option<u64>,
     },
+    Completions {
+        shell: String,
+    },
     Help,
     Init,
     Status,
@@ -137,6 +140,16 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             explain: args.iter().any(|value| value == "--explain"),
             require_catalog_gte,
         });
+    }
+    if normalized.first() == Some(&"completions") {
+        let shell = normalized
+            .get(1)
+            .ok_or("shell is required: bash, zsh, fish, or powershell")?
+            .to_string();
+        if !matches!(shell.as_str(), "bash" | "zsh" | "fish" | "powershell") {
+            return Err("unsupported shell; use bash, zsh, fish, or powershell".into());
+        }
+        return Ok(ParsedCommand::Completions { shell });
     }
 
     if normalized.starts_with(&["agent", "spawn"]) {
