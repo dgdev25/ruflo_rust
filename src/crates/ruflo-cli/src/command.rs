@@ -713,14 +713,44 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
                 },
                 _ => return Err("issues status requires --issue and --status".into()),
             },
-            Some("handoff") => match (&issue, claimant("-a", "-u")) {
-                (Some(i), Some(to)) => Iss::Handoff {
-                    issue: i.clone(),
-                    to,
-                    reason,
-                },
-                _ => return Err("issues handoff requires --issue and (--agent or --user)".into()),
-            },
+            Some("handoff") => {
+                // TS uses --to agent:type:id|user:id:name; fallback to --agent/--user.
+                let to = option_value(&args, "--to", "--to")
+                    .map(|val| {
+                        if let Some(rest) = val.strip_prefix("agent:") {
+                            let (at, id) = rest.split_once(':').unwrap_or(("coder", rest));
+                            Claimant::agent {
+                                agent_id: id.into(),
+                                agent_type: at.into(),
+                            }
+                        } else if let Some(rest) = val.strip_prefix("user:") {
+                            let (uid, name) = rest.split_once(':').unwrap_or((rest, rest));
+                            Claimant::human {
+                                user_id: uid.into(),
+                                name: name.into(),
+                            }
+                        } else {
+                            Claimant::human {
+                                user_id: val.clone(),
+                                name: val,
+                            }
+                        }
+                    })
+                    .or_else(|| claimant("-a", "-u"));
+                match (&issue, to) {
+                    (Some(i), Some(to)) => Iss::Handoff {
+                        issue: i.clone(),
+                        to,
+                        reason,
+                    },
+                    _ => {
+                        return Err(
+                            "issues handoff requires --issue and (--to or --agent or --user)"
+                                .into(),
+                        )
+                    }
+                }
+            }
             Some("stealable") => Iss::Stealable {
                 agent_type: option_value(&args, "--agent-type", "-t"),
             },
