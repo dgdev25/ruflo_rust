@@ -8,6 +8,7 @@ mod completions;
 mod compressor;
 mod config_file;
 mod deployment;
+mod eject;
 mod funnel;
 mod funnel_command;
 mod lifecycle;
@@ -286,6 +287,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::Funnel(command)) => {
             ExitCode::from(funnel_command::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::Eject(command)) => {
+            ExitCode::from(eject::run(&current_directory(), command))
         }
         Ok(ParsedCommand::MemoryStore {
             key,

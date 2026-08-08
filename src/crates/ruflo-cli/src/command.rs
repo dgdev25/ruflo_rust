@@ -36,6 +36,7 @@ pub enum ParsedCommand {
     Spinner(crate::spinner::SpinnerCommand),
     Settings(crate::settings::SettingsCommand),
     Funnel(crate::funnel_command::FunnelCommand),
+    Eject(crate::eject::EjectCommand),
     MemoryStore {
         key: String,
         value: String,
@@ -611,6 +612,21 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             Some(other) => return Err(format!("Unknown subcommand '{other}' for funnel")),
         };
         return Ok(ParsedCommand::Funnel(cmd));
+    }
+    if normalized.first() == Some(&"eject") {
+        if args.iter().any(|v| matches!(v.as_str(), "--help" | "-h")) {
+            return Ok(ParsedCommand::Eject(crate::eject::EjectCommand::Help));
+        }
+        let name = option_value(&args, "--name", "--name");
+        let target = option_value(&args, "--target", "--target");
+        let confirm = args.iter().any(|v| v == "--confirm");
+        let format = option_value(&args, "--format", "--format").unwrap_or_else(|| "table".into());
+        return Ok(ParsedCommand::Eject(crate::eject::EjectCommand::Run {
+            name,
+            target,
+            confirm,
+            format,
+        }));
     }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {
         let key = option_value(&args, "--key", "-k").ok_or("memory key is required")?;
