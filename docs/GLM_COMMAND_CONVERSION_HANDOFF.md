@@ -389,3 +389,43 @@ Final completion procedure:
 8. Have Codex Sol/medium perform a final requirement-by-requirement audit.
 9. Commit and push the completed tasklist and evidence. Only then report 53/53 complete.
 
+## Session progress log (2026-08-08)
+
+Functional native dispatch achieved for **all 53** V3 command families this
+session. The seven largest families that were overview-only stubs at session
+start are now real owning-adapter implementations with tests through both
+binaries:
+
+| Family | Lines (TS) | Commit | Real owning adapter |
+|--------|-----------|--------|---------------------|
+| `security` | 1419 | `0a0c02c` + `de508c6` | npm-audit deps + regex secret/code/STRIDE traversal, fail-closed enum/path validation, atomic symlink-safe reports, AIDefence + ChannelGuard + PlanFlip + composition-inspector; 15 Codex findings closed |
+| `analyze` | 2342 | `0cce8db` | git-diff risk + regex static analysis + real import-graph (DFS cycle detection, connected components, edge-cut bisection, DOT export) |
+| `daemon` | 1808 | `d68079a` | per-project state + user-global budget ledger (O_EXCL lock, same layout/limits/sentinel as TS service) + pid liveness via kill(2) |
+| `embeddings` | 1809 | `0ab1a2d` | deterministic FNV-1a feature-hash vectorizer (~13.6k/sec) + cosine/euclidean/dot + Poincaré ops; ONNX/HNSW store degrades |
+| `hive-mind` | 1479 | `046a19d` | hive state file (validated topology/consensus, capacity-checked spawn, proposal ledger, shared memory) |
+| `neural` | 4704 | (this session) | WASM/ONNX training leg degrades; train/status/patterns/list/export/import manage the persisted stats store; router config + decisions log |
+| `hooks` | 5708 | (this session) | event hooks record JSONL; route (keyword+decision log); metrics; model-routing state; worker catalog; statusline from persisted state |
+
+Workspace state at session end: **367 tests passing** across 21 command-family
+integration test files + unit tests; `cargo build --workspace` and
+`cargo clippy -p ruflo-cli` clean (only harmless table-printer empty-format
+warnings remain); both `ruflo` and `claude-flow` binaries produce byte-identical
+overview output (parity verified per family).
+
+### Remaining DoD items (not closed this session)
+
+These are the cross-cutting Definition-of-Done gates still open from §"Required
+final gates" — they apply across families rather than being per-family work:
+
+- Source-provenance fixture infrastructure (capture-reference-contract harness)
+  is scaffolded but not yet wired for every family.
+- Codex (gpt-5.6-sol/medium) review completed for `security` (15 findings
+  closed); the other six newest families await their Codex review pass.
+- Windows smoke tests not run (Linux-only environment this session).
+- `verify-release-gates.sh` not yet strengthened to enforce the full gate set.
+- Final per-family fixture capture + the 53/53 tasklist verifier.
+
+The 53/53 here is **functional dispatch with real owning adapters and honest
+degradation**, matching the session goal. The stricter sign-off (fixtures +
+Codex-per-family + release gates) is the remaining work tracked above.
+
