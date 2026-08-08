@@ -343,6 +343,12 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         Ok(ParsedCommand::MetaHarness(command)) => {
             ExitCode::from(metaharness::run(&current_directory(), command))
         }
+        Ok(ParsedCommand::NativeOverview { name }) => {
+            println!("\n{name} — native surface active (full V3 parity pending)");
+            println!("Run '{name} --help' for usage once the command is fully ported.");
+            println!("See docs/GLM_COMMAND_CONVERSION_HANDOFF.md for conversion status.");
+            ExitCode::SUCCESS
+        }
         Ok(ParsedCommand::MemoryStore {
             key,
             value,

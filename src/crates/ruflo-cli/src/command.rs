@@ -230,6 +230,9 @@ pub enum ParsedCommand {
         reset_state: bool,
     },
     McpStart,
+    NativeOverview {
+        name: String,
+    },
 }
 
 pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, String> {
@@ -1318,6 +1321,50 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
         ["agent", "list"] | ["agent", "ls"] => Ok(ParsedCommand::AgentList),
         ["task", "list"] | ["task", "ls"] => Ok(ParsedCommand::TaskList),
         ["mcp", "start"] => Ok(ParsedCommand::McpStart),
+        // 25 families with native overview surface (full V3 parity pending)
+        _ if matches!(
+            normalized.first().copied(),
+            Some("hooks")
+                | Some("workflow")
+                | Some("hive-mind")
+                | Some("hive")
+                | Some("process")
+                | Some("proc")
+                | Some("ps")
+                | Some("daemon")
+                | Some("neural")
+                | Some("security")
+                | Some("performance")
+                | Some("perf")
+                | Some("policy")
+                | Some("embeddings")
+                | Some("embed")
+                | Some("verify")
+                | Some("analyze")
+                | Some("an")
+                | Some("route")
+                | Some("providers")
+                | Some("plugins")
+                | Some("update")
+                | Some("ruvector")
+                | Some("rv")
+                | Some("guidance")
+                | Some("guide")
+                | Some("appliance")
+                | Some("rvfa")
+                | Some("appliance-advanced")
+                | Some("transfer-store")
+                | Some("autopilot")
+                | Some("ap")
+                | Some("gaia-bench")
+                | Some("auth")
+                | Some("proxy")
+        ) =>
+        {
+            Ok(ParsedCommand::NativeOverview {
+                name: normalized[0].to_string(),
+            })
+        }
         [] => Err("no command provided".to_string()),
         _ => Err(format!(
             "unsupported native CLI invocation: {}",
