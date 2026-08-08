@@ -20,9 +20,40 @@
 
 use std::fs;
 use std::io::Write;
+#[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+// Portable private-file opens: 0600 on Unix (via OpenOptionsExt), default ACLs
+// elsewhere. Keeps the documented Windows target compiling.
+#[cfg(unix)]
+fn open_create_new_private(path: &Path) -> std::io::Result<std::fs::File> {
+    std::fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(path)
+}
+#[cfg(not(unix))]
+fn open_create_new_private(path: &Path) -> std::io::Result<std::fs::File> {
+    std::fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(path)
+}
+#[cfg(unix)]
+fn open_append_private(path: &Path) -> std::io::Result<std::fs::File> {
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .mode(0o600)
+        .open(path)
+}
+#[cfg(not(unix))]
+fn open_append_private(path: &Path) -> std::io::Result<std::fs::File> {
+    std::fs::OpenOptions::new().create(true).append(true).open(path)
+}
 
 use serde_json::{json, Value};
 
@@ -89,11 +120,7 @@ impl LockGuard {
         ensure_budget_dir();
         let deadline = now_ms() + 2000;
         loop {
-            let res = fs::OpenOptions::new()
-                .create_new(true)
-                .write(true)
-                .mode(0o600)
-                .open(lock_file());
+            let res = open_create_new_private(&lock_file());
             match res {
                 Ok(mut f) => {
                     let _ = f.write_all(std::process::id().to_string().as_bytes());
@@ -156,12 +183,7 @@ fn write_ledger(v: &Value) -> bool {
 
 fn append_receipt(rec: Value) {
     ensure_budget_dir();
-    if let Ok(mut f) = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .mode(0o600)
-        .open(receipts_file())
-    {
+    if let Ok(mut f) = open_append_private(&receipts_file()) {
         let _ = writeln!(f, "{}", rec);
     }
 }
@@ -289,19 +311,36 @@ fn write_daemon_state(root: &Path, v: &Value) -> bool {
     ok
 }
 
+#[cfg(unix)]
 fn is_process_running(pid: u32) -> bool {
     // kill(pid, 0) returns Ok if the process exists (or we lack permission to
     // signal it — still "exists"). Either way it's running.
-    unsafe { libc_kill(pid, 0) == 0 }
+    libc_kill(pid, 0) == 0
+}
+
+#[cfg(not(unix))]
+fn is_process_running(_pid: u32) -> bool {
+    // No portable pid-liveness probe on Windows without a crate; conservatively
+    // report not-running so status reflects that the native-managed daemon
+    // isn't a live background process here.
+    false
 }
 
 // Minimal libc kill(2) binding for pid liveness — avoids pulling a crate for
-// one syscall.
+// one syscall. Unix-only: the documented Windows target uses a different
+// process model and does not signal via kill(2).
+#[cfg(unix)]
 unsafe extern "C" {
     fn kill(pid: u32, sig: i32) -> i32;
 }
-unsafe fn libc_kill(pid: u32, sig: i32) -> i32 {
+#[cfg(unix)]
+fn libc_kill(pid: u32, sig: i32) -> i32 {
+    // Safety: kill(2) is a sound libc syscall; pid/sig are plain integers.
     unsafe { kill(pid, sig) }
+}
+#[cfg(not(unix))]
+fn libc_kill(_pid: u32, _sig: i32) -> i32 {
+    -1
 }
 
 // ---- start ------------------------------------------------------------------
@@ -364,7 +403,7 @@ fn stop(root: &Path, command: &DaemonCommand) -> u8 {
     if let Some(pid) = pid {
         if is_process_running(pid) {
             // SIGTERM for graceful shutdown.
-            unsafe { libc_kill(pid, 15) };
+            libc_kill(pid, 15);
             stopped = true;
         }
     }
@@ -385,23 +424,26 @@ fn stop(root: &Path, command: &DaemonCommand) -> u8 {
 }
 
 fn stop_all() -> u8 {
-    // Scan ~/.claude-flow for daemon-state ledgers across workspaces is not
-    // feasible (they live per-project). Enumerate running ruflo/claude-flow
-    // processes via /proc and SIGTERM them.
+    // Enumerate running ruflo/claude-flow daemon processes and SIGTERM them.
+    // /proc is Linux-specific; on other platforms there is no portable
+    // enumeration, so report zero and let the per-workspace state drive stops.
     let mut killed = 0u32;
-    if let Ok(entries) = fs::read_dir("/proc") {
-        for e in entries.flatten() {
-            let name = e.file_name();
-            let name = name.to_string_lossy();
-            let Ok(pid) = name.parse::<u32>() else { continue };
-            if pid == std::process::id() {
-                continue;
-            }
-            if let Ok(cmdline) = fs::read_to_string(e.path().join("cmdline")) {
-                let cmd = cmdline.replace('\0', " ");
-                if (cmd.contains("ruflo") || cmd.contains("claude-flow")) && cmd.contains("daemon") {
-                    unsafe { libc_kill(pid, 15) };
-                    killed += 1;
+    #[cfg(unix)]
+    {
+        if let Ok(entries) = fs::read_dir("/proc") {
+            for e in entries.flatten() {
+                let name = e.file_name();
+                let name = name.to_string_lossy();
+                let Ok(pid) = name.parse::<u32>() else { continue };
+                if pid == std::process::id() {
+                    continue;
+                }
+                if let Ok(cmdline) = fs::read_to_string(e.path().join("cmdline")) {
+                    let cmd = cmdline.replace('\0', " ");
+                    if (cmd.contains("ruflo") || cmd.contains("claude-flow")) && cmd.contains("daemon") {
+                        libc_kill(pid, 15);
+                        killed += 1;
+                    }
                 }
             }
         }
@@ -472,20 +514,28 @@ fn status(root: &Path, command: &DaemonCommand) -> u8 {
 fn status_all() -> u8 {
     println!("\n\u{256d} Daemons Across All Workspaces \u{256e}");
     let mut count = 0u32;
-    if let Ok(entries) = fs::read_dir("/proc") {
-        for e in entries.flatten() {
-            let name = e.file_name();
-            let name = name.to_string_lossy();
-            let Ok(pid) = name.parse::<u32>() else { continue };
-            if let Ok(cmdline) = fs::read_to_string(e.path().join("cmdline")) {
-                let cmd = cmdline.replace('\0', " ");
-                if (cmd.contains("ruflo") || cmd.contains("claude-flow")) && cmd.contains("daemon") {
-                    let cwd = fs::read_link(e.path().join("cwd")).ok();
-                    count += 1;
-                    println!("  pid {pid:<7} \u{25cf} {}", cwd.map(|c| c.display().to_string()).unwrap_or_else(|| "?".into()));
+    #[cfg(unix)]
+    {
+        if let Ok(entries) = fs::read_dir("/proc") {
+            for e in entries.flatten() {
+                let name = e.file_name();
+                let name = name.to_string_lossy();
+                let Ok(pid) = name.parse::<u32>() else { continue };
+                if let Ok(cmdline) = fs::read_to_string(e.path().join("cmdline")) {
+                    let cmd = cmdline.replace('\0', " ");
+                    if (cmd.contains("ruflo") || cmd.contains("claude-flow")) && cmd.contains("daemon") {
+                        let cwd = fs::read_link(e.path().join("cwd")).ok();
+                        count += 1;
+                        println!("  pid {pid:<7} \u{25cf} {}", cwd.map(|c| c.display().to_string()).unwrap_or_else(|| "?".into()));
+                    }
                 }
             }
         }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = &mut count;
+        println!("  (cross-workspace daemon enumeration is Linux/proc-only)");
     }
     if count == 0 {
         println!("  No ruflo daemons running.");
@@ -498,10 +548,17 @@ fn status_all() -> u8 {
 fn trigger(root: &Path, command: &DaemonCommand) -> u8 {
     let worker = command.worker.as_deref().unwrap_or("all");
     let marker = root.join(".claude-flow/daemon-triggers.jsonl");
-    let _ = fs::create_dir_all(marker.parent().unwrap_or(Path::new(".")));
+    if fs::create_dir_all(marker.parent().unwrap_or(Path::new("."))).is_err() {
+        eprintln!("[ERROR] Failed to create trigger dir.");
+        return 1;
+    }
     let rec = json!({"worker": worker, "at": now_ms(), "nativeRecorded": true});
-    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).mode(0o600).open(&marker) {
-        let _ = writeln!(f, "{}", rec);
+    match open_append_private(&marker).and_then(|mut f| writeln!(f, "{}", rec).map(|_| f)) {
+        Ok(_) => {}
+        Err(e) => {
+            eprintln!("[ERROR] Failed to record trigger: {e}");
+            return 1;
+        }
     }
     println!("Trigger recorded for worker '{worker}'.");
     eprintln!("[WARN] A live Node daemon consumes the trigger; native build records it only.");

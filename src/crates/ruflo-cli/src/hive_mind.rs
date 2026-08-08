@@ -241,6 +241,11 @@ fn spawn(root: &Path, command: &HiveMindCommand) -> u8 {
         eprintln!("[ERROR] Hive is at max capacity ({current}/{max_agents}).");
         return 1;
     }
+    // --dry-run must not mutate state; report the plan only.
+    if command.dry_run {
+        println!("[dry-run] Would spawn {to_spawn} {atype} worker(s) as '{role}' (capacity {}/{max_agents}).", current + to_spawn);
+        return 0;
+    }
     let mut workers = workers;
     for i in 0..to_spawn {
         let id = format!("{prefix}-{}-{}", now_ms(), current + i);
@@ -253,11 +258,7 @@ fn spawn(root: &Path, command: &HiveMindCommand) -> u8 {
         eprintln!("[ERROR] Failed to update hive state.");
         return 1;
     }
-    if command.dry_run {
-        println!("[dry-run] Would spawn {to_spawn} {atype} worker(s) as '{role}'.");
-    } else {
-        println!("Spawned {to_spawn} {atype} worker(s) as '{role}' (capacity {}/{max_agents}).", current + to_spawn);
-    }
+    println!("Spawned {to_spawn} {atype} worker(s) as '{role}' (capacity {}/{max_agents}).", current + to_spawn);
     0
 }
 
@@ -357,9 +358,15 @@ fn join(root: &Path, command: &HiveMindCommand) -> u8 {
         return 1;
     };
     let role = command.role.clone().unwrap_or_else(|| "worker".into());
+    let max_agents = hive["maxAgents"].as_u64().unwrap_or(15) as usize;
     let mut workers = hive["workers"].as_array().cloned().unwrap_or_default();
     if workers.iter().any(|w| w["id"].as_str() == Some(agent_id.as_str())) {
         eprintln!("[ERROR] Agent '{agent_id}' already in hive.");
+        return 1;
+    }
+    // Enforce the same capacity ceiling spawn uses.
+    if workers.len() >= max_agents {
+        eprintln!("[ERROR] Hive is at max capacity ({}/{max_agents}).", workers.len());
         return 1;
     }
     workers.push(json!({"id": agent_id, "role": role, "status": "idle", "joinedAt": now_ms()}));
@@ -447,23 +454,60 @@ fn consensus(root: &Path, command: &HiveMindCommand) -> u8 {
             println!("Proposal {id} created: {value}");
         }
         "vote" => {
-            let (Some(pid), Some(vote)) = (&command.proposal_id, &command.vote) else {
-                eprintln!("[ERROR] --proposal-id and --vote (accept|reject) are required");
+            let (Some(pid), Some(vote_raw)) = (&command.proposal_id, &command.vote) else {
+                eprintln!("[ERROR] --proposal-id and --vote (accept|reject|yes|no) are required");
                 return 1;
             };
-            if !matches!(vote.as_str(), "accept" | "reject") {
-                eprintln!("[ERROR] --vote must be accept or reject");
-                return 1;
-            }
+            // V3's documented vote contract is yes|no; accept|reject is accepted
+            // as an alias and normalized internally.
+            let vote = match vote_raw.to_lowercase().as_str() {
+                "accept" | "yes" => "accept",
+                "reject" | "no" => "reject",
+                _ => {
+                    eprintln!("[ERROR] --vote must be accept|reject|yes|no");
+                    return 1;
+                }
+            };
             let voter = command.voter_id.clone().unwrap_or_else(|| "voter".into());
+            // Compute member count before taking the mutable borrow on proposals.
+            let members = hive["workers"].as_array().map(|w| w.len()).unwrap_or(0) + 1;
             let proposals = hive["proposals"].as_array_mut();
             let mut found = false;
             if let Some(arr) = proposals {
                 for p in arr.iter_mut() {
                     if p["id"].as_str() == Some(pid.as_str()) {
                         let mut votes = p["votes"].as_array().cloned().unwrap_or_default();
+                        // One vote per voter — replace an existing vote rather
+                        // than appending a duplicate.
+                        votes.retain(|v| v["voter"].as_str() != Some(voter.as_str()));
                         votes.push(json!({"voter": voter, "vote": vote}));
                         p["votes"] = json!(votes);
+                        // Simple majority quorum: once >half of members accept (or
+                        // any reject under unanimous strategy), resolve the
+                        // proposal. Members = workers + queen.
+                        let accepts = p["votes"]
+                            .as_array()
+                            .map(|v| v.iter().filter(|x| x["vote"].as_str() == Some("accept")).count())
+                            .unwrap_or(0);
+                        let rejects = p["votes"]
+                            .as_array()
+                            .map(|v| v.iter().filter(|x| x["vote"].as_str() == Some("reject")).count())
+                            .unwrap_or(0);
+                        let strategy = p["strategy"].as_str().unwrap_or("raft");
+                        let accepted = match strategy {
+                            "quorum" | "raft" => accepts * 2 > members,
+                            "byzantine" => accepts * 3 >= members * 2,
+                            _ => accepts * 2 > members,
+                        };
+                        let rejected = match strategy {
+                            "byzantine" => rejects * 3 >= members,
+                            _ => rejects * 2 >= members,
+                        };
+                        if accepted {
+                            p["status"] = json!("accepted");
+                        } else if rejected {
+                            p["status"] = json!("rejected");
+                        }
                         found = true;
                         break;
                     }

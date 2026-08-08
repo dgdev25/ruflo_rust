@@ -15,11 +15,22 @@
 
 use std::fs;
 use std::io::Write;
+#[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Value};
+
+// Portable private append: 0600 on Unix, default ACLs elsewhere, so the
+// documented Windows target compiles.
+fn open_append_private(path: &Path) -> std::io::Result<std::fs::File> {
+    let mut o = std::fs::OpenOptions::new();
+    o.create(true).append(true);
+    #[cfg(unix)]
+    o.mode(0o600);
+    o.open(path)
+}
 
 fn now_ms() -> u64 {
     SystemTime::now()
@@ -44,17 +55,15 @@ fn decisions_file(root: &Path) -> PathBuf {
     hooks_dir(root).join("route-decisions.jsonl")
 }
 
-fn append_jsonl(path: &Path, v: &Value) {
+fn append_jsonl(path: &Path, v: &Value) -> bool {
     if let Some(dir) = path.parent() {
-        let _ = fs::create_dir_all(dir);
+        if fs::create_dir_all(dir).is_err() {
+            return false;
+        }
     }
-    if let Ok(mut f) = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .mode(0o600)
-        .open(path)
-    {
-        let _ = writeln!(f, "{}", v);
+    match open_append_private(path) {
+        Ok(mut f) => writeln!(f, "{}", v).is_ok(),
+        Err(_) => false,
     }
 }
 
@@ -230,7 +239,10 @@ fn record_event(root: &Path, event: &str, command: &HooksCommand) -> u8 {
         "agent": command.agent,
         "description": command.description,
     });
-    append_jsonl(&events_file(root), &rec);
+    if !append_jsonl(&events_file(root), &rec) {
+        eprintln!("[ERROR] Failed to persist hook event '{event}' — audit record not written.");
+        return 1;
+    }
     if command.json {
         println!("{}", rec);
     }
@@ -339,7 +351,10 @@ fn route_cmd(root: &Path, command: &HooksCommand) -> u8 {
         "task": task, "agent": best, "tier": tier, "score": best_score,
         "model": tier_label(tier), "at": now_ms(),
     });
-    append_jsonl(&decisions_file(root), &decision);
+    if !append_jsonl(&decisions_file(root), &decision) {
+        eprintln!("[ERROR] Failed to persist routing decision — `explain`/learning will not see it.");
+        return 1;
+    }
     if command.json {
         println!("{}", serde_json::to_string_pretty(&decision).unwrap_or_default());
         return 0;
@@ -396,7 +411,10 @@ fn model_route(root: &Path, command: &HooksCommand) -> u8 {
         ("sonnet", 2)
     };
     let rec = json!({"task": task, "model": model, "tier": tier, "at": now_ms()});
-    append_jsonl(&model_state_file(root).with_extension("jsonl"), &rec);
+    if !append_jsonl(&model_state_file(root).with_extension("jsonl"), &rec) {
+        eprintln!("[ERROR] Failed to persist model-routing decision.");
+        return 1;
+    }
     if command.json {
         println!("{}", serde_json::to_string_pretty(&rec).unwrap_or_default());
         return 0;

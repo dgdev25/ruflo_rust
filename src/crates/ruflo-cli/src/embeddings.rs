@@ -104,19 +104,29 @@ fn dot(a: &[f64], b: &[f64]) -> f64 {
     a.iter().zip(b).map(|(x, y)| x * y).sum()
 }
 
-// Poincaré ball distance (curvature -1 default).
+/// Poincaré ball distance. The standard formula is
+///   d(x,y) = (1/√|k|) · acosh(1 + 2·‖x−y‖² / ((1−‖x‖²)(1−‖y‖²)))
+/// where ‖·‖² is the squared Euclidean norm. Curvature k must be negative
+/// (validated at the caller); |k| scales the result.
 fn poincare_distance(a: &[f64], b: &[f64], curvature: f64) -> f64 {
+    if curvature >= 0.0 {
+        // Hyperbolic (Poincaré) distance is only defined for negative curvature.
+        return f64::NAN;
+    }
     let norm_a_sq: f64 = a.iter().map(|x| x * x).sum();
     let norm_b_sq: f64 = b.iter().map(|x| x * x).sum();
-    let diff: f64 = a.iter().zip(b).map(|(x, y)| x - y).map(|d| d * d).sum::<f64>().sqrt();
+    let diff_sq: f64 = a.iter().zip(b).map(|(x, y)| x - y).map(|d| d * d).sum();
     let alpha = 1.0 - norm_a_sq;
     let beta = 1.0 - norm_b_sq;
-    let k = curvature.abs();
     let denom = alpha * beta;
     if denom <= 0.0 {
+        // One point is on/over the ball boundary — distance is infinite.
         return f64::INFINITY;
     }
-    2.0 / k.sqrt() * ((1.0 + diff / denom).ln().atanh())
+    let arg = 1.0 + 2.0 * diff_sq / denom;
+    // acosh is defined for arg >= 1; arg is always >= 1 here since diff_sq >= 0.
+    let acosh = (arg + (arg * arg - 1.0).sqrt()).ln();
+    acosh / curvature.abs().sqrt()
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -215,7 +225,22 @@ fn generate(command: &EmbeddingsCommand) -> u8 {
         return 1;
     };
     let dim = command.dim.unwrap_or(DEFAULT_DIM);
+    // Reject dim 0 (modulo-by-zero panic in embed()) and absurd dims.
+    if dim == 0 || dim > 4096 {
+        eprintln!("[ERROR] --dim must be in 1..=4096 (got {dim})");
+        return 1;
+    }
     let provider = command.provider.clone().unwrap_or_else(|| "local".into());
+    // Only the local deterministic vectorizer is available natively; requesting
+    // a provider/model that needs a runtime/API is an unsupported op, not a
+    // silent relabel.
+    if provider != "local" {
+        eprintln!("[ERROR] Provider '{provider}' requires its runtime/API (ONNX/OpenAI/etc.); only 'local' is available in the native build.");
+        return 1;
+    }
+    if command.model.is_some() {
+        eprintln!("[WARN] --model is ignored by the native local vectorizer.");
+    }
     let output_fmt = command.output.clone().unwrap_or_else(|| "preview".into());
 
     println!("\nGenerate Embedding");
@@ -287,7 +312,9 @@ fn search(command: &EmbeddingsCommand) -> u8 {
     }
     eprintln!("[WARN] Native search cannot query the sql.js/HNSW store. Install a Node");
     eprintln!("       runtime and run `npx ruflo embeddings search -q \"{query}\"`.");
-    0
+    // Fail closed: the search did not run, so exit nonzero — a CI gate must not
+    // treat "store present but unqueried" as a successful search.
+    1
 }
 
 // ---- compare ----------------------------------------------------------------
@@ -382,7 +409,10 @@ fn init(command: &EmbeddingsCommand) -> u8 {
     let cache_size = command.cache_size.unwrap_or(256);
 
     let dir = Path::new(".claude-flow");
-    let _ = fs::create_dir_all(dir);
+    if fs::create_dir_all(dir).is_err() {
+        eprintln!("[ERROR] Failed to create config dir {}", dir.display());
+        return 1;
+    }
     let cfg = json!({
         "model": model,
         "dimensions": DEFAULT_DIM,
@@ -393,7 +423,10 @@ fn init(command: &EmbeddingsCommand) -> u8 {
         "initializedAt": now_ms(),
     });
     let path = dir.join("embeddings-config.json");
-    let _ = fs::write(&path, serde_json::to_vec_pretty(&cfg).unwrap_or_default());
+    if fs::write(&path, serde_json::to_vec_pretty(&cfg).unwrap_or_default()).is_err() {
+        eprintln!("[ERROR] Failed to write config {}", path.display());
+        return 1;
+    }
     println!("\n\u{2714} Embeddings config written to {}", path.display());
     println!("  Model: {model} ({DEFAULT_DIM}-dim, native vectorizer)");
     println!("  Hyperbolic: {hyperbolic}, curvature: {curvature}");
@@ -431,9 +464,19 @@ fn chunk(command: &EmbeddingsCommand) -> u8 {
     println!("\nChunk Text (target ~{limit} tokens/chunk)");
     println!("{}", "\u{2500}".repeat(50));
 
-    // Sentence-aware chunking: split on sentence boundaries, accumulate up to
-    // the token limit.
-    let sentences: Vec<&str> = text.split("(?<=\\.)").flat_map(|s| s.split('\n')).collect();
+    // Sentence-aware chunking: split on '.', '!', '?' (keeping the terminator)
+    // and newlines, then accumulate up to the token limit.
+    let mut sentences: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    for ch in text.chars() {
+        cur.push(ch);
+        if matches!(ch, '.' | '!' | '?' | '\n') {
+            sentences.push(std::mem::take(&mut cur));
+        }
+    }
+    if !cur.trim().is_empty() {
+        sentences.push(cur);
+    }
     let mut chunks: Vec<String> = Vec::new();
     let mut current = String::new();
     let mut current_tokens = 0usize;
@@ -446,6 +489,16 @@ fn chunk(command: &EmbeddingsCommand) -> u8 {
         if current_tokens + tokens > limit && !current.is_empty() {
             chunks.push(std::mem::take(&mut current));
             current_tokens = 0;
+        }
+        // If a single sentence alone exceeds the limit, hard-split it by words
+        // so one oversized sentence can't blow past the budget.
+        if tokens > limit {
+            let words: Vec<&str> = sent.split_whitespace().collect();
+            for chunk_words in words.chunks(limit.max(1)) {
+                chunks.push(chunk_words.join(" "));
+            }
+            current_tokens = 0;
+            continue;
         }
         if !current.is_empty() {
             current.push(' ');
