@@ -25,6 +25,7 @@ mod hive_mind;
 mod issues;
 mod lifecycle;
 mod metaharness;
+mod neural;
 mod performance;
 mod plugins;
 mod policy;
@@ -430,6 +431,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::HiveMind(command)) => {
             ExitCode::from(hive_mind::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::Neural(command)) => {
+            ExitCode::from(neural::run(&current_directory(), command))
         }
         Ok(ParsedCommand::NativeOverview { name }) => {
             let root = current_directory();

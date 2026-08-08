@@ -61,6 +61,7 @@ pub enum ParsedCommand {
     Daemon(crate::daemon::DaemonCommand),
     Embeddings(crate::embeddings::EmbeddingsCommand),
     HiveMind(crate::hive_mind::HiveMindCommand),
+    Neural(crate::neural::NeuralCommand),
     TransferStore(crate::transfer_store::TransferStoreCommand),
     MemoryStore {
         key: String,
@@ -1142,6 +1143,40 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             plan_file: option_value(&args, "--plan-file", "--plan-file"),
             strict: args.iter().any(|v| v == "--strict"),
             json: args.iter().any(|v| v == "--json" || v == "--format=json"),
+        }));
+    }
+    if normalized.first() == Some(&"neural") {
+        let operation = normalized.get(1).copied().unwrap_or("").to_string();
+        // `neural router <op>` and `neural distill <op>` capture the subcommand.
+        let sub = if operation == "router" || operation == "distill" {
+            normalized.get(2).copied().map(|s| s.to_string())
+        } else {
+            None
+        };
+        return Ok(ParsedCommand::Neural(crate::neural::NeuralCommand {
+            operation,
+            sub,
+            pattern: option_value(&args, "--pattern", "-p"),
+            epochs: option_value(&args, "--epochs", "-e")
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(50),
+            data: option_value(&args, "--data", "-d"),
+            model: option_value(&args, "--model", "-m"),
+            learning_rate: option_value(&args, "--learning-rate", "-l")
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(0.01),
+            batch_size: option_value(&args, "--batch-size", "-b")
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(32),
+            dim: option_value(&args, "--dim", "--dim")
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(256),
+            input: option_value(&args, "--input", "-i"),
+            top_k: option_value(&args, "--top-k", "--top-k")
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(5),
+            json: args.iter().any(|v| v == "--json"),
+            verbose: args.iter().any(|v| matches!(v.as_str(), "--verbose" | "-v")),
         }));
     }
     if normalized.first() == Some(&"hive-mind") || normalized.first() == Some(&"hive") {
