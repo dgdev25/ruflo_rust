@@ -1,5 +1,6 @@
 //! Shared native CLI entrypoint for thin Ruflo-compatible binaries.
 
+mod analyze;
 mod announcements;
 mod appliance;
 mod appliance_advanced;
@@ -414,6 +415,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::Security(command)) => {
             ExitCode::from(security::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::Analyze(command)) => {
+            ExitCode::from(analyze::run(&current_directory(), command))
         }
         Ok(ParsedCommand::NativeOverview { name }) => {
             let root = current_directory();

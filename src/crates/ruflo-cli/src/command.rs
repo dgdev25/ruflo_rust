@@ -57,6 +57,7 @@ pub enum ParsedCommand {
     Route(crate::route::RouteCommand),
     Plugins(crate::plugins::PluginsCommand),
     Security(crate::security::SecurityCommand),
+    Analyze(crate::analyze::AnalyzeCommand),
     TransferStore(crate::transfer_store::TransferStoreCommand),
     MemoryStore {
         key: String,
@@ -1138,6 +1139,41 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             plan_file: option_value(&args, "--plan-file", "--plan-file"),
             strict: args.iter().any(|v| v == "--strict"),
             json: args.iter().any(|v| v == "--json" || v == "--format=json"),
+        }));
+    }
+    if normalized.first() == Some(&"analyze") || normalized.first() == Some(&"an") {
+        let operation = normalized.get(1).copied().unwrap_or("").to_string();
+        // Positional = first bare token AFTER the operation token (a path or
+        // git ref). Skip binary + operation, exclude flag values.
+        let op_idx = args.iter().position(|a| a == "analyze" || a == "an");
+        let positional = op_idx.and_then(|start| {
+            args.iter().skip(start + 2).find_map(|a| {
+                if a.starts_with('-') {
+                    None
+                } else {
+                    Some(a.clone())
+                }
+            })
+        });
+        return Ok(ParsedCommand::Analyze(crate::analyze::AnalyzeCommand {
+            operation,
+            positional,
+            path: option_value(&args, "--path", "-p"),
+            analysis_type: option_value(&args, "--type", "-t"),
+            format: option_value(&args, "--format", "-f"),
+            risk: args.iter().any(|v| matches!(v.as_str(), "--risk" | "-r")),
+            classify: args.iter().any(|v| matches!(v.as_str(), "--classify" | "-c")),
+            reviewers: args.iter().any(|v| v == "--reviewers"),
+            verbose: args.iter().any(|v| matches!(v.as_str(), "--verbose" | "-v")),
+            complexity: args.iter().any(|v| matches!(v.as_str(), "--complexity" | "-c")),
+            symbols: args.iter().any(|v| matches!(v.as_str(), "--symbols" | "-s")),
+            output: option_value(&args, "--output", "-o"),
+            external: args.iter().any(|v| matches!(v.as_str(), "--external" | "-e")),
+            partitions: option_value(&args, "--partitions", "-p")
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(2),
+            threshold: option_value(&args, "--threshold", "-t")
+                .and_then(|v| v.parse::<usize>().ok()),
         }));
     }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {
