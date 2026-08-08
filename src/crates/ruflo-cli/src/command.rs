@@ -47,6 +47,7 @@ pub enum ParsedCommand {
     Auth(crate::auth::AuthCommand),
     Autopilot(crate::autopilot::AutopilotCommand),
     Proxy(crate::proxy::ProxyCommand),
+    ApplianceAdvanced(crate::appliance_advanced::ApplianceAdvancedCommand),
     MemoryStore {
         key: String,
         value: String,
@@ -935,6 +936,29 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             operation,
             yes: args.iter().any(|v| v == "--yes"),
         }));
+    }
+    if normalized.first() == Some(&"appliance-advanced") {
+        let operation = normalized.get(1).copied().unwrap_or("").to_string();
+        return Ok(ParsedCommand::ApplianceAdvanced(
+            crate::appliance_advanced::ApplianceAdvancedCommand {
+                operation,
+                file: option_value(&args, "--file", "-f"),
+                section: option_value(&args, "--section", "-s"),
+                patch: option_value(&args, "--patch", "-p"),
+                data: option_value(&args, "--data", "-d"),
+                key: option_value(&args, "--key", "-k"),
+                generate_keys: args.iter().any(|v| v == "--generate-keys"),
+                key_dir: option_value(&args, "--key-dir", "--key-dir")
+                    .unwrap_or_else(|| ".rvfa-keys".into()),
+                signer: option_value(&args, "--signer", "--signer"),
+                name: option_value(&args, "--name", "-n"),
+                description: option_value(&args, "--description", "--description"),
+                version: option_value(&args, "--version", "--version")
+                    .unwrap_or_else(|| "0.0.1".into()),
+                no_backup: args.iter().any(|v| v == "--no-backup"),
+                public_key: option_value(&args, "--public-key", "--public-key"),
+            },
+        ));
     }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {
         let key = option_value(&args, "--key", "-k").ok_or("memory key is required")?;
