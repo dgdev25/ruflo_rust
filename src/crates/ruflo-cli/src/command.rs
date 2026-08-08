@@ -15,6 +15,7 @@ pub enum ParsedCommand {
         topology: String,
         daemon: bool,
     },
+    Progress,
     Help,
     Init,
     Status,
@@ -165,6 +166,9 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
                 .unwrap_or_else(|| "hierarchical-mesh".into()),
             daemon: args.iter().any(|value| value == "--daemon"),
         });
+    }
+    if normalized.first() == Some(&"progress") {
+        return Ok(ParsedCommand::Progress);
     }
 
     if normalized.starts_with(&["agent", "spawn"]) {

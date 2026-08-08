@@ -150,6 +150,10 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
                 Err(error) => task_error(error),
             }
         }
+        Ok(ParsedCommand::Progress) => {
+            println!("Native V3 command migration progress\nTop-level families: 11 initial native commands; 53 required for parity\nStatus: in progress — source differential fixtures remain mandatory");
+            ExitCode::SUCCESS
+        }
         Ok(ParsedCommand::Help) => {
             print!("{HELP}");
             ExitCode::SUCCESS
