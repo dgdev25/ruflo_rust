@@ -772,22 +772,60 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
                 ExitCode::from(ERROR_EXIT)
             }
         },
-        Ok(ParsedCommand::Status) => match lifecycle::status(&current_directory()) {
-            Ok(status) => {
-                println!("RuFlo V3 [STOPPED]");
-                println!("Agents: {}", status.agents);
-                println!("Tasks: {}", status.tasks);
-                ExitCode::SUCCESS
+        Ok(ParsedCommand::Status) => {
+            let root = current_directory();
+            let config = root.join(".claude-flow/config.json").is_file()
+                || root.join("claude-flow.config.json").is_file();
+            let memory =
+                root.join(".claude-flow/memory").is_dir() || root.join("data/memory").is_dir();
+            let swarm = root.join(".swarm/state.json").is_file();
+            let agents_dir = root.join(".claude-flow/agents");
+            let sessions = root.join(".claude-flow/sessions");
+            let mcp = root.join(".claude-flow/mcp.json").is_file();
+            match lifecycle::status(&root) {
+                Ok(status) => {
+                    println!("RuFlo V3 [{}]", if swarm { "ACTIVE" } else { "STOPPED" });
+                    println!();
+                    println!(
+                        "Configuration:\t{}",
+                        if config { "initialized" } else { "not found" }
+                    );
+                    println!(
+                        "Memory:\t\t{}",
+                        if memory {
+                            "hybrid backend"
+                        } else {
+                            "not initialized"
+                        }
+                    );
+                    println!(
+                        "MCP Server:\t{}",
+                        if mcp { "configured" } else { "not configured" }
+                    );
+                    println!("Agents:\t\t{}", status.agents);
+                    println!("Tasks:\t\t{}", status.tasks);
+                    if agents_dir.is_dir() {
+                        let count = std::fs::read_dir(&agents_dir)
+                            .map(|d| d.count())
+                            .unwrap_or(0);
+                        println!("Agent defs:\t{count}");
+                    }
+                    if sessions.is_dir() {
+                        let count = std::fs::read_dir(&sessions).map(|d| d.count()).unwrap_or(0);
+                        println!("Sessions:\t{count}");
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    eprintln!("[ERROR] {error}");
+                    ExitCode::from(1)
+                }
+                Err(error) => {
+                    eprintln!("error: failed to read RuFlo status: {error}");
+                    ExitCode::from(ERROR_EXIT)
+                }
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                eprintln!("[ERROR] {error}");
-                ExitCode::from(1)
-            }
-            Err(error) => {
-                eprintln!("error: failed to read RuFlo status: {error}");
-                ExitCode::from(ERROR_EXIT)
-            }
-        },
+        }
         Ok(ParsedCommand::SwarmInit {
             topology,
             max_agents,
