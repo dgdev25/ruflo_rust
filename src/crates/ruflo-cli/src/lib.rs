@@ -344,9 +344,74 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             ExitCode::from(metaharness::run(&current_directory(), command))
         }
         Ok(ParsedCommand::NativeOverview { name }) => {
-            println!("\n{name} — native surface active (full V3 parity pending)");
-            println!("Run '{name} --help' for usage once the command is fully ported.");
-            println!("See docs/GLM_COMMAND_CONVERSION_HANDOFF.md for conversion status.");
+            let root = current_directory();
+            match name.as_str() {
+                "neural" => {
+                    println!("\nNeural Pattern Training");
+                    println!("\nSubcommands:");
+                    println!("  train     - Train neural patterns (WASM SIMD, MicroLoRA, Flash Attention)");
+                    println!("  status    - Check training status");
+                    println!("  patterns  - List learned patterns");
+                    println!("  predict   - Make predictions");
+                    println!("  optimize  - Optimize models");
+                    let models = root.join(".claude-flow/neural/models");
+                    if models.is_dir() {
+                        let count = std::fs::read_dir(&models).map(|d| d.count()).unwrap_or(0);
+                        println!("\nModels: {count} trained");
+                    } else {
+                        println!("\nNo models trained. Run 'ruflo neural train' to begin.");
+                    }
+                }
+                "security" => {
+                    println!("\nSecurity Scanning");
+                    println!("\nSubcommands:");
+                    println!("  scan       - Security scan");
+                    println!("  cve        - CVE detection");
+                    println!("  threats    - Threat modeling");
+                    println!("  audit      - Security audit");
+                    println!("  secrets    - Secrets scanning");
+                }
+                "performance" | "perf" => {
+                    println!("\nPerformance Profiling");
+                    println!("\nSubcommands:");
+                    println!("  benchmark  - Run benchmarks");
+                    println!("  profile    - Profile code");
+                    println!("  metrics    - Show metrics");
+                    println!("  optimize   - Optimize performance");
+                    println!("  bottleneck - Find bottlenecks");
+                }
+                "hooks" => {
+                    println!("\nSelf-Learning Hooks System");
+                    println!("\nSubcommands:");
+                    println!("  pre-edit    - Before file editing");
+                    println!("  post-edit   - After file editing");
+                    println!("  pre-command - Before command execution");
+                    println!("  post-command- After command execution");
+                    println!("  route       - Route task to agent");
+                    println!("  intelligence- Neural intelligence commands");
+                    let settings = root.join(".claude/settings.json");
+                    if settings.is_file() {
+                        println!("\nSettings: configured");
+                    }
+                }
+                "workflow" => {
+                    println!("\nWorkflow Execution");
+                    println!("\nSubcommands:");
+                    println!("  run      - Run a workflow");
+                    println!("  validate - Validate workflow definition");
+                    println!("  list     - List workflows");
+                    println!("  status   - Workflow status");
+                    let wf_dir = root.join(".claude-flow/workflows");
+                    if wf_dir.is_dir() {
+                        let count = std::fs::read_dir(&wf_dir).map(|d| d.count()).unwrap_or(0);
+                        println!("\nWorkflows: {count} defined");
+                    }
+                }
+                cmd => {
+                    println!("\n{cmd} — native surface active (full V3 parity pending)");
+                    println!("Run '{cmd} --help' for usage once the command is fully ported.");
+                }
+            }
             ExitCode::SUCCESS
         }
         Ok(ParsedCommand::MemoryStore {
