@@ -126,6 +126,15 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             print!("{}", completion_script(&shell));
             ExitCode::SUCCESS
         }
+        Ok(ParsedCommand::Doctor) => {
+            let root = current_directory();
+            let config = root.join(".claude-flow/config.yaml").is_file();
+            let swarm = root.join(".swarm/state.json").is_file();
+            println!("Config File\t{}", if config { "pass" } else { "warn" });
+            println!("Swarm State\t{}", if swarm { "pass" } else { "warn" });
+            println!("Native CLI\tpass");
+            ExitCode::SUCCESS
+        }
         Ok(ParsedCommand::Help) => {
             print!("{HELP}");
             ExitCode::SUCCESS

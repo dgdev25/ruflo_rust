@@ -10,6 +10,7 @@ pub enum ParsedCommand {
     Completions {
         shell: String,
     },
+    Doctor,
     Help,
     Init,
     Status,
@@ -150,6 +151,9 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             return Err("unsupported shell; use bash, zsh, fish, or powershell".into());
         }
         return Ok(ParsedCommand::Completions { shell });
+    }
+    if normalized.first() == Some(&"doctor") {
+        return Ok(ParsedCommand::Doctor);
     }
 
     if normalized.starts_with(&["agent", "spawn"]) {
