@@ -53,6 +53,9 @@ const BYTE_ALIGNED: &[&str] = &[
     "appliance",
     "transfer-store",
     "process",
+    "claims",
+    "benchmark",
+    "metaharness",
 ];
 
 /// Families with a captured source-oracle overview fixture. doctor/funnel/

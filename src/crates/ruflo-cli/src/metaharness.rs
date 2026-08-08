@@ -26,7 +26,28 @@ const SUBCOMMANDS: &[(&str, &str)] = &[
     ("bench", "bench.mjs"),
 ];
 
-const OVERVIEW: &str = "\nnpx ruflo metaharness <subcommand> [options]\n\nSubcommands:\n  score         5-dimension harness readiness scorecard\n  genome        7-section categorical readiness report\n  mcp-scan      static security scan of declared MCP surface\n  threat-model  enterprise-grade threat model\n  oia-audit     composite weekly audit (oia + threat + mcp) -> memory\n  audit-list    enumerate timestamped audit records\n  audit-trend   diff two audit records (drift detection)\n  similarity    ADR-152 -- weighted similarity between two harness fingerprints\n  drift-from-history  1-command drift detection against most recent audit\n  mint          scaffold a custom harness (dry-run by default)\n  redblue       adversarial red/blue LLM testing (init|run|patch|attack|report)\n  evolve        Darwin candidate evolution\n  bench         create or verify a stable benchmark suite\n  flywheel      receipt loop: run | status | receipts | history | promote\n\nEach subcommand accepts --format json|table and --help.\n\nADR-150 -- runs as subprocess; graceful degradation if metaharness is not installed.\n";
+const OVERVIEW: &str = r####"npx ruflo metaharness <subcommand> [options]
+
+Subcommands:
+  score         5-dimension harness readiness scorecard
+  genome        7-section categorical readiness report
+  mcp-scan      static security scan of declared MCP surface
+  threat-model  enterprise-grade threat model
+  oia-audit     composite weekly audit (oia + threat + mcp) → memory
+  audit-list    enumerate timestamped audit records
+  audit-trend   diff two audit records (drift detection)
+  similarity    ADR-152 — weighted similarity between two harness fingerprints
+  drift-from-history  iter 53 — diff current state against most recent audit (1-command drift)
+  mint          scaffold a custom harness (dry-run by default)
+  redblue       adversarial red/blue LLM testing (init|run|patch|attack|report)
+  evolve        Darwin candidate evolution
+  bench         create or verify a stable benchmark suite
+  flywheel      receipt loop: run | status | receipts | history | promote
+
+Each subcommand accepts --format json|table and --help.
+
+ADR-150 — runs as subprocess; graceful degradation if metaharness is not installed.
+"####;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MetaCommand {

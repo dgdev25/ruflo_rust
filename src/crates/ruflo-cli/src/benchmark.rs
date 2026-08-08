@@ -164,4 +164,18 @@ fn help(sub: Option<&str>) -> &'static str {
     }
 }
 
-const OVERVIEW: &str = "\nRuFlo V3 Benchmark Suite\n\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\n\nAvailable subcommands:\n  pretrain  - Benchmark self-learning pre-training (SONA, EWC++, MoE)\n  neural    - Benchmark neural operations (embeddings, WASM)\n  memory    - Benchmark memory operations (HNSW, store, search)\n  all       - Run all benchmark suites\n\nExamples:\n  claude-flow benchmark pretrain -i 200\n  claude-flow benchmark all --save results.json\n";
+const OVERVIEW: &str = r####"
+RuFlo V3 Benchmark Suite
+──────────────────────────────────────────────────
+
+Available subcommands:
+  pretrain  - Benchmark self-learning pre-training (SONA, EWC++, MoE)
+  neural    - Benchmark neural operations (embeddings, WASM)
+  memory    - Benchmark memory operations (HNSW, store, search)
+  all       - Run all benchmark suites
+
+Examples:
+  claude-flow benchmark pretrain -i 200
+  claude-flow benchmark all --save results.json
+
+"####;

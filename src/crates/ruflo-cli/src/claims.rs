@@ -896,7 +896,26 @@ fn visible_len(value: &str) -> usize {
     len
 }
 
-const OVERVIEW: &str = "\n\x1b[1mRuFlo Claims System\x1b[0m\n\x1b[2mFine-grained authorization and access control\x1b[0m\n\nSubcommands:\n  list     - List claims and permissions\n  check    - Check if a claim is granted\n  grant    - Grant a claim to user or role\n  revoke   - Revoke a claim\n  roles    - Manage roles and their claims\n  policies - Manage claim policies\n\nClaim Types:\n  swarm:*   - Swarm operations (create, delete, scale)\n  agent:*   - Agent operations (spawn, terminate)\n  memory:*  - Memory operations (read, write, delete)\n  admin:*   - Administrative operations\n\n\x1b[2mCreated with ❤️ by ruv.io\x1b[0m\n";
+const OVERVIEW: &str = r####"
+RuFlo Claims System
+Fine-grained authorization and access control
+
+Subcommands:
+  - list     - List claims and permissions
+  - check    - Check if a claim is granted
+  - grant    - Grant a claim to user or role
+  - revoke   - Revoke a claim
+  - roles    - Manage roles and their claims
+  - policies - Manage claim policies
+
+Claim Types:
+  - swarm:*   - Swarm operations (create, delete, scale)
+  - agent:*   - Agent operations (spawn, terminate)
+  - memory:*  - Memory operations (read, write, delete)
+  - admin:*   - Administrative operations
+
+Created with ❤️ by ruv.io
+"####;
 
 fn help(bin: &str, subcommand: Option<&str>) -> String {
     match subcommand {
