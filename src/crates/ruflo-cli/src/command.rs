@@ -42,6 +42,7 @@ pub enum ParsedCommand {
     MetaHarness(crate::metaharness::MetaCommand),
     Verify(crate::verify::VerifyCommand),
     Policy(crate::policy::PolicyCommand),
+    UpdateCmd(crate::update_cmd::UpdateCommand),
     MemoryStore {
         key: String,
         value: String,
@@ -857,6 +858,28 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             args: poly_args,
             mode,
             project_root,
+        }));
+    }
+    if normalized.first() == Some(&"update") {
+        let operation = normalized.get(1).copied().unwrap_or("check").to_string();
+        let json = args.iter().any(|v| v == "--json");
+        let force = args.iter().any(|v| v == "--force");
+        let dry_run = args
+            .iter()
+            .any(|v| matches!(v.as_str(), "--dry-run" | "-n"));
+        let include_major = args.iter().any(|v| v == "--include-major");
+        let clear = args.iter().any(|v| v == "--clear");
+        let limit = option_value(&args, "--limit", "-n")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(20);
+        return Ok(ParsedCommand::UpdateCmd(crate::update_cmd::UpdateCommand {
+            operation,
+            json,
+            force,
+            dry_run,
+            include_major,
+            limit,
+            clear,
         }));
     }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {

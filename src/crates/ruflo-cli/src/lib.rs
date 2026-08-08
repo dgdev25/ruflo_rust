@@ -18,6 +18,7 @@ mod metaharness;
 mod policy;
 mod settings;
 mod spinner;
+mod update_cmd;
 mod verify;
 mod version;
 
@@ -350,6 +351,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::Policy(command)) => {
             ExitCode::from(policy::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::UpdateCmd(command)) => {
+            ExitCode::from(update_cmd::run(&current_directory(), command))
         }
         Ok(ParsedCommand::NativeOverview { name }) => {
             let root = current_directory();
