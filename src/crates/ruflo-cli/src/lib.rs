@@ -7,6 +7,7 @@ mod compressor;
 mod config_file;
 mod deployment;
 mod lifecycle;
+mod version;
 
 use std::ffi::OsString;
 use std::process::ExitCode;
@@ -142,24 +143,10 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         Ok(ParsedCommand::VersionCommand {
             explain,
             require_catalog_gte,
-        }) => {
-            let generation = 0_u64;
-            if let Some(required) = require_catalog_gte {
-                if generation >= required {
-                    println!("OK (installed catalog is {generation})");
-                    return ExitCode::SUCCESS;
-                }
-                eprintln!("Installed catalog generation {generation} is below required {required}");
-                return ExitCode::from(1);
-            }
-            if explain {
-                println!("Installed: ruflo@{}", env!("CARGO_PKG_VERSION"));
-                println!("  (no catalog-manifest.json — plain semver, native dev checkout)");
-            } else {
-                println!("{}", env!("CARGO_PKG_VERSION"));
-            }
-            ExitCode::SUCCESS
-        }
+        }) => ExitCode::from(version::run(version::VersionCommand {
+            explain,
+            require_catalog_gte,
+        })),
         Ok(ParsedCommand::Completions { shell }) => {
             print!("{}", completion_script(&shell));
             ExitCode::SUCCESS
