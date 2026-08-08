@@ -918,7 +918,7 @@ mod tests {
     static TEST_LOCK: Mutex<()> = Mutex::new(());
 
     fn lock() -> std::sync::MutexGuard<'static, ()> {
-        TEST_LOCK.lock().unwrap()
+        TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     #[test]

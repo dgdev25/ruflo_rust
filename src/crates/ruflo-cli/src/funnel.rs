@@ -961,7 +961,7 @@ mod tests {
     static STATE_LOCK: Mutex<()> = Mutex::new(());
 
     fn isolated_state(test_name: &str) -> (tempfile::TempDir, std::sync::MutexGuard<'static, ()>) {
-        let guard = STATE_LOCK.lock().unwrap();
+        let guard = STATE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("RUFLO_STATE_DIR", dir.path());
         let _ = test_name;
