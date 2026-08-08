@@ -32,6 +32,7 @@ mod transfer_store;
 mod update_cmd;
 mod verify;
 mod version;
+mod workflow;
 
 use std::ffi::OsString;
 use std::process::ExitCode;
@@ -398,6 +399,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::ProcessCmd(command)) => {
             ExitCode::from(process_cmd::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::Workflow(command)) => {
+            ExitCode::from(workflow::run(&current_directory(), command))
         }
         Ok(ParsedCommand::NativeOverview { name }) => {
             let root = current_directory();
