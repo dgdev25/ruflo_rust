@@ -33,6 +33,7 @@ pub enum ParsedCommand {
     Claims(crate::claims::ClaimsCommand),
     Advisor(crate::funnel::AdvisorCommand),
     Announcements(crate::announcements::AnnouncementsCommand),
+    Spinner(crate::spinner::SpinnerCommand),
     MemoryStore {
         key: String,
         value: String,
@@ -531,6 +532,28 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             }
         };
         return Ok(ParsedCommand::Announcements(cmd));
+    }
+    if normalized.first() == Some(&"spinner") {
+        use crate::spinner::SpinnerCommand as Spin;
+        let subcommand = normalized.get(1).copied();
+        if args.iter().any(|v| matches!(v.as_str(), "--help" | "-h")) {
+            return Ok(ParsedCommand::Spinner(Spin::Help {
+                subcommand: subcommand
+                    .filter(|v| !v.starts_with('-'))
+                    .map(str::to_owned),
+            }));
+        }
+        let json = args.iter().any(|v| v == "--json");
+        let yes = args.iter().any(|v| v == "--yes");
+        let cmd = match subcommand {
+            None => Spin::List { json },
+            Some("list") => Spin::List { json },
+            Some("enable") => Spin::Enable { yes },
+            Some("disable") => Spin::Disable,
+            Some("reset") => Spin::Reset { yes },
+            Some(other) => return Err(format!("Unknown subcommand '{other}' for spinner")),
+        };
+        return Ok(ParsedCommand::Spinner(cmd));
     }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {
         let key = option_value(&args, "--key", "-k").ok_or("memory key is required")?;
