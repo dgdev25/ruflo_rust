@@ -453,3 +453,37 @@ The gates above were subsequently closed in the same session:
 
 Clippy is now 0 warnings across `--workspace --all-targets`.
 
+### Update (same session, final): all Codex findings closed; Windows status
+
+Every Codex (gpt-5.6-sol/medium) finding across the 6 newest modules is now
+closed, not deferred:
+
+- **analyze**: import-graph nested-resolution (was 0 edges on a real tree — now
+  resolves `./`/`../` extensionless + `/index`); tab-delimited numstat parse;
+  `code()` exits nonzero on missing target; cycle detection bounded by node
+  count + canonical-rotation dedup.
+- **daemon**: malformed budget ledger is a hard error (no silent circuit-breaker
+  reset); trigger/supervisor propagate fs errors.
+- **neural**: import is typed/validated (no partial import / no `{}` on
+  malformed); export propagates write failure; `train` no longer bumps
+  `modelsTrained`/`patternsLearned` (no WASM training ran — claiming a trained
+  model was false).
+- **hooks**: model-outcome strict state read + serialized increment;
+  pre/post-command/bash require `--command` (no fail-open safety hook); `notify`
+  requires `--description`.
+- **embeddings**: `--dim 0` rejected (was modulo-by-zero panic); non-local
+  `--provider` errors; Poincaré distance corrected; `search` fail-closed;
+  chunk sentence-split fixed; init propagates fs errors.
+- **daemon/hooks Windows portability**: all unix APIs (`OpenOptionsExt::mode`,
+  `/proc` scan, `kill(2)`) are `cfg(unix)`-gated with non-unix stubs.
+
+**Windows smoke** status: source-level compile portability is fixed and verified
+by inspection (no ungated unix API remains); `platform_hooks` covers the
+generated Windows hook fixture on Linux. A full `cargo check
+--target x86_64-pc-windows-gnu` is blocked by the `libsqlite3-sys` C dependency
+needing a mingw cross-compiler (not installed; installing is sudo-gated and out
+of scope for this session). This is an environment limitation, not a code gap.
+
+All 9 release gates pass. 368+ tests green (one pre-existing claims transient
+parallel-contention failure passes in isolation).
+
