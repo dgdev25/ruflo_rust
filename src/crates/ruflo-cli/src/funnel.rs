@@ -361,6 +361,16 @@ fn parse_iso_millis(value: &str) -> Option<u64> {
     let minute: i64 = std::str::from_utf8(&b[14..16]).ok()?.parse().ok()?;
     let second: i64 = std::str::from_utf8(&b[17..19]).ok()?.parse().ok()?;
     let millis: i64 = std::str::from_utf8(&b[20..23]).ok()?.parse().ok()?;
+    // Date.parse rejects out-of-range components — validate them.
+    if !(1..=12).contains(&month)
+        || !(1..=31).contains(&day)
+        || !(0..=23).contains(&hour)
+        || !(0..=59).contains(&minute)
+        || !(0..=59).contains(&second)
+        || !(0..=999).contains(&millis)
+    {
+        return None;
+    }
     let days = days_from_civil(year, month, day);
     let secs = days * 86_400 + hour * 3600 + minute * 60 + second;
     Some((secs * 1000 + millis) as u64)
@@ -852,6 +862,95 @@ pub fn read_consents_pub() -> Value {
 /// Public pseudonymous funnel-id accessor for `settings notices id`.
 pub fn get_funnel_id_pub() -> Option<String> {
     get_funnel_id()
+}
+
+// ─── disclosure accept/promoEligible + payout enrollment (funnel command) ────
+
+const DISCLOSURE_GRACE_MS: u64 = 24 * 60 * 60 * 1000;
+
+/// Backdate firstShownAt past the 24h grace so promo rotation starts at once.
+pub fn record_disclosure_accepted() -> DisclosureRecord {
+    let backdated = unix_millis().saturating_sub(DISCLOSURE_GRACE_MS + 1000);
+    let iso = iso_from_millis(backdated as i64);
+    let rec = json!({ "state": "disclosed_enabled", "firstShownAt": iso });
+    write_state_json("funnel-disclosure.json", &rec);
+    DisclosureRecord {
+        state: DisclosureState::DisclosedEnabled,
+        first_shown_at: Some(iso),
+    }
+}
+
+/// promoEligible (disclosure.ts:122): disclosed_enabled + firstShownAt + age ≥ 24h.
+pub fn promo_eligible() -> bool {
+    let rec = get_disclosure();
+    if rec.state != DisclosureState::DisclosedEnabled {
+        return false;
+    }
+    let Some(first) = rec.first_shown_at.as_deref().and_then(parse_iso_millis) else {
+        return false;
+    };
+    unix_millis().saturating_sub(first) >= DISCLOSURE_GRACE_MS
+}
+
+#[derive(Debug, Clone)]
+pub struct PayoutEnrollment {
+    pub kyc_status: String,
+    pub enrolled_at: String,
+    pub payout_account_last4: String,
+    #[allow(dead_code)]
+    pub enrollment_token: Option<String>,
+}
+
+pub fn get_enrollment() -> Option<PayoutEnrollment> {
+    let v = read_state_json("funnel-payout.json")?;
+    Some(PayoutEnrollment {
+        kyc_status: v.get("kyc_status").and_then(Value::as_str)?.to_string(),
+        enrolled_at: v.get("enrolled_at").and_then(Value::as_str)?.to_string(),
+        payout_account_last4: v
+            .get("payout_account_last4")
+            .and_then(Value::as_str)?
+            .to_string(),
+        enrollment_token: v
+            .get("enrollment_token")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+    })
+}
+
+pub fn delete_enrollment() -> bool {
+    // payout.ts:58 writes JSON null (idempotent success). get_enrollment treats
+    // a null file the same as absent (fields missing → None).
+    write_state_json("funnel-payout.json", &Value::Null)
+}
+
+/// isEarningEligible (payout.ts:34): consent + verified KYC + enrollment token.
+pub fn is_earning_eligible() -> bool {
+    if !has_consent("rev-share-payout") {
+        return false;
+    }
+    match get_enrollment() {
+        Some(rec) => {
+            rec.kyc_status == "verified"
+                && rec
+                    .enrollment_token
+                    .as_deref()
+                    .map(|t| !t.is_empty())
+                    .unwrap_or(false)
+        }
+        None => false,
+    }
+}
+
+fn iso_from_millis(millis: i64) -> String {
+    let seconds = millis.div_euclid(1000);
+    let sub_millis = millis.rem_euclid(1000);
+    let days = seconds.div_euclid(86_400);
+    let seconds_of_day = seconds.rem_euclid(86_400);
+    let (year, month, day) = civil_from_days(days);
+    let hour = seconds_of_day / 3600;
+    let minute = seconds_of_day % 3600 / 60;
+    let second = seconds_of_day % 60;
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{sub_millis:03}Z")
 }
 
 #[cfg(test)]

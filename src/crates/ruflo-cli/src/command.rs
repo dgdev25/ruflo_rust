@@ -35,6 +35,7 @@ pub enum ParsedCommand {
     Announcements(crate::announcements::AnnouncementsCommand),
     Spinner(crate::spinner::SpinnerCommand),
     Settings(crate::settings::SettingsCommand),
+    Funnel(crate::funnel_command::FunnelCommand),
     MemoryStore {
         key: String,
         value: String,
@@ -583,6 +584,33 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             return Ok(ParsedCommand::Settings(cmd));
         }
         return Ok(ParsedCommand::Settings(Set::Overview));
+    }
+    if normalized.first() == Some(&"funnel") {
+        use crate::funnel_command::FunnelCommand as F;
+        if args.iter().any(|v| matches!(v.as_str(), "--help" | "-h")) {
+            return Ok(ParsedCommand::Funnel(F::Help {
+                subcommand: normalized
+                    .get(1)
+                    .filter(|v| !v.starts_with('-'))
+                    .copied()
+                    .map(str::to_owned),
+            }));
+        }
+        let json = args.iter().any(|v| v == "--json");
+        let cmd = match normalized.get(1).copied() {
+            None => F::Status { json },
+            Some("status") => F::Status { json },
+            Some("disable") => F::Disable,
+            Some("enable") => F::Enable,
+            Some("accept") => F::Accept,
+            Some("open") => F::Open,
+            Some("enroll") => F::Enroll,
+            Some("earnings") => F::Earnings { json },
+            Some("unenroll") => F::Unenroll,
+            Some("id") => F::Id,
+            Some(other) => return Err(format!("Unknown subcommand '{other}' for funnel")),
+        };
+        return Ok(ParsedCommand::Funnel(cmd));
     }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {
         let key = option_value(&args, "--key", "-k").ok_or("memory key is required")?;

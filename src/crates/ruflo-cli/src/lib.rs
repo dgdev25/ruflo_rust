@@ -9,6 +9,7 @@ mod compressor;
 mod config_file;
 mod deployment;
 mod funnel;
+mod funnel_command;
 mod lifecycle;
 mod settings;
 mod spinner;
@@ -282,6 +283,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         Ok(ParsedCommand::Spinner(command)) => ExitCode::from(spinner::run(command)),
         Ok(ParsedCommand::Settings(command)) => {
             ExitCode::from(settings::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::Funnel(command)) => {
+            ExitCode::from(funnel_command::run(&current_directory(), command))
         }
         Ok(ParsedCommand::MemoryStore {
             key,
