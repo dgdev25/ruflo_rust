@@ -1068,6 +1068,33 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             },
         ));
     }
+    if normalized.first() == Some(&"plugins") {
+        let operation = normalized.get(1).copied().unwrap_or("list").to_string();
+        return Ok(ParsedCommand::Plugins(crate::plugins::PluginsCommand {
+            operation,
+            name: option_value(&args, "--name", "-n"),
+            installed: args
+                .iter()
+                .any(|v| matches!(v.as_str(), "--installed" | "-i")),
+            available: args
+                .iter()
+                .any(|v| matches!(v.as_str(), "--available" | "-a")),
+            category: option_value(&args, "--category", "-c"),
+            plugin_type: option_value(&args, "--type", "-t"),
+            official: args
+                .iter()
+                .any(|v| matches!(v.as_str(), "--official" | "-o")),
+            featured: args
+                .iter()
+                .any(|v| matches!(v.as_str(), "--featured" | "-f")),
+            json: args.iter().any(|v| v == "--json"),
+            enabled: args
+                .iter()
+                .any(|v| v == "--enable")
+                .then_some(true)
+                .or_else(|| args.iter().any(|v| v == "--disable").then_some(false)),
+        }));
+    }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {
         let key = option_value(&args, "--key", "-k").ok_or("memory key is required")?;
         let value = option_value(&args, "--value", "--value")
@@ -1615,7 +1642,6 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
                 | Some("an")
                 | Some("route")
                 | Some("providers")
-                | Some("plugins")
                 | Some("update")
                 | Some("ruvector")
                 | Some("rv")
