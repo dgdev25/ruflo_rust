@@ -63,6 +63,12 @@ pub enum ParsedCommand {
         key: Option<String>,
     },
     MigrateStatus,
+    MigrateRun {
+        target: String,
+        dry_run: bool,
+        backup: bool,
+        force: bool,
+    },
     Help,
     Init,
     Status,
@@ -328,6 +334,18 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
     }
     if normalized.as_slice() == ["migrate", "status"] {
         return Ok(ParsedCommand::MigrateStatus);
+    }
+    if normalized.len() >= 2 && normalized[0] == "migrate" && normalized[1] == "run" {
+        let target = option_value(&args, "--target", "-t").unwrap_or_else(|| "all".into());
+        if !matches!(target.as_str(), "config" | "all") {
+            return Err("native migrate run currently supports target config or all".into());
+        }
+        return Ok(ParsedCommand::MigrateRun {
+            target,
+            dry_run: args.iter().any(|value| value == "--dry-run"),
+            backup: !args.iter().any(|value| value == "--no-backup"),
+            force: args.iter().any(|value| value == "--force" || value == "-f"),
+        });
     }
     if normalized.starts_with(&["agent", "spawn"]) {
         let agent_type = option_value(&args, "--type", "-t").ok_or("agent type is required")?;

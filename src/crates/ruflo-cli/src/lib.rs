@@ -378,6 +378,21 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             println!("Migration needed: {}", if needed { "yes" } else { "no" });
             ExitCode::SUCCESS
         }
+        Ok(ParsedCommand::MigrateRun {
+            target,
+            dry_run,
+            backup,
+            force,
+        }) => match migrate_v2_config(&current_directory(), &target, dry_run, backup, force) {
+            Ok(message) => {
+                println!("{message}");
+                ExitCode::SUCCESS
+            }
+            Err(message) => {
+                eprintln!("error: {message}");
+                ExitCode::from(1)
+            }
+        },
         Ok(ParsedCommand::Help) => {
             print!("{HELP}");
             ExitCode::SUCCESS
@@ -937,6 +952,84 @@ fn directory_has_entries(path: &std::path::Path) -> bool {
         .ok()
         .and_then(|mut entries| entries.next())
         .is_some()
+}
+
+fn migrate_v2_config(
+    root: &std::path::Path,
+    target: &str,
+    dry_run: bool,
+    backup: bool,
+    force: bool,
+) -> Result<String, String> {
+    let source = root.join("claude-flow.config.json");
+    if !source.is_file() {
+        return Err("no V2 configuration found at claude-flow.config.json".into());
+    }
+    let raw = std::fs::read_to_string(&source).map_err(|error| error.to_string())?;
+    let mut config: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|error| format!("invalid V2 configuration: {error}"))?;
+    let is_v2 = match config.get("version") {
+        None => true,
+        Some(serde_json::Value::String(value)) => value == "2",
+        Some(serde_json::Value::Number(value)) => value.as_u64() == Some(2),
+        _ => false,
+    };
+    if !is_v2 {
+        return Err("configuration is not V2".into());
+    }
+    let destination = root.join(".claude-flow/config.json");
+    if destination.exists() && !force {
+        return Err("V3 config already exists; use --force to overwrite".into());
+    }
+    if dry_run {
+        return Ok(format!(
+            "Would migrate {target} configuration: {} -> {}",
+            source.display(),
+            destination.display()
+        ));
+    }
+    if let Some(object) = config.as_object_mut() {
+        object.insert("version".into(), serde_json::Value::String("3".into()));
+        for (section, from, to) in [("swarm", "mode", "topology"), ("memory", "type", "backend")] {
+            if let Some(section) = object
+                .get_mut(section)
+                .and_then(serde_json::Value::as_object_mut)
+            {
+                if !section.contains_key(to) {
+                    if let Some(value) = section.remove(from) {
+                        section.insert(to.into(), value);
+                    }
+                }
+            }
+        }
+    }
+    let parent = destination
+        .parent()
+        .ok_or("invalid V3 config destination")?;
+    std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    if backup {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+        let backup_path = root.join(format!(
+            ".claude-flow/backup/v2-{stamp}/claude-flow.config.json"
+        ));
+        std::fs::create_dir_all(backup_path.parent().ok_or("invalid backup path")?)
+            .map_err(|error| error.to_string())?;
+        std::fs::copy(&source, backup_path).map_err(|error| error.to_string())?;
+    }
+    std::fs::write(
+        &destination,
+        serde_json::to_vec_pretty(&config).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
+    std::fs::write(
+        root.join(".claude-flow/migration-state.json"),
+        r#"{"status":"complete","target":"config"}"#,
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(format!("Config migrated to {}", destination.display()))
 }
 
 fn swarm_worker_plan(swarm: &lifecycle::SwarmRecord, objective: &str) -> Vec<String> {
