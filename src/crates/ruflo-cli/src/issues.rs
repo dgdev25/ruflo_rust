@@ -154,7 +154,25 @@ fn save_claims(root: &Path, data: &mut Value) -> bool {
     let Ok(bytes) = serde_json::to_vec_pretty(data) else {
         return false;
     };
-    fs::write(&tmp, &bytes).is_ok() && fs::rename(&tmp, &path).is_ok()
+    // create_new prevents a pre-planted symlink from redirecting the write.
+    use std::io::Write;
+    let mut file = match fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&tmp)
+    {
+        Ok(f) => f,
+        Err(_) => return false,
+    };
+    if file.write_all(&bytes).is_err() {
+        let _ = fs::remove_file(&tmp);
+        return false;
+    }
+    let ok = fs::rename(&tmp, &path).is_ok();
+    if !ok {
+        let _ = fs::remove_file(&tmp);
+    }
+    ok
 }
 
 fn get_claim(data: &Value, issue: &str) -> Option<Value> {
@@ -344,8 +362,16 @@ fn release(root: &Path, issue: &str, claimant: &Claimant) -> u8 {
         (Claimant::human { user_id, .. }, "human") => {
             ec.get("userId").and_then(Value::as_str) == Some(user_id.as_str())
         }
-        (Claimant::agent { agent_id, .. }, "agent") => {
+        (
+            Claimant::agent {
+                agent_id,
+                agent_type,
+                ..
+            },
+            "agent",
+        ) => {
             ec.get("agentId").and_then(Value::as_str) == Some(agent_id.as_str())
+                && ec.get("agentType").and_then(Value::as_str) == Some(agent_type.as_str())
         }
         _ => false,
     };
@@ -385,6 +411,10 @@ fn update_status(
         o.insert("status".into(), json!(parsed.as_str()));
         o.insert("statusChangedAt".into(), json!(now_iso()));
         if let Some(p) = progress {
+            if !(0..=100).contains(&p) {
+                eprintln!("[ERROR] Progress must be 0-100, got {p}");
+                return 1;
+            }
             o.insert("progress".into(), json!(p));
         }
         match parsed {
@@ -442,13 +472,26 @@ fn stealable(root: &Path, agent_type: Option<String>) -> u8 {
         .into_iter()
         .filter(|c| c.get("status").and_then(Value::as_str) == Some("stealable"))
         .collect();
-    if items.is_empty() {
+    let filtered: Vec<_> = if let Some(ref at) = agent_type {
+        items
+            .iter()
+            .filter(|c| {
+                c.get("claimant")
+                    .and_then(|cl| cl.get("agentType"))
+                    .and_then(Value::as_str)
+                    == Some(at.as_str())
+            })
+            .cloned()
+            .collect()
+    } else {
+        items
+    };
+    if filtered.is_empty() {
         println!("No stealable issues");
         return 0;
     }
-    let _ = agent_type;
     println!("Stealable issues:");
-    for c in &items {
+    for c in &filtered {
         let issue = c.get("issueId").and_then(Value::as_str).unwrap_or("?");
         let reason = c
             .get("blockReason")
@@ -491,8 +534,8 @@ fn help(sub: Option<&str>) -> &'static str {
         Some("list") => "\nruflo issues list\nList all issue claims\n\nOPTIONS:\n  -s, --status <value>  Filter by status\n  -m, --mine            Show only my claims\n      --json            Output as JSON\n",
         Some("claim") => "\nruflo issues claim\nClaim an issue\n\nOPTIONS:\n  -i, --issue <value>   Issue ID (required)\n  -a, --agent <value>   Agent as type:id\n  -u, --user <value>    User as id:name\n",
         Some("release") => "\nruflo issues release\nRelease a claim\n\nOPTIONS:\n  -i, --issue <value>   Issue ID (required)\n  -a, --agent <value>   Agent as type:id\n  -u, --user <value>    User as id:name\n",
-        Some("status") => "\nruflo issues status\nUpdate claim status\n\nOPTIONS:\n  -i, --issue <value>   Issue ID (required)\n  -s, --status <value>  New status (required)\n  -n, --note <value>    Optional note\n",
-        Some("handoff") => "\nruflo issues handoff\nRequest handoff\n\nOPTIONS:\n  -i, --issue <value>   Issue ID (required)\n  -a, --agent <value>   Agent to hand off TO (type:id)\n  -u, --user <value>    User to hand off TO (id:name)\n  -r, --reason <value>  Handoff reason\n",
+        Some("status") => "\nruflo issues status\nUpdate claim status\n\nOPTIONS:\n  -i, --issue <value>    Issue ID (required)\n  -s, --status <value>   New status (required)\n      --set <value>      Alias for --status\n  -n, --note <value>     Optional note (blocked→blockReason)\n      --progress <number> Set progress 0-100 (completed defaults to 100)\n",
+        Some("handoff") => "\nruflo issues handoff\nRequest handoff\n\nOPTIONS:\n  -i, --issue <value>   Issue ID (required)\n      --to <value>       Recipient: agent:type:id or user:id:name\n  -a, --agent <value>   Agent to hand off TO (type:id)\n  -u, --user <value>    User to hand off TO (id:name)\n  -r, --reason <value>  Handoff reason\n",
         Some("stealable") => "\nruflo issues stealable\nList stealable issues\n",
         Some("steal") => "\nruflo issues steal\nSteal a stealable issue\n\nOPTIONS:\n  -i, --issue <value>   Issue ID (required)\n  -a, --agent <value>   Agent as type:id\n  -u, --user <value>    User as id:name\n",
         _ => "\nruflo issues\nCollaborative issue claims for human-agent workflows (ADR-016)\n\nSUBCOMMANDS:\n  list       List all issue claims\n  claim      Claim an issue\n  release    Release a claim\n  status     Update claim status\n  handoff    Request handoff\n  stealable  List stealable issues\n  steal      Steal a stealable issue\n",
