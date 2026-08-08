@@ -78,6 +78,9 @@ named compatibility evidence and focused verification.
   memory, and session artifacts without modifying the project. `migrate run`
   must next compose the existing transactional storage migration primitives
   with V3-specific transforms and source fixtures.
+  The configuration target now has a tested dry-run, timestamped backup,
+  overwrite gate, V2-to-V3 version change, and `swarm.mode`/`memory.type`
+  field transforms; memory and session migration remain open.
 - Then migrate every remaining command family from the original registry,
   capturing source fixtures before implementation and exercising real local
   Codex swarm deployment before release.
