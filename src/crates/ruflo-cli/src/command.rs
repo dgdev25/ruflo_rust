@@ -660,18 +660,23 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
         let sub = normalized.get(1).copied();
         let json = args.iter().any(|v| v == "--json");
         let issue = option_value(&args, "--issue", "-i");
-        let status = option_value(&args, "--status", "-s");
+        let status =
+            option_value(&args, "--status", "-s").or_else(|| option_value(&args, "--set", "--set"));
         let note = option_value(&args, "--note", "-n");
+        let progress = option_value(&args, "--progress", "-p").and_then(|v| v.parse().ok());
         let reason = option_value(&args, "--reason", "-r");
         let mine = args.iter().any(|v| matches!(v.as_str(), "--mine" | "-m"));
         let claimant = |short_agent: &str, short_user: &str| -> Option<Claimant> {
             let agent = option_value(&args, "--agent", short_agent);
             let user = option_value(&args, "--user", short_user);
             if let Some(val) = agent {
-                let (at, id) = val.split_once(':').unwrap_or(("coder", val.as_str()));
+                let (at, id) = match val.split_once(':') {
+                    Some((t, i)) => (t.to_string(), i.to_string()),
+                    None => (val.clone(), format!("{val}-1")),
+                };
                 Some(Claimant::agent {
-                    agent_id: id.into(),
-                    agent_type: at.into(),
+                    agent_id: id,
+                    agent_type: at,
                 })
             } else {
                 user.map(|val| {
@@ -704,6 +709,7 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
                     issue: i,
                     status: s,
                     note,
+                    progress,
                 },
                 _ => return Err("issues status requires --issue and --status".into()),
             },

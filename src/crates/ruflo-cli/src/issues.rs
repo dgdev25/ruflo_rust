@@ -80,6 +80,7 @@ pub enum IssuesCommand {
         issue: String,
         status: String,
         note: Option<String>,
+        progress: Option<i64>,
     },
     Handoff {
         issue: String,
@@ -111,7 +112,8 @@ pub fn run(root: &Path, command: IssuesCommand) -> u8 {
             issue,
             status,
             note,
-        } => update_status(root, &issue, &status, note),
+            progress,
+        } => update_status(root, &issue, &status, note, progress),
         IssuesCommand::Handoff { issue, to, reason } => handoff(root, &issue, &to, reason),
         IssuesCommand::Stealable { agent_type } => stealable(root, agent_type),
         IssuesCommand::Steal { issue, stealer } => steal(root, &issue, &stealer),
@@ -126,10 +128,18 @@ fn claims_file(root: &Path) -> PathBuf {
 }
 
 fn load_claims(root: &Path) -> Value {
-    fs::read_to_string(claims_file(root))
+    let mut data: Value = fs::read_to_string(claims_file(root))
         .ok()
         .and_then(|r| serde_json::from_str(&r).ok())
-        .unwrap_or_else(|| json!({"claims": [], "savedAt": null}))
+        .unwrap_or_else(|| json!({"claims": [], "savedAt": null}));
+    if !data.get("claims").is_some_and(Value::is_array) {
+        if let Some(o) = data.as_object_mut() {
+            o.insert("claims".into(), json!([]));
+        } else {
+            data = json!({"claims": [], "savedAt": null});
+        }
+    }
+    data
 }
 
 fn save_claims(root: &Path, data: &mut Value) -> bool {
@@ -355,7 +365,13 @@ fn release(root: &Path, issue: &str, claimant: &Claimant) -> u8 {
     0
 }
 
-fn update_status(root: &Path, issue: &str, status: &str, note: Option<String>) -> u8 {
+fn update_status(
+    root: &Path,
+    issue: &str,
+    status: &str,
+    note: Option<String>,
+    progress: Option<i64>,
+) -> u8 {
     let Some(parsed) = ClaimStatus::parse(status) else {
         eprintln!("[ERROR] Invalid status: {status}\n  Valid: active, paused, blocked, completed, handoff-pending, review-requested, stealable");
         return 1;
@@ -368,6 +384,9 @@ fn update_status(root: &Path, issue: &str, status: &str, note: Option<String>) -
     if let Some(o) = c.as_object_mut() {
         o.insert("status".into(), json!(parsed.as_str()));
         o.insert("statusChangedAt".into(), json!(now_iso()));
+        if let Some(p) = progress {
+            o.insert("progress".into(), json!(p));
+        }
         match parsed {
             ClaimStatus::Blocked => {
                 if let Some(n) = &note {
