@@ -89,7 +89,7 @@ fn status(root: &Path, command: &AuthCommand) -> u8 {
     0
 }
 
-fn login(root: &Path, command: &AuthCommand) -> u8 {
+fn login(_root: &Path, command: &AuthCommand) -> u8 {
     let profile = command.profile.clone().unwrap_or_else(|| "default".into());
     // The full OAuth PKCE flow requires an HTTP server + browser launch.
     // In the native build we document the degradation.
