@@ -915,9 +915,6 @@ mod tests {
     use super::*;
     use std::sync::Mutex;
 
-    // Some claims tests mutate the process-global HOME (the precedence test),
-    // and load() reads HOME. Serialize the whole module so no two claims tests
-    // race on HOME mid-load.
     static TEST_LOCK: Mutex<()> = Mutex::new(());
 
     fn lock() -> std::sync::MutexGuard<'static, ()> {

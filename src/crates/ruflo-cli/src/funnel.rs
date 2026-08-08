@@ -958,7 +958,6 @@ mod tests {
     use super::*;
     use std::sync::Mutex;
 
-    // These tests mutate the process-global RUFLO_STATE_DIR; serialize them.
     static STATE_LOCK: Mutex<()> = Mutex::new(());
 
     fn isolated_state(test_name: &str) -> (tempfile::TempDir, std::sync::MutexGuard<'static, ()>) {
