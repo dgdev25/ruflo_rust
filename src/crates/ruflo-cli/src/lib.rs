@@ -408,8 +408,33 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
                     }
                 }
                 cmd => {
-                    println!("\n{cmd} — native surface active (full V3 parity pending)");
-                    println!("Run '{cmd} --help' for usage once the command is fully ported.");
+                    let overview = match cmd {
+                        "embeddings" | "embed" => "\nSubcommands: init, generate, search, compare, collections, index, providers, chunk, normalize, hyperbolic, neural, models, cache, warmup, benchmark",
+                        "verify" => "\nSubcommands: local, remote",
+                        "analyze" | "an" => "\nSubcommands: diff, code, deps, ast, complexity, symbols, imports, boundaries, modules, dependencies, circular",
+                        "route" => "\nSubcommands: task, list-agents, stats, feedback, reset, export, import, coverage",
+                        "policy" => "\nSubcommands: status, init, migrate, evaluate, rule (add/list/remove), budget (set/show), approve, revoke, audit, verify",
+                        "providers" => "\nSubcommands: list, configure, test, models, usage",
+                        "plugins" => "\nSubcommands: list, search, install, uninstall, upgrade, toggle, info, create, rate",
+                        "hive-mind" | "hive" => "\nSubcommands: init, spawn, status, task, join, leave, consensus, broadcast, memory, optimize-memory, shutdown",
+                        "process" | "proc" | "ps" => "\nSubcommands: daemon, monitor, workers, signals, logs",
+                        "daemon" => "\nSubcommands: start, stop, status, trigger, enable, budget (show/pause/resume)",
+                        "update" => "\nSubcommands: check, all, history, rollback, clear-cache",
+                        "guidance" | "guide" => "\nSubcommands: compile, retrieve, gates, status, optimize, ab-test",
+                        "appliance" | "rvfa" => "\nSubcommands: build, inspect, verify, extract, run, sign, publish, update",
+                        "appliance-advanced" => "\nSubcommands: sign, publish, update",
+                        "transfer-store" => "\nSubcommands: list, search, download, publish, info",
+                        "autopilot" | "ap" => "\nSubcommands: status, enable, disable, config, reset, log, learn, history, predict, check",
+                        "gaia-bench" => "\nSubcommands: run",
+                        "auth" => "\nSubcommands: status, login, logout",
+                        "proxy" => "\nSubcommands: install, update, start, supervise, stop, status, logs, uninstall, config, sponsor, power-saver, training-share",
+                        _ => "",
+                    };
+                    if overview.is_empty() {
+                        println!("\n{cmd} — native surface active (full V3 parity pending)");
+                    } else {
+                        println!("\n{}{overview}", cmd);
+                    }
                 }
             }
             ExitCode::SUCCESS
