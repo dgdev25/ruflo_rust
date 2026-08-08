@@ -55,6 +55,7 @@ pub enum ParsedCommand {
     ProcessCmd(crate::process_cmd::ProcessCommand),
     Workflow(crate::workflow::WorkflowCommand),
     Route(crate::route::RouteCommand),
+    Plugins(crate::plugins::PluginsCommand),
     TransferStore(crate::transfer_store::TransferStoreCommand),
     MemoryStore {
         key: String,

@@ -22,6 +22,7 @@ mod issues;
 mod lifecycle;
 mod metaharness;
 mod performance;
+mod plugins;
 mod policy;
 mod process_cmd;
 mod providers;
@@ -406,6 +407,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::Route(command)) => {
             ExitCode::from(route::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::Plugins(command)) => {
+            ExitCode::from(plugins::run(&current_directory(), command))
         }
         Ok(ParsedCommand::NativeOverview { name }) => {
             let root = current_directory();
