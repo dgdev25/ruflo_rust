@@ -68,6 +68,8 @@ struct DeploymentRecord {
     timestamp: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     description: Option<String>,
+    #[serde(flatten)]
+    remaining: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -82,6 +84,8 @@ struct DeploymentState {
         skip_serializing_if = "Option::is_none"
     )]
     active_deployment: Option<String>,
+    #[serde(flatten)]
+    remaining: serde_json::Map<String, serde_json::Value>,
 }
 
 impl DeploymentState {
@@ -198,6 +202,7 @@ fn deploy(
         status: "deployed".into(),
         timestamp: now_iso8601(),
         description: description.clone(),
+        remaining: serde_json::Map::new(),
     };
 
     if dry_run {
@@ -356,6 +361,7 @@ fn rollback(root: &Path, env_name: String, target_version: Option<String>) -> io
             "Rollback from {from_version} to {}",
             rollback_to.version
         )),
+        remaining: serde_json::Map::new(),
     };
     state.history.push(record.clone());
     state.active_deployment = Some(record.id.clone());
@@ -542,6 +548,7 @@ fn release(
         status: "deployed".into(),
         timestamp: now_iso8601(),
         description: Some(description.clone()),
+        remaining: serde_json::Map::new(),
     };
     state.history.push(record.clone());
     state.active_deployment = Some(record.id.clone());
@@ -596,11 +603,15 @@ fn state_path(root: &Path) -> PathBuf {
 fn read_project_version(root: &Path) -> Option<String> {
     let value: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(root.join("package.json")).ok()?).ok()?;
-    value.get("version").and_then(|version| match version {
-        serde_json::Value::Null => None,
-        serde_json::Value::String(value) => Some(value.clone()),
-        other => Some(js_string(other)),
-    })
+    // JS truthiness: null, false, 0, "" are falsy → None (deploy falls back to
+    // 0.0.0, release rejects). Matches V3 `version || "0.0.0"`.
+    match value.get("version") {
+        None | Some(serde_json::Value::Null) | Some(serde_json::Value::Bool(false)) => None,
+        Some(serde_json::Value::Number(n)) if n.as_f64().map(|f| f == 0.0).unwrap_or(false) => None,
+        Some(serde_json::Value::String(s)) if s.is_empty() => None,
+        Some(serde_json::Value::String(s)) => Some(s.clone()),
+        Some(other) => Some(js_string(other)),
+    }
 }
 
 fn js_string(value: &serde_json::Value) -> String {
@@ -662,16 +673,17 @@ fn record_table(records: &[DeploymentRecord], description: bool) -> String {
 }
 
 fn table(headers: &[&str], rows: &[Vec<String>]) -> String {
+    let char_len = |s: &str| s.chars().count();
     let widths = headers
         .iter()
         .enumerate()
         .map(|(index, header)| {
             rows.iter()
                 .filter_map(|row| row.get(index))
-                .map(String::len)
+                .map(|cell| char_len(cell))
                 .max()
                 .unwrap_or(0)
-                .max(header.len())
+                .max(char_len(header))
         })
         .collect::<Vec<_>>();
     let border = format!(

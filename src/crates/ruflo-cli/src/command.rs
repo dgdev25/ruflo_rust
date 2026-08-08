@@ -235,9 +235,12 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
         .skip(1)
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect::<Vec<_>>();
+    // Only intercept --version/-V when it is the FIRST argument (standalone
+    // version request), so subcommand flags like `deployment deploy --version
+    // 1.0.0` are not swallowed.
     if args
-        .iter()
-        .any(|value| matches!(value.as_str(), "--version" | "-V"))
+        .first()
+        .is_some_and(|value| matches!(value.as_str(), "--version" | "-V"))
     {
         return Ok(ParsedCommand::Version);
     }
