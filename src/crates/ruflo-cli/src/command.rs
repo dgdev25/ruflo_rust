@@ -10,6 +10,7 @@ pub enum ParsedCommand {
     Completions {
         shell: String,
     },
+    CompletionsOverview,
     Doctor,
     Start {
         topology: String,
@@ -286,14 +287,17 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
         });
     }
     if normalized.first() == Some(&"completions") {
-        let shell = normalized
-            .get(1)
-            .ok_or("shell is required: bash, zsh, fish, or powershell")?
-            .to_string();
-        if !matches!(shell.as_str(), "bash" | "zsh" | "fish" | "powershell") {
+        let Some(shell) = normalized.get(1).copied() else {
+            return Ok(ParsedCommand::CompletionsOverview);
+        };
+        // completions.ts powershellCommand aliases `pwsh` -> powershell.
+        let shell = if shell == "pwsh" { "powershell" } else { shell };
+        if !matches!(shell, "bash" | "zsh" | "fish" | "powershell") {
             return Err("unsupported shell; use bash, zsh, fish, or powershell".into());
         }
-        return Ok(ParsedCommand::Completions { shell });
+        return Ok(ParsedCommand::Completions {
+            shell: shell.to_string(),
+        });
     }
     if normalized.first() == Some(&"doctor") {
         return Ok(ParsedCommand::Doctor);
