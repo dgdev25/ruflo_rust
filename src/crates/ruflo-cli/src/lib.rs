@@ -404,6 +404,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         Ok(ParsedCommand::Workflow(command)) => {
             ExitCode::from(workflow::run(&current_directory(), command))
         }
+        Ok(ParsedCommand::Route(command)) => {
+            ExitCode::from(route::run(&current_directory(), command))
+        }
         Ok(ParsedCommand::NativeOverview { name }) => {
             let root = current_directory();
             match name.as_str() {
