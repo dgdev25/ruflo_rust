@@ -119,6 +119,16 @@ fn home_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("/"))
 }
 
+/// Public home accessor for sibling commands that target ~/.claude (settings).
+pub fn home_dir_pub() -> PathBuf {
+    home_dir()
+}
+
+/// Public ISO-8601 accessor for sibling commands' backup filenames.
+pub fn now_iso_pub() -> String {
+    now_iso8601()
+}
+
 fn state_path(name: &str) -> PathBuf {
     funnel_state_dir().join(name)
 }
@@ -164,7 +174,7 @@ fn read_consents() -> Value {
     read_state_json("consent.json").unwrap_or_else(|| json!({}))
 }
 
-fn has_consent(domain: &str) -> bool {
+pub fn has_consent(domain: &str) -> bool {
     let file = read_consents();
     let receipt = file.get(domain);
     receipt
@@ -178,7 +188,7 @@ fn has_consent(domain: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn record_consent(domain: &str, granted: bool, surface: &str) {
+pub fn record_consent(domain: &str, granted: bool, surface: &str) {
     let mut file = read_consents();
     if !file.is_object() {
         file = json!({});
@@ -197,7 +207,7 @@ fn record_consent(domain: &str, granted: bool, surface: &str) {
     write_state_json("consent.json", &file);
 }
 
-fn revoke_consent(domain: &str, surface: &str) {
+pub fn revoke_consent(domain: &str, surface: &str) {
     record_consent(domain, false, surface);
 }
 

@@ -32,6 +32,7 @@ pub enum ParsedCommand {
     Deployment(crate::deployment::DeploymentCommand),
     Claims(crate::claims::ClaimsCommand),
     Advisor(crate::funnel::AdvisorCommand),
+    Announcements(crate::announcements::AnnouncementsCommand),
     MemoryStore {
         key: String,
         value: String,
@@ -506,6 +507,30 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             }
         };
         return Ok(ParsedCommand::Advisor(cmd));
+    }
+    if normalized.first() == Some(&"announcements") {
+        use crate::announcements::AnnouncementsCommand as Ann;
+        let subcommand = normalized.get(1).copied();
+        if args.iter().any(|v| matches!(v.as_str(), "--help" | "-h")) {
+            return Ok(ParsedCommand::Announcements(Ann::Help {
+                subcommand: subcommand
+                    .filter(|v| !v.starts_with('-'))
+                    .map(str::to_owned),
+            }));
+        }
+        let json = args.iter().any(|v| v == "--json");
+        let yes = args.iter().any(|v| v == "--yes");
+        let cmd = match subcommand {
+            None => Ann::List { json },
+            Some("list") => Ann::List { json },
+            Some("enable") => Ann::Enable { yes },
+            Some("disable") => Ann::Disable,
+            Some("reset") => Ann::Reset { yes },
+            Some(other) => {
+                return Err(format!("Unknown subcommand '{other}' for announcements"));
+            }
+        };
+        return Ok(ParsedCommand::Announcements(cmd));
     }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {
         let key = option_value(&args, "--key", "-k").ok_or("memory key is required")?;
