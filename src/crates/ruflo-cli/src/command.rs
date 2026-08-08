@@ -11,6 +11,10 @@ pub enum ParsedCommand {
         shell: String,
     },
     Doctor,
+    Start {
+        topology: String,
+        daemon: bool,
+    },
     Help,
     Init,
     Status,
@@ -154,6 +158,13 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
     }
     if normalized.first() == Some(&"doctor") {
         return Ok(ParsedCommand::Doctor);
+    }
+    if normalized.first() == Some(&"start") {
+        return Ok(ParsedCommand::Start {
+            topology: option_value(&args, "--topology", "--topology")
+                .unwrap_or_else(|| "hierarchical-mesh".into()),
+            daemon: args.iter().any(|value| value == "--daemon"),
+        });
     }
 
     if normalized.starts_with(&["agent", "spawn"]) {

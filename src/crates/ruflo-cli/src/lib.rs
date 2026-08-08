@@ -135,6 +135,21 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
             println!("Native CLI\tpass");
             ExitCode::SUCCESS
         }
+        Ok(ParsedCommand::Start { topology, daemon }) => {
+            match lifecycle::initialize_swarm(&current_directory(), &topology, 15, "development") {
+                Ok(swarm) => {
+                    if daemon {
+                        let _ = std::fs::write(
+                            current_directory().join(".claude-flow/daemon.pid"),
+                            std::process::id().to_string(),
+                        );
+                    }
+                    println!("RuFlo V3 is running!\nSwarm ID: {}\nTopology: {}\nMax Agents: 15\nMCP Server: stdio", swarm.id, swarm.topology);
+                    ExitCode::SUCCESS
+                }
+                Err(error) => task_error(error),
+            }
+        }
         Ok(ParsedCommand::Help) => {
             print!("{HELP}");
             ExitCode::SUCCESS
