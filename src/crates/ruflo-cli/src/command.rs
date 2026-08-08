@@ -49,6 +49,7 @@ pub enum ParsedCommand {
     Proxy(crate::proxy::ProxyCommand),
     ApplianceAdvanced(crate::appliance_advanced::ApplianceAdvancedCommand),
     Appliance(crate::appliance::ApplianceCommand),
+    TransferStore(crate::transfer_store::TransferStoreCommand),
     MemoryStore {
         key: String,
         value: String,
@@ -973,6 +974,31 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
                 json: args.iter().any(|v| v == "--json"),
                 quick: args.iter().any(|v| matches!(v.as_str(), "--quick" | "-q")),
                 target_dir: option_value(&args, "--target", "--target"),
+            },
+        ));
+    }
+    if normalized.first() == Some(&"transfer-store") {
+        let operation = normalized.get(1).copied().unwrap_or("").to_string();
+        return Ok(ParsedCommand::TransferStore(
+            crate::transfer_store::TransferStoreCommand {
+                operation,
+                query: option_value(&args, "--query", "-q"),
+                registry: option_value(&args, "--registry", "-r"),
+                category: option_value(&args, "--category", "-c"),
+                featured: args
+                    .iter()
+                    .any(|v| matches!(v.as_str(), "--featured" | "-f")),
+                trending: args
+                    .iter()
+                    .any(|v| matches!(v.as_str(), "--trending" | "-t")),
+                newest: args.iter().any(|v| matches!(v.as_str(), "--newest" | "-n")),
+                limit: option_value(&args, "--limit", "-l")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(20),
+                id: option_value(&args, "--id", "--id"),
+                file: option_value(&args, "--file", "-f"),
+                name: option_value(&args, "--name", "-n"),
+                cid: option_value(&args, "--cid", "--cid"),
             },
         ));
     }

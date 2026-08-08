@@ -24,6 +24,7 @@ mod providers;
 mod proxy;
 mod settings;
 mod spinner;
+mod transfer_store;
 mod update_cmd;
 mod verify;
 mod version;
@@ -378,6 +379,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::Appliance(command)) => {
             ExitCode::from(appliance::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::TransferStore(command)) => {
+            ExitCode::from(transfer_store::run(&current_directory(), command))
         }
         Ok(ParsedCommand::NativeOverview { name }) => {
             let root = current_directory();
