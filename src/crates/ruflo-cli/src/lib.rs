@@ -489,7 +489,7 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
                             ExitCode::SUCCESS
                         }
                         Some(value) => {
-                            println!("{key} = {}", display_json_value(value));
+                            println!("{key} = {}", config_file::js_template(value));
                             ExitCode::SUCCESS
                         }
                         None => {
@@ -636,7 +636,10 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         Ok(ParsedCommand::ConfigImport { file, merge }) => {
             match config_file::import(&current_directory(), std::path::Path::new(&file), merge) {
                 Ok(_) => {
-                    let path = current_directory().join(&file);
+                    // config.ts:397 reports path.resolve(cwd, file) — lexical
+                    // resolution, not a raw join (so `..` normalizes).
+                    let path =
+                        config_file::resolve(&current_directory(), std::path::Path::new(&file));
                     println!("Configuration imported from: {}", path.display());
                     ExitCode::SUCCESS
                 }
@@ -1273,6 +1276,9 @@ fn display_table_value(value: &serde_json::Value) -> String {
 }
 
 fn text_table(columns: &[(&str, usize, bool)], rows: &[Vec<String>]) -> String {
+    // Char-based widths/truncation so multi-byte config keys/values don't split
+    // on UTF-8 boundaries (matches JS string truncation, no panics).
+    let char_len = |s: &str| s.chars().count();
     let widths = columns
         .iter()
         .enumerate()
@@ -1280,10 +1286,10 @@ fn text_table(columns: &[(&str, usize, bool)], rows: &[Vec<String>]) -> String {
             let widest = rows
                 .iter()
                 .filter_map(|row| row.get(index))
-                .map(String::len)
+                .map(|cell| char_len(cell))
                 .max()
                 .unwrap_or(0);
-            header.len().max(widest).min(*limit)
+            char_len(header).max(widest).min(*limit)
         })
         .collect::<Vec<_>>();
     let border = format!(
@@ -1302,8 +1308,9 @@ fn text_table(columns: &[(&str, usize, bool)], rows: &[Vec<String>]) -> String {
                 .enumerate()
                 .map(|(index, value)| {
                     let width = widths[index];
-                    let value = if value.len() > width {
-                        format!("{}...", &value[..width.saturating_sub(3)])
+                    let value = if char_len(&value) > width {
+                        let take = width.saturating_sub(3);
+                        format!("{}...", value.chars().take(take).collect::<String>())
                     } else {
                         value
                     };

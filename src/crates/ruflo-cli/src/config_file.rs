@@ -167,41 +167,31 @@ pub fn resolve(root: &Path, path: &Path) -> PathBuf {
 }
 
 pub fn parse_value(raw: &str) -> Value {
-    if raw.eq_ignore_ascii_case("true") {
+    // Mirrors V3 parseConfigValue (config-file-manager.ts:221) exactly:
+    // case-sensitive true/false, unsigned decimal int/float only, JSON
+    // object/array/null, otherwise the literal string. No signs, exponents,
+    // radix, NaN/Infinity, or case-insensitive booleans.
+    if raw == "true" {
         return Value::Bool(true);
     }
-    if raw.eq_ignore_ascii_case("false") {
+    if raw == "false" {
         return Value::Bool(false);
     }
-    let trimmed = raw.trim();
-    if !trimmed.is_empty() {
-        let radix_number = [
-            ("0x", 16),
-            ("0X", 16),
-            ("0b", 2),
-            ("0B", 2),
-            ("0o", 8),
-            ("0O", 8),
-        ]
-        .into_iter()
-        .find_map(|(prefix, radix)| {
-            trimmed
-                .strip_prefix(prefix)
-                .and_then(|digits| u64::from_str_radix(digits, radix).ok())
-        });
-        if let Some(value) = radix_number {
+    if !raw.is_empty() && raw.bytes().all(|b| b.is_ascii_digit()) {
+        if let Ok(value) = raw.parse::<i64>() {
             return Value::from(value);
         }
-        if let Ok(value) = trimmed.parse::<f64>() {
-            if value.is_finite() {
-                if value.fract() == 0.0 && value >= i64::MIN as f64 && value <= i64::MAX as f64 {
-                    return Value::from(value as i64);
-                }
+    }
+    if let Some((int_part, frac_part)) = raw.split_once('.') {
+        if !int_part.is_empty()
+            && int_part.bytes().all(|b| b.is_ascii_digit())
+            && !frac_part.is_empty()
+            && frac_part.bytes().all(|b| b.is_ascii_digit())
+        {
+            if let Ok(value) = raw.parse::<f64>() {
                 if let Some(number) = serde_json::Number::from_f64(value) {
                     return Value::Number(number);
                 }
-            } else {
-                return Value::Null;
             }
         }
     }
@@ -449,6 +439,15 @@ fn js_string(value: &Value) -> String {
     }
 }
 
+/// JS template-literal coercion (`${value}` = String(value)): like js_string
+/// but null → "null" (config.ts:120 prints `${key} = ${value}`).
+pub fn js_template(value: &Value) -> String {
+    match value {
+        Value::Null => "null".into(),
+        other => js_string(other),
+    }
+}
+
 fn js_number(value: &Value) -> Option<f64> {
     match value {
         Value::Number(value) => value.as_f64(),
@@ -506,17 +505,34 @@ mod tests {
 
     #[test]
     fn parses_v3_scalar_and_structured_values() {
+        // V3 parseConfigValue: case-sensitive bool, unsigned decimal only.
         assert_eq!(parse_value("true"), Value::Bool(true));
+        assert_eq!(parse_value("false"), Value::Bool(false));
         assert_eq!(parse_value("20"), Value::from(20));
         assert_eq!(parse_value("1.5"), Value::from(1.5));
+        assert_eq!(parse_value("null"), Value::Null);
         assert!(parse_value(r#"["a","b"]"#).is_array());
+        assert!(parse_value(r#"{"x":1}"#).is_object());
         assert_eq!(parse_value("hybrid"), Value::String("hybrid".into()));
-        assert_eq!(parse_value("TRUE"), Value::Bool(true));
-        assert_eq!(parse_value("-1"), Value::from(-1));
-        assert_eq!(parse_value("1e3"), Value::from(1000));
-        assert_eq!(parse_value("0x10"), Value::from(16));
-        assert_eq!(parse_value("1.0"), Value::from(1));
-        assert!(parse_value("184467440737095516160000").is_number());
+        // Over-acceptance rejected: these stay literal strings.
+        assert_eq!(parse_value("TRUE"), Value::String("TRUE".into()));
+        assert_eq!(parse_value("False"), Value::String("False".into()));
+        assert_eq!(parse_value("-1"), Value::String("-1".into()));
+        assert_eq!(parse_value("1e3"), Value::String("1e3".into()));
+        assert_eq!(parse_value("0x10"), Value::String("0x10".into()));
+        assert_eq!(parse_value("NaN"), Value::String("NaN".into()));
+        assert_eq!(parse_value("Infinity"), Value::String("Infinity".into()));
+    }
+
+    #[test]
+    fn js_template_matches_js_string_coercion() {
+        // config.ts:120 `${key} = ${value}` → String(value) coercion.
+        assert_eq!(js_template(&Value::Null), "null");
+        assert_eq!(js_template(&json!(true)), "true");
+        assert_eq!(js_template(&json!(42)), "42");
+        assert_eq!(js_template(&json!("hi")), "hi");
+        assert_eq!(js_template(&json!(["a", "b"])), "a,b");
+        assert_eq!(js_template(&json!({"x": 1})), "[object Object]");
     }
 
     #[test]
