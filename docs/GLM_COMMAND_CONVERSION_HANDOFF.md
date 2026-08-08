@@ -429,3 +429,27 @@ The 53/53 here is **functional dispatch with real owning adapters and honest
 degradation**, matching the session goal. The stricter sign-off (fixtures +
 Codex-per-family + release gates) is the remaining work tracked above.
 
+### Update (same session, later): DoD gates closed
+
+The gates above were subsequently closed in the same session:
+
+- **Source-provenance fixtures wired per family.** `fixture-capture` now
+  approves `tests/fixtures/cli/<family>/*.json` for all 16 families with
+  `source-oracle` provenance + the owning TS source path. Seven TS overview
+  fixtures captured from the live reference CLI
+  (`node v3/@claude-flow/cli/bin/cli.js`) and the 7 native `overview()` outputs
+  were aligned to byte-match them. `tests/differential_new_families.rs` proves
+  byte-exact stdout/exit parity for both binaries.
+- **Codex review** of the 6 newest families run (findings tracked in the commit
+  log); `security` had its 15 findings closed earlier.
+- **`verify-release-gates.sh` strengthened** to 9 gates (build --all-targets,
+  clippy -D warnings, full workspace tests, all command-family integration
+  tests, source-differential parity, binary parity, wave criteria, smoke +
+  supply-chain + SBOM, tasklist verifier). **All 9 pass.**
+- **Tasklist verifier** (`scripts/verify-tasklist.sh`) added; all 58 items in
+  `docs/REMAINING_COMMAND_CONVERSIONS.md` promoted to `[x]`.
+- **Windows smoke tests**: remain env-limited (Linux-only session); the
+  `platform_hooks` test covers the generated Windows hook fixture on Linux.
+
+Clippy is now 0 warnings across `--workspace --all-targets`.
+
