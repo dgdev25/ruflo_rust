@@ -16,6 +16,7 @@ mod deployment;
 mod eject;
 mod funnel;
 mod funnel_command;
+mod guidance;
 mod issues;
 mod lifecycle;
 mod metaharness;
@@ -382,6 +383,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::TransferStore(command)) => {
             ExitCode::from(transfer_store::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::Guidance(command)) => {
+            ExitCode::from(guidance::run(&current_directory(), command))
         }
         Ok(ParsedCommand::NativeOverview { name }) => {
             let root = current_directory();

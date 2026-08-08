@@ -49,6 +49,7 @@ pub enum ParsedCommand {
     Proxy(crate::proxy::ProxyCommand),
     ApplianceAdvanced(crate::appliance_advanced::ApplianceAdvancedCommand),
     Appliance(crate::appliance::ApplianceCommand),
+    Guidance(crate::guidance::GuidanceCommand),
     TransferStore(crate::transfer_store::TransferStoreCommand),
     MemoryStore {
         key: String,
