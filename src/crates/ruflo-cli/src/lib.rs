@@ -15,6 +15,7 @@ mod funnel_command;
 mod issues;
 mod lifecycle;
 mod metaharness;
+mod policy;
 mod settings;
 mod spinner;
 mod verify;
@@ -346,6 +347,9 @@ pub fn run(argv: impl IntoIterator<Item = OsString>) -> ExitCode {
         }
         Ok(ParsedCommand::Verify(command)) => {
             ExitCode::from(verify::run(&current_directory(), command))
+        }
+        Ok(ParsedCommand::Policy(command)) => {
+            ExitCode::from(policy::run(&current_directory(), command))
         }
         Ok(ParsedCommand::NativeOverview { name }) => {
             let root = current_directory();

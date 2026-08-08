@@ -41,6 +41,7 @@ pub enum ParsedCommand {
     Benchmark(crate::benchmark::BenchmarkCommand),
     MetaHarness(crate::metaharness::MetaCommand),
     Verify(crate::verify::VerifyCommand),
+    Policy(crate::policy::PolicyCommand),
     MemoryStore {
         key: String,
         value: String,
@@ -840,6 +841,24 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             json,
         }));
     }
+    if normalized.first() == Some(&"policy") {
+        let operation = normalized.get(1).copied().unwrap_or("status").to_string();
+        let mode = option_value(&args, "--mode", "--mode");
+        let project_root = option_value(&args, "--project-root", "--project-root");
+        // positional args after the operation
+        let poly_args = args
+            .iter()
+            .skip(2)
+            .filter(|v| !v.starts_with("--"))
+            .cloned()
+            .collect::<Vec<_>>();
+        return Ok(ParsedCommand::Policy(crate::policy::PolicyCommand {
+            operation,
+            args: poly_args,
+            mode,
+            project_root,
+        }));
+    }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {
         let key = option_value(&args, "--key", "-k").ok_or("memory key is required")?;
         let value = option_value(&args, "--value", "--value")
@@ -1383,7 +1402,7 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
                 | Some("embeddings")
                 | Some("embed")
                 | Some("verify")
-                | Some("analyze")
+                | Some("analyze")  // verify + policy + analyze handled above
                 | Some("an")
                 | Some("route")
                 | Some("providers")
