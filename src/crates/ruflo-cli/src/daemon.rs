@@ -160,10 +160,17 @@ fn empty_ledger() -> Value {
     json!({"version": 1, "launches": [], "active": []})
 }
 
-fn read_ledger() -> Value {
-    match fs::read_to_string(ledger_file()) {
-        Ok(s) if !s.trim().is_empty() => serde_json::from_str(&s).unwrap_or_else(|_| empty_ledger()),
-        _ => empty_ledger(),
+/// Read the budget ledger. A missing file is a fresh (empty) ledger; a
+/// MALFORMED existing file is a hard error — falling back to empty would
+/// silently reopen the circuit breaker and reset usage counters (fail-open).
+fn read_ledger() -> Result<Value, String> {
+    let path = ledger_file();
+    match fs::read_to_string(&path) {
+        Ok(s) if s.trim().is_empty() => Ok(empty_ledger()),
+        Ok(s) => serde_json::from_str::<Value>(&s)
+            .map_err(|e| format!("budget ledger at {} is malformed: {e}", path.display())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(empty_ledger()),
+        Err(e) => Err(format!("cannot read budget ledger at {}: {e}", path.display())),
     }
 }
 
@@ -621,7 +628,13 @@ fn budget_show() -> u8 {
             return 1;
         }
     };
-    let ledger = prune_ledger(read_ledger(), now_ms());
+    let ledger = match read_ledger() {
+        Ok(v) => prune_ledger(v, now_ms()),
+        Err(e) => {
+            eprintln!("[ERROR] {e}");
+            return 1;
+        }
+    };
     let now = now_ms();
     let launches = ledger["launches"].as_array();
     let last_hour = launches
@@ -671,7 +684,13 @@ fn budget_pause(reason: Option<&str>) -> u8 {
         }
     };
     let now = now_ms();
-    let mut ledger = prune_ledger(read_ledger(), now);
+    let mut ledger = match read_ledger() {
+        Ok(v) => prune_ledger(v, now),
+        Err(e) => {
+            eprintln!("[ERROR] {e}");
+            return 1;
+        }
+    };
     let r = reason.unwrap_or("manual pause (ruflo daemon budget pause)");
     ledger["pausedUntil"] = json!(MANUAL_PAUSE_SENTINEL);
     ledger["pauseReason"] = json!(r);
@@ -694,7 +713,13 @@ fn budget_resume() -> u8 {
         }
     };
     let now = now_ms();
-    let mut ledger = prune_ledger(read_ledger(), now);
+    let mut ledger = match read_ledger() {
+        Ok(v) => prune_ledger(v, now),
+        Err(e) => {
+            eprintln!("[ERROR] {e}");
+            return 1;
+        }
+    };
     let was_paused = ledger["pausedUntil"]
         .as_u64()
         .map(|t| t > now)
@@ -770,30 +795,45 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
 mod tests {
     use super::*;
 
+    // RUFLO_AI_BUDGET_DIR is process-global; serialize the tests that set it.
+    static BUDGET_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn budget_pause_resume_roundtrip() {
+        let _lock = BUDGET_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         // Use a temp budget dir.
         let tmp = tempfile::tempdir().unwrap();
         std::env::set_var("RUFLO_AI_BUDGET_DIR", tmp.path());
         // Fresh ledger.
-        assert!(read_ledger()["launches"].as_array().unwrap().is_empty());
+        assert!(read_ledger().unwrap()["launches"].as_array().unwrap().is_empty());
         // Pause.
         let _g = LockGuard::acquire().expect("lock");
-        let mut l = read_ledger();
+        let mut l = read_ledger().unwrap();
         l["pausedUntil"] = json!(MANUAL_PAUSE_SENTINEL);
         l["pauseReason"] = json!("test");
         assert!(write_ledger(&l));
         drop(_g);
-        let l2 = read_ledger();
+        let l2 = read_ledger().unwrap();
         assert_eq!(l2["pausedUntil"], MANUAL_PAUSE_SENTINEL);
         // Resume clears it.
         let _g2 = LockGuard::acquire().expect("lock2");
-        let mut l3 = read_ledger();
+        let mut l3 = read_ledger().unwrap();
         l3["pausedUntil"] = Value::Null;
         assert!(write_ledger(&l3));
         drop(_g2);
-        let l4 = read_ledger();
+        let l4 = read_ledger().unwrap();
         assert!(l4["pausedUntil"].is_null());
+        std::env::remove_var("RUFLO_AI_BUDGET_DIR");
+    }
+
+    #[test]
+    fn malformed_ledger_is_rejected_not_reset() {
+        let _lock = BUDGET_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let tmp = tempfile::tempdir().unwrap();
+        std::env::set_var("RUFLO_AI_BUDGET_DIR", tmp.path());
+        // Write a corrupt ledger; read_ledger must error rather than reset.
+        std::fs::write(ledger_file(), "{ not valid json").unwrap();
+        assert!(read_ledger().is_err());
         std::env::remove_var("RUFLO_AI_BUDGET_DIR");
     }
 

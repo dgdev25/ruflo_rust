@@ -273,11 +273,19 @@ fn diff(root: &Path, command: &AnalyzeCommand) -> u8 {
 
     let mut files: Vec<DiffFile> = Vec::new();
     for line in numstat.lines() {
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() < 3 {
+        // numstat is tab-delimited: <added>\t<deleted>\t<path>. The path may
+        // itself contain spaces or be a rename ("old => new"), so split on the
+        // first two tabs only and keep the rest verbatim as the path.
+        let mut iter = line.splitn(3, '\t');
+        let (Some(adds), Some(dels), Some(path)) = (iter.next(), iter.next(), iter.next()) else {
+            continue;
+        };
+        let adds = adds.trim();
+        let dels = dels.trim();
+        let path = path.trim();
+        if path.is_empty() {
             continue;
         }
-        let (adds, dels, path) = (parts[0], parts[1], parts[2]);
         if adds == "-" || dels == "-" {
             files.push(DiffFile { path: path.into(), status: "M".into(), additions: 0, deletions: 0, binary: true });
         } else {
@@ -520,6 +528,21 @@ fn code(root: &Path, command: &AnalyzeCommand) -> u8 {
     let resolved = resolve_under(root, &target);
     println!("\nCode Analysis");
     println!("{}", "-".repeat(50));
+
+    // Fail closed on invalid input: a missing or unreadable target is an error,
+    // not an empty-but-clean analysis. A real directory that simply has no JS/TS
+    // sources is a legitimate "no source files" warning + exit 0.
+    let meta = match fs::metadata(&resolved) {
+        Ok(m) => m,
+        Err(_) => {
+            eprintln!("[ERROR] Target does not exist or is unreadable: {}", resolved.display());
+            return 1;
+        }
+    };
+    if !meta.is_dir() {
+        eprintln!("[ERROR] Target is not a directory: {}", resolved.display());
+        return 1;
+    }
 
     let files = scan_source_files(&resolved, 10);
     if files.is_empty() {
@@ -1043,23 +1066,38 @@ fn resolve_relative(from_file: &str, spec: &str, map: &HashMap<String, String>) 
     if let Some(n) = map.get(spec) {
         return Some(n.clone());
     }
-    // Try normalizing: from src/a.ts importing ./b -> src/b
+    // Resolve a relative spec against the importing file's directory. The map
+    // keys are extensionless ("./src/b", "./src/b/index" collapsed to "./src/b"),
+    // so candidates must be looked up extensionless too — looking up
+    // "./src/b.ts" never hit (the original bug: 0 edges on a real tree).
+    let spec_norm = spec.trim_start_matches("./").trim_start_matches("../");
     let dir = from_file.rsplit_once('/').map(|(d, _)| d).unwrap_or("");
     let joined = if dir.is_empty() {
         spec.trim_start_matches("./").to_string()
+    } else if spec.starts_with("../") {
+        // Walk up one directory component for each leading ../.
+        let mut dir_parts: Vec<&str> = dir.split('/').collect();
+        let mut rest = spec.to_string();
+        while rest.starts_with("../") {
+            dir_parts.pop();
+            rest = rest.trim_start_matches("../").to_string();
+        }
+        let parent = dir_parts.join("/");
+        if parent.is_empty() {
+            rest
+        } else {
+            format!("{parent}/{rest}")
+        }
     } else {
-        format!("{dir}/{}", spec.trim_start_matches("./"))
+        format!("{dir}/{spec_norm}")
     };
+    // Extensionless lookup variants the map actually stores.
     let candidates = [
-        format!("{joined}.ts"),
-        format!("{joined}.tsx"),
-        format!("{joined}.js"),
-        format!("{joined}.jsx"),
-        format!("{joined}/index.ts"),
-        format!("{joined}/index.js"),
+        format!("./{joined}"),
+        format!("./{joined}/index"),
     ];
     for c in candidates {
-        if let Some(n) = map.get(&format!("./{}", c)) {
+        if let Some(n) = map.get(&c) {
             return Some(n.clone());
         }
     }
@@ -1374,11 +1412,12 @@ fn find_cycles(graph: &ImportGraph) -> Vec<Vec<String>> {
     let mut cycles = Vec::new();
     let mut seen_signatures: HashSet<Vec<String>> = HashSet::new();
 
+    let max_depth = nodes.len().max(1);
     for &start in &nodes {
         let mut path: Vec<&str> = vec![start];
         let mut on_path: HashSet<&str> = HashSet::new();
         on_path.insert(start);
-        dfs_cycles(start, start, &adj, &mut path, &mut on_path, &mut cycles, &mut seen_signatures, 0);
+        dfs_cycles(start, start, &adj, &mut path, &mut on_path, &mut cycles, &mut seen_signatures, 0, max_depth);
     }
 
     cycles
@@ -1394,8 +1433,11 @@ fn dfs_cycles<'a>(
     out: &mut Vec<Vec<String>>,
     seen: &mut HashSet<Vec<String>>,
     depth: usize,
+    max_depth: usize,
 ) {
-    if depth > 8 {
+    // A cycle cannot be longer than the number of nodes; bound the search by
+    // that rather than an arbitrary magic number so we never miss a real cycle.
+    if depth >= max_depth {
         return;
     }
     if let Some(nbrs) = adj.get(cur) {
@@ -1403,18 +1445,28 @@ fn dfs_cycles<'a>(
             if nb == start && path.len() > 1 {
                 let mut cycle: Vec<String> = path.iter().map(|s| s.to_string()).collect();
                 cycle.push(start.to_string());
-                // Signature = sorted set of participating nodes so a->b->a and
-                // b->a->b (the same cycle from different seeds) dedup.
-                let mut sig: Vec<String> = path.iter().map(|s| s.to_string()).collect();
-                sig.sort();
-                sig.dedup();
+                // Signature = canonical rotation of the cycle's nodes (smallest
+                // element first) so a->b->a and b->a->b dedup as the same cycle,
+                // WITHOUT collapsing distinct cycles (a->b->c->a vs a->c->b->a)
+                // the way a plain sorted node-set would.
+                let node_count = cycle.len() - 1; // exclude the repeated closer
+                let core = &cycle[..node_count];
+                let min_idx = core
+                    .iter()
+                    .enumerate()
+                    .min_by(|a, b| a.1.cmp(b.1))
+                    .map(|(i, _)| i)
+                    .unwrap_or(0);
+                let sig: Vec<String> = (0..node_count)
+                    .map(|i| core[(min_idx + i) % node_count].clone())
+                    .collect();
                 if seen.insert(sig) {
                     out.push(cycle);
                 }
             } else if !on_path.contains(nb) {
                 path.push(nb);
                 on_path.insert(nb);
-                dfs_cycles(start, nb, adj, path, on_path, out, seen, depth + 1);
+                dfs_cycles(start, nb, adj, path, on_path, out, seen, depth + 1, max_depth);
                 on_path.remove(nb);
                 path.pop();
             }

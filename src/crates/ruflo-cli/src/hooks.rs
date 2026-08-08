@@ -230,6 +230,14 @@ V3 Features:
 // ---- event recording --------------------------------------------------------
 
 fn record_event(root: &Path, event: &str, command: &HooksCommand) -> u8 {
+    // Risk-relevant hooks must carry the thing they're meant to assess — a
+    // pre-command/pre-bash hook with no command performs no assessment and
+    // must not silently exit 0 (fail-open). Require the command field.
+    let requires_subject = matches!(event, "pre-command" | "pre-bash" | "post-command" | "post-bash");
+    if requires_subject && command.command.as_deref().unwrap_or("").is_empty() {
+        eprintln!("[ERROR] hooks {event} requires --command (the command being hooked).");
+        return 1;
+    }
     let rec = json!({
         "event": event,
         "at": now_ms(),
@@ -461,11 +469,28 @@ fn model_outcome(root: &Path, command: &HooksCommand) -> u8 {
         eprintln!("[ERROR] --outcome must be success|failure|escalated");
         return 1;
     }
-    let mut state = read_json(&model_state_file(root));
+    // Strict load: a malformed existing state file is an error, not a reset to
+    // {} (which would silently lose recorded outcomes). Missing file is fine.
+    let path = model_state_file(root);
+    let mut state = match fs::read_to_string(&path) {
+        Ok(s) if s.trim().is_empty() => json!({}),
+        Ok(s) => match serde_json::from_str::<Value>(&s) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("[ERROR] model-routing state at {} is malformed: {e}", path.display());
+                return 1;
+            }
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => json!({}),
+        Err(e) => {
+            eprintln!("[ERROR] cannot read model-routing state: {e}");
+            return 1;
+        }
+    };
     let key = format!("{model}.{outcome}");
     let cur = state[key.as_str()].as_u64().unwrap_or(0);
     state[key.as_str()] = json!(cur + 1);
-    if !write_json_atomic(&model_state_file(root), &state) {
+    if !write_json_atomic(&path, &state) {
         eprintln!("[ERROR] Failed to persist model-routing state.");
         return 1;
     }
@@ -588,7 +613,11 @@ fn home_budget() -> PathBuf {
 // ---- notify -----------------------------------------------------------------
 
 fn notify(command: &HooksCommand) -> u8 {
-    let msg = command.description.clone().unwrap_or_else(|| "notification".into());
+    // V3 requires a message; a missing one is an error, not a default.
+    let Some(msg) = &command.description else {
+        eprintln!("[ERROR] hooks notify requires --description <message>");
+        return 1;
+    };
     let target = command.agent.clone().unwrap_or_else(|| "all".into());
     let rec = json!({"event": "notify", "target": target, "message": msg, "at": now_ms()});
     if command.json {

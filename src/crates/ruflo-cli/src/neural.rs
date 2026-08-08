@@ -177,7 +177,10 @@ fn train(root: &Path, command: &NeuralCommand) -> u8 {
     let mut runs = stats["trainingRuns"].as_array().cloned().unwrap_or_default();
     runs.push(run.clone());
     stats["trainingRuns"] = json!(runs);
-    stats["modelsTrained"] = json!(stats["trainingRuns"].as_array().map(|a| a.len()).unwrap_or(0));
+    // NOTE: modelsTrained / patternsLearned are NOT bumped — no WASM training
+    // ran, so claiming a trained model / learned pattern would be false. The
+    // run is recorded (backend: native-recorded) so the user can see attempts,
+    // but the learning counters stay at 0 until a Node runtime actually trains.
     stats["lastTrainingAt"] = json!(now_ms());
     if !write_json_atomic(&stats_file(root), &stats) {
         eprintln!("[ERROR] Failed to persist training stats.");
@@ -388,7 +391,10 @@ fn export_cmd(root: &Path, command: &NeuralCommand) -> u8 {
     let patterns = read_json(&patterns_file(root));
     let out = json!({"stats": stats, "patterns": patterns, "exportedAt": now_ms()});
     if let Some(path) = &command.data {
-        let _ = write_json_atomic(Path::new(path), &out);
+        if !write_json_atomic(Path::new(path), &out) {
+            eprintln!("[ERROR] Failed to write export to {path}");
+            return 1;
+        }
         println!("Exported neural state to {path}");
     } else {
         println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
@@ -402,16 +408,33 @@ fn import_cmd(root: &Path, command: &NeuralCommand) -> u8 {
         eprintln!("[ERROR] --data <file> is required");
         return 1;
     };
-    let v = read_json(Path::new(path));
-    if v.is_null() {
-        eprintln!("[ERROR] Could not read/parse {path}");
+    // Read+parse must be typed — a missing/garbage file must not import {}.
+    let raw = match fs::read_to_string(Path::new(path)) {
+        Ok(s) => s,
+        Err(_) => {
+            eprintln!("[ERROR] Cannot read import file: {path}");
+            return 1;
+        }
+    };
+    let v: Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("[ERROR] Invalid JSON in {path}: {e}");
+            return 1;
+        }
+    };
+    if v["stats"].is_null() && v["patterns"].is_null() {
+        eprintln!("[ERROR] Import file has no 'stats' or 'patterns' field: {path}");
         return 1;
     }
-    if !v["stats"].is_null() {
-        let _ = write_json_atomic(&stats_file(root), &v["stats"]);
+    // Both writes must succeed before claiming success (no partial import).
+    if !v["stats"].is_null() && !write_json_atomic(&stats_file(root), &v["stats"]) {
+        eprintln!("[ERROR] Failed to write stats during import.");
+        return 1;
     }
-    if !v["patterns"].is_null() {
-        let _ = write_json_atomic(&patterns_file(root), &v["patterns"]);
+    if !v["patterns"].is_null() && !write_json_atomic(&patterns_file(root), &v["patterns"]) {
+        eprintln!("[ERROR] Failed to write patterns during import.");
+        return 1;
     }
     println!("Imported neural state from {path}");
     0
@@ -578,7 +601,11 @@ mod tests {
         let root = tmp();
         run(&root, base("train"));
         let stats = read_stats(&root);
-        assert!(stats["modelsTrained"].as_u64().unwrap_or(0) >= 1);
+        // The native build records the training run but does NOT bump
+        // modelsTrained (no WASM training ran), so assert the run was recorded
+        // and learning counters stayed at 0.
+        assert!(!stats["trainingRuns"].as_array().unwrap().is_empty());
+        assert_eq!(stats["modelsTrained"].as_u64().unwrap_or(0), 0);
     }
 
     #[test]
