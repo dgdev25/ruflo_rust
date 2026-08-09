@@ -30,6 +30,7 @@ mod issues;
 mod lifecycle;
 mod metaharness;
 mod neural;
+mod onnx_embeddings;
 mod output;
 mod performance;
 mod plugins;
