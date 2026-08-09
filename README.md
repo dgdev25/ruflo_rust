@@ -215,7 +215,7 @@ MIT OR Apache-2.0
 
 <div align="center">
 
-**Built with ❤️ by the rUv.io ecosystem**
+**Built with ❤️ on the shoulders of giants rUv and the ecosystem he has developed**
 
 [Original TypeScript project](https://github.com/ruvnet/ruflo) · [RuvNet](https://ruv.io)
 
