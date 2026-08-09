@@ -1917,11 +1917,71 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             })
         }
         [] => Err("no command provided".to_string()),
-        _ => Err(format!(
-            "unsupported native CLI invocation: {}",
-            args.join(" ")
-        )),
+        _ => {
+            let input = normalized.first().copied().unwrap_or("");
+            let suggestion = suggest_command(input);
+            let hint = match suggestion {
+                Some(s) => format!("\n\nDid you mean `{s}`?"),
+                None => String::new(),
+            };
+            Err(format!(
+                "unsupported native CLI invocation: {}{hint}",
+                args.join(" ")
+            ))
+        }
     }
+}
+
+/// All valid top-level command names for suggestion matching.
+const VALID_COMMANDS: &[&str] = &[
+    "init", "start", "status", "agent", "swarm", "task", "session", "memory",
+    "mcp", "config", "migrate", "hooks", "workflow", "hive-mind", "process",
+    "daemon", "version", "doctor", "completions", "neural", "security",
+    "performance", "policy", "embeddings", "verify", "analyze", "route",
+    "progress", "providers", "plugins", "deployment", "claims", "issues",
+    "update", "ruvector", "guidance", "appliance", "transfer-store",
+    "cleanup", "autopilot", "benchmark", "gaia-bench", "metaharness",
+    "eject", "funnel", "settings", "auth", "proxy", "advisor", "spinner",
+    "announcements", "transport",
+];
+
+/// Levenshtein edit distance between two strings (case-insensitive).
+fn edit_distance(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.to_lowercase().chars().collect();
+    let b: Vec<char> = b.to_lowercase().chars().collect();
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    let mut curr = vec![0usize; b.len() + 1];
+    for (i, &ac) in a.iter().enumerate() {
+        curr[0] = i + 1;
+        for (j, &bc) in b.iter().enumerate() {
+            let cost = if ac == bc { 0 } else { 1 };
+            curr[j + 1] = (prev[j + 1] + 1).min(curr[j] + 1).min(prev[j] + cost);
+        }
+        std::mem::swap(&mut prev, &mut curr);
+    }
+    prev[b.len()]
+}
+
+/// Suggest the closest valid command if the edit distance is small enough.
+fn suggest_command(input: &str) -> Option<&'static str> {
+    let input_lower = input.to_lowercase();
+    // Exact prefix match first (fastest, most natural).
+    if let Some(exact) = VALID_COMMANDS.iter().find(|c| **c == input_lower.as_str()) {
+        return Some(*exact);
+    }
+    // Prefix match.
+    if let Some(prefixed) = VALID_COMMANDS.iter().find(|c| c.starts_with(&input_lower)) {
+        return Some(*prefixed);
+    }
+    // Edit distance ≤ 2.
+    VALID_COMMANDS
+        .iter()
+        .filter_map(|c| {
+            let d = edit_distance(&input_lower, c);
+            (d <= 2).then_some((d, *c))
+        })
+        .min_by_key(|(d, _)| *d)
+        .map(|(_, c)| c)
 }
 
 fn option_value(args: &[String], long: &str, short: &str) -> Option<String> {
