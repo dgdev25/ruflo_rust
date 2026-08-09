@@ -241,14 +241,12 @@ fn check(
             };
             (granted, reason, source)
         }
-        Err(_) => {
-            let granted = !claim.starts_with("admin:");
-            let reason = if granted {
-                "Granted (default permissive policy)".into()
-            } else {
-                "Admin claims require explicit grant".into()
-            };
-            (granted, reason, "fallback".into())
+        Err(error) => {
+            // Fail CLOSED: if the policy file is malformed or unreadable, deny
+            // ALL claims. A corrupt policy must never silently grant access.
+            // (codesec CRITICAL fix — was fail-open granting non-admin claims.)
+            let reason = format!("Cannot evaluate authorization policy: {error}");
+            (false, reason, "error".into())
         }
     };
 

@@ -76,16 +76,18 @@ pub mod rvfa {
         })
     }
 
-    /// Sign an RVFA manifest — generate a SHA-256 hash of the manifest content
-    /// (no Ed25519 key in native build; uses content hash for integrity check).
+    /// Sign an RVFA manifest — generate a SHA-256 content checksum using the
+    /// sha2 crate (already a workspace dep). This is a checksum, NOT a
+    /// cryptographic signature (no private key). Honest about what it is.
     pub fn sign(root: &Path) -> Value {
         let manifest = inspect(root);
         let content = serde_json::to_vec(&manifest).unwrap_or_default();
-        let hash = sha256_hex(&content);
+        let hash = real_sha256_hex(&content);
         let signature = json!({
-            "algorithm": "sha256-content",
+            "algorithm": "sha256-checksum",
             "hash": hash,
             "signedAt": now_ms(),
+            "note": "content checksum, not a cryptographic signature",
         });
         let mut updated = manifest;
         updated["signature"] = signature.clone();
@@ -123,16 +125,16 @@ pub mod rvfa {
         }
     }
 
-    fn sha256_hex(data: &[u8]) -> String {
+    fn real_sha256_hex(data: &[u8]) -> String {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(data);
+        let result = hasher.finalize();
+        let mut s = String::with_capacity(64);
         use std::fmt::Write;
-        // Simple FNV-based hash (not SHA-256, but deterministic for integrity check).
-        // Real signing needs the sha2 crate — already in workspace deps.
-        let mut h: u64 = 0xcbf29ce484222325;
-        for b in data { h ^= *b as u64; h = h.wrapping_mul(0x100000001b3); }
-        let mut s = String::new();
-        write!(&mut s, "{h:016x}").unwrap();
-        // Double it for a 32-char hash.
-        write!(&mut s, "{h:016x}").unwrap();
+        for b in result.iter() {
+            write!(&mut s, "{b:02x}").unwrap();
+        }
         s
     }
 }
