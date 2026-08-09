@@ -2,6 +2,7 @@
 
 mod analyze;
 mod announcements;
+mod ast;
 mod appliance;
 mod appliance_advanced;
 mod auth;

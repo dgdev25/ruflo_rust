@@ -10,6 +10,12 @@ description = "Shared native CLI dispatcher for the Ruflo and claude-flow wrappe
 [lib]
 path = "src/lib.rs"
 
+[features]
+default = []
+# Real AST analysis via tree-sitter. Off by default — grammars compile C code
+# and add ~30s to a clean build. Enable with --features ast.
+ast = ["dep:tree-sitter", "dep:tree-sitter-rust", "dep:tree-sitter-typescript"]
+
 [dependencies]
 ruflo-config = { path = "../ruflo-config" }
 ruflo-codex-cli = { path = "../ruflo-codex-cli" }
@@ -27,6 +33,9 @@ petgraph = { workspace = true }
 dialoguer = { workspace = true }
 ort = { workspace = true }
 tokenizers = { workspace = true }
+tree-sitter = { version = "0.25", optional = true }
+tree-sitter-rust = { version = "0.23", optional = true }
+tree-sitter-typescript = { version = "0.23", optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
