@@ -301,6 +301,14 @@ fn agent_spawn(arguments: &Value) -> Result<ToolResult, RufloError> {
     ))
 }
 
+/// Open a cached SQLite memory store. The store is re-created per call today;
+/// a future optimization would cache it in the Dispatcher. For now the
+/// open_from_current_dir cost is bounded (CREATE TABLE IF NOT EXISTS is a
+/// no-op after the first call, and WAL mode keeps it fast).
+fn open_memory_store() -> Result<ruflo_storage::SqliteMemoryStore, RufloError> {
+    ruflo_storage::SqliteMemoryStore::open_from_current_dir()
+}
+
 fn memory_store(arguments: &Value) -> Result<ToolResult, RufloError> {
     let key = required_string(arguments, "key")?;
     let content = required_value_content(arguments, "value")?;
@@ -311,7 +319,7 @@ fn memory_store(arguments: &Value) -> Result<ToolResult, RufloError> {
         optional_string(arguments, "provenance_type")?.unwrap_or_else(|| "unknown".to_string());
     let tags_json = optional_tags(arguments)?;
     let upsert = optional_bool(arguments, "upsert")?.unwrap_or(true);
-    let store = ruflo_storage::SqliteMemoryStore::open_from_current_dir()?;
+    let store = open_memory_store()?;
     let entry = store.store(&ruflo_storage::MemoryStoreInput {
         key,
         namespace,
@@ -337,7 +345,7 @@ fn memory_retrieve(arguments: &Value) -> Result<ToolResult, RufloError> {
     let key = required_string(arguments, "key")?;
     let namespace =
         optional_string(arguments, "namespace")?.unwrap_or_else(|| "default".to_string());
-    let store = ruflo_storage::SqliteMemoryStore::open_from_current_dir()?;
+    let store = open_memory_store()?;
     let entry = store.retrieve(&namespace, &key)?;
     match entry {
         Some(entry) => Ok(ToolResult::text(
@@ -356,7 +364,7 @@ fn memory_search(arguments: &Value) -> Result<ToolResult, RufloError> {
     let query = required_string(arguments, "query")?;
     let namespace = optional_string(arguments, "namespace")?;
     let limit = optional_usize(arguments, "limit")?.unwrap_or(10);
-    let store = ruflo_storage::SqliteMemoryStore::open_from_current_dir()?;
+    let store = open_memory_store()?;
     let matches = store.search_keyword(namespace.as_deref(), &query, limit)?;
     let structured_matches = matches
         .into_iter()

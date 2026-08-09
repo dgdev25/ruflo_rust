@@ -120,6 +120,16 @@ pub fn run(root: &Path, command: IssuesCommand) -> u8 {
     }
 }
 
+
+use std::sync::Mutex;
+
+static ISSUES_LOCK: Mutex<()> = Mutex::new(());
+
+fn with_issues_lock<F: FnOnce() -> u8>(f: F) -> u8 {
+    let _g = ISSUES_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    f()
+}
+
 fn claims_dir(root: &Path) -> PathBuf {
     root.join(".claude-flow/claims")
 }
