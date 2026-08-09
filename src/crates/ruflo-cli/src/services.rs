@@ -234,7 +234,6 @@ pub mod bounded_pool {
             let before = arr.len();
             arr.retain(|s| s["id"].as_str() != Some(slot_id));
             let changed = arr.len() < before;
-            drop(arr);
             if changed {
                 write_state("bounded-pool", &state);
             }

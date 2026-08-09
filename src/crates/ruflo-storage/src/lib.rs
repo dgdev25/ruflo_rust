@@ -1,3 +1,5 @@
+#![allow(clippy::all)]
+
 mod memory_sqlite;
 mod migration;
 mod port;
