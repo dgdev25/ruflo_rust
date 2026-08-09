@@ -14,6 +14,30 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Value};
 
+/// Check if the global AI budget is paused (manual or quota-triggered circuit
+/// breaker). Reads ~/.claude-flow/ai-budget.json (same file daemon.rs manages).
+/// Returns Some(reason) if paused, None if clear.
+fn check_budget_paused(_cwd: &Path) -> Option<String> {
+    let budget_dir = std::env::var("RUFLO_AI_BUDGET_DIR")
+        .map(PathBuf::from)
+        .or_else(|_| std::env::var("RUFLO_STATE_DIR").map(PathBuf::from))
+        .unwrap_or_else(|_| {
+            std::env::var("HOME")
+                .map(|h| PathBuf::from(h).join(".claude-flow"))
+                .unwrap_or_else(|_| PathBuf::from(".claude-flow"))
+        });
+    let ledger_path = budget_dir.join("ai-budget.json");
+    let raw = std::fs::read_to_string(&ledger_path).ok()?;
+    let ledger: Value = serde_json::from_str(&raw).ok()?;
+    let now = now_ms();
+    let paused_until = ledger["pausedUntil"].as_u64().filter(|&t| t > now)?;
+    let reason = ledger["pauseReason"]
+        .as_str()
+        .unwrap_or("unknown")
+        .to_string();
+    Some(reason)
+}
+
 /// Per-worker role slices for hierarchical-mesh topology. Worker 0 = queen
 /// (coordinator); rest = specialists. Keeps prompts bounded.
 fn worker_roles(n: usize) -> Vec<&'static str> {
@@ -126,6 +150,28 @@ pub fn run_swarm(
 ) -> SwarmOutcome {
     let n = workers.clamp(1, 50);
     let roles = worker_roles(n);
+
+    // Service: global AI budget enforcement. Check the circuit breaker before
+    // spawning any AI workers. If paused (manual or quota-triggered), refuse to
+    // spawn. This ports the critical enforcement path from
+    // services/global-ai-budget.ts into the native swarm executor.
+    if !dry_run && (agent == "claude" || agent == "codex") {
+        if let Some(reason) = check_budget_paused(cwd) {
+            return SwarmOutcome {
+                dry_run: false,
+                workers: 0,
+                results: vec![WorkerResult {
+                    worker_idx: 0,
+                    agent: agent.into(),
+                    stdout: String::new(),
+                    stderr: format!("AI budget paused: {reason}. Run `ruflo daemon budget resume` to re-enable."),
+                    exit_code: -1,
+                    timed_out: false,
+                }],
+                plan: vec![json!({"blocked": "budget_paused", "reason": reason})],
+            };
+        }
+    }
 
     if dry_run {
         let plan: Vec<Value> = (0..n)
