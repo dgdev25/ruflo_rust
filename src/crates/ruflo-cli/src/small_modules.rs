@@ -19,17 +19,69 @@ fn now_ms() -> u64 {
 // ENCRYPTION VAULT (encryption/vault.ts, 192 LOC)
 // ============================================================================ //
 
-/// Credential vault — stores secrets with XOR-based obfuscation (native build
-/// has no AES crate dependency; real encryption needs a crypto crate). This
-/// matches the vault.ts interface: store/retrieve/list/delete.
+/// Credential vault — stores secrets with an HMAC-SHA256 authenticated seal.
+/// Uses a keystream derived from HMAC(key, nonce) (repeated/expanded to value
+/// length) XORed with the plaintext, plus an HMAC(key, nonce || ciphertext)
+/// MAC stored alongside for tamper detection. This is an authenticated-encryption
+/// construction that does not require an external AES crate; it matches the
+/// vault.ts interface (store/retrieve/list/delete).
 pub mod vault {
     use super::*;
+    use sha2::{Digest, Sha256};
 
-    /// Obfuscate a value with XOR (not cryptographically secure — use a crypto
-    /// crate like `aes-gcm` for real encryption). Sufficient for local dev
-    /// vault that prevents casual secret exposure in plaintext files.
-    fn xor_cipher(data: &[u8], key: &[u8]) -> Vec<u8> {
-        data.iter().enumerate().map(|(i, b)| b ^ key[i % key.len()]).collect()
+    /// HMAC-SHA256 computed inline (avoids pulling in a separate hmac crate).
+    fn hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32] {
+        const BLOCK_SIZE: usize = 64;
+        // RFC 2104: hash keys longer than the block size, pad shorter keys.
+        let mut key_block = [0u8; BLOCK_SIZE];
+        if key.len() > BLOCK_SIZE {
+            let mut h = Sha256::new();
+            h.update(key);
+            let digest = h.finalize();
+            key_block[..digest.len()].copy_from_slice(&digest);
+        } else {
+            key_block[..key.len()].copy_from_slice(key);
+        }
+        let mut ipad = [0u8; BLOCK_SIZE];
+        let mut opad = [0u8; BLOCK_SIZE];
+        for i in 0..BLOCK_SIZE {
+            ipad[i] = key_block[i] ^ 0x36;
+            opad[i] = key_block[i] ^ 0x5c;
+        }
+        let mut inner = Sha256::new();
+        inner.update(&ipad);
+        inner.update(message);
+        let inner_digest = inner.finalize();
+        let mut outer = Sha256::new();
+        outer.update(&opad);
+        outer.update(&inner_digest);
+        let outer_digest = outer.finalize();
+        let mut out = [0u8; 32];
+        out.copy_from_slice(&outer_digest);
+        out
+    }
+
+    /// Derive a keystream of `len` bytes from HMAC(key, nonce) by concatenating
+    /// HMAC blocks over a 32-bit counter (NIST SP 800-108-ish KDF).
+    fn keystream(key: &[u8], nonce: &[u8], len: usize) -> Vec<u8> {
+        let mut out = Vec::with_capacity(len);
+        let mut counter: u32 = 0;
+        while out.len() < len {
+            let mut msg = Vec::with_capacity(nonce.len() + 4);
+            msg.extend_from_slice(nonce);
+            msg.extend_from_slice(&counter.to_be_bytes());
+            let block = hmac_sha256(key, &msg);
+            out.extend_from_slice(&block);
+            counter = counter.wrapping_add(1);
+        }
+        out.truncate(len);
+        out
+    }
+
+    fn xor_in_place(data: &mut [u8], ks: &[u8]) {
+        for (i, b) in data.iter_mut().enumerate() {
+            *b ^= ks[i];
+        }
     }
 
     fn vault_key() -> Vec<u8> {
@@ -39,16 +91,64 @@ pub mod vault {
     }
 
     pub fn store(key: &str, value: &str) -> Value {
-        let encoded = xor_cipher(value.as_bytes(), &vault_key());
-        let b64 = base64_encode(&encoded);
-        json!({"key": key, "value": b64, "encrypted": true, "storedAt": now_ms()})
+        let vk = vault_key();
+        // Nonce derived from current time (now_ms) — unique per store call.
+        let nonce = now_ms().to_be_bytes();
+        // Keystream XOR (confidentiality).
+        let mut ct = value.as_bytes().to_vec();
+        let ks = keystream(&vk, &nonce, ct.len());
+        xor_in_place(&mut ct, &ks);
+        let b64 = base64_encode(&ct);
+        // MAC over nonce || ciphertext for authenticity / tamper detection.
+        let mut mac_input = Vec::with_capacity(nonce.len() + ct.len());
+        mac_input.extend_from_slice(&nonce);
+        mac_input.extend_from_slice(&ct);
+        let mac = hmac_sha256(&vk, &mac_input);
+        let mac_b64 = base64_encode(&mac);
+        let nonce_b64 = base64_encode(&nonce);
+        json!({
+            "key": key,
+            "value": b64,
+            "nonce": nonce_b64,
+            "mac": mac_b64,
+            "encrypted": true,
+            "storedAt": now_ms()
+        })
     }
 
     pub fn retrieve(entry: &Value) -> Option<String> {
         let b64 = entry["value"].as_str()?;
-        let encoded = base64_decode(b64)?;
-        let decoded = xor_cipher(&encoded, &vault_key());
-        String::from_utf8(decoded).ok()
+        let nonce_b64 = entry["nonce"].as_str()?;
+        let mac_b64 = entry["mac"].as_str()?;
+        let ct = base64_decode(b64)?;
+        let nonce = base64_decode(nonce_b64)?;
+        let stored_mac = base64_decode(mac_b64)?;
+        let vk = vault_key();
+        // Recompute MAC and constant-time compare — fail if mismatched.
+        let mut mac_input = Vec::with_capacity(nonce.len() + ct.len());
+        mac_input.extend_from_slice(&nonce);
+        mac_input.extend_from_slice(&ct);
+        let expected = hmac_sha256(&vk, &mac_input);
+        if !ct_eq(&stored_mac, &expected) {
+            return None;
+        }
+        // Regenerate keystream and XOR to recover plaintext.
+        let ks = keystream(&vk, &nonce, ct.len());
+        let mut pt = ct;
+        xor_in_place(&mut pt, &ks);
+        String::from_utf8(pt).ok()
+    }
+
+    /// Constant-time slice equality so MAC mismatches aren't timing-leaky.
+    fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+        if a.len() != b.len() {
+            return false;
+        }
+        let mut diff: u8 = 0;
+        for (x, y) in a.iter().zip(b.iter()) {
+            diff |= x ^ y;
+        }
+        diff == 0
     }
 
     fn base64_encode(data: &[u8]) -> String {
@@ -241,9 +341,26 @@ mod tests {
         std::env::set_var("RUFLO_VAULT_KEY", "key-a");
         let entry = vault::store("k", "secret");
         std::env::set_var("RUFLO_VAULT_KEY", "key-b");
-        let recovered = vault::retrieve(&entry).unwrap();
-        assert_ne!(recovered, "secret"); // garbled, not the original
+        // With the authenticated seal, MAC verification fails under the wrong
+        // key and retrieve returns None rather than garbled plaintext.
+        assert!(vault::retrieve(&entry).is_none());
         std::env::remove_var("RUFLO_VAULT_KEY");
+    }
+
+    #[test]
+    fn vault_tamper_detected() {
+        let _g = VAULT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::remove_var("RUFLO_VAULT_KEY");
+        let mut entry = vault::store("k", "topsecret");
+        // Flip a bit in the stored ciphertext — retrieve must fail the MAC.
+        let mut b64 = entry["value"].as_str().unwrap().to_string();
+        // Toggle trailing '=' handling: replace first non-pad char with another.
+        if let Some(pos) = b64.find(|c: char| c.is_alphanumeric()) {
+            let bytes = unsafe { b64.as_bytes_mut() };
+            bytes[pos] = if bytes[pos] == b'A' { b'B' } else { b'A' };
+        }
+        entry["value"] = json!(b64);
+        assert!(vault::retrieve(&entry).is_none());
     }
 
     #[test]

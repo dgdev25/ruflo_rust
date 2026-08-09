@@ -14,9 +14,18 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Value};
 
+/// Global AI budget limits enforced by the swarm executor in addition to the
+/// manual / circuit-breaker pause. Values port from services/global-ai-budget.ts.
+const LIMIT_CONCURRENT: usize = 1;
+const LIMIT_HOURLY: usize = 2;
+const LIMIT_DAILY: usize = 12;
+const HOUR_MS: u64 = 3_600_000;
+const DAY_MS: u64 = 86_400_000;
+
 /// Check if the global AI budget is paused (manual or quota-triggered circuit
-/// breaker). Reads ~/.claude-flow/ai-budget.json (same file daemon.rs manages).
-/// Returns Some(reason) if paused, None if clear.
+/// breaker) or over one of the rate limits. Reads
+/// ~/.claude-flow/ai-budget.json (same file daemon.rs manages).
+/// Returns Some(reason) if paused/over-limit, None if clear.
 fn check_budget_paused(_cwd: &Path) -> Option<String> {
     let budget_dir = std::env::var("RUFLO_AI_BUDGET_DIR")
         .map(PathBuf::from)
@@ -30,12 +39,57 @@ fn check_budget_paused(_cwd: &Path) -> Option<String> {
     let raw = std::fs::read_to_string(&ledger_path).ok()?;
     let ledger: Value = serde_json::from_str(&raw).ok()?;
     let now = now_ms();
-    let paused_until = ledger["pausedUntil"].as_u64().filter(|&t| t > now)?;
-    let reason = ledger["pauseReason"]
-        .as_str()
-        .unwrap_or("unknown")
-        .to_string();
-    Some(reason)
+
+    // Manual / circuit-breaker pause.
+    if let Some(paused_until) = ledger["pausedUntil"].as_u64().filter(|&t| t > now) {
+        let _ = paused_until;
+        let reason = ledger["pauseReason"]
+            .as_str()
+            .unwrap_or("unknown")
+            .to_string();
+        return Some(reason);
+    }
+
+    // Active concurrent workers.
+    if let Some(active) = ledger["active"].as_array() {
+        if active.len() >= LIMIT_CONCURRENT {
+            return Some(format!(
+                "concurrent limit reached ({active}/{limit})",
+                active = active.len(),
+                limit = LIMIT_CONCURRENT
+            ));
+        }
+    }
+
+    // Sliding-window launch counters.
+    if let Some(launches) = ledger["launches"].as_array() {
+        let hourly = launches
+            .iter()
+            .filter_map(|l| l["at"].as_u64())
+            .filter(|&t| now.saturating_sub(t) <= HOUR_MS)
+            .count();
+        if hourly >= LIMIT_HOURLY {
+            return Some(format!(
+                "hourly launch limit reached ({hourly}/{limit})",
+                hourly = hourly,
+                limit = LIMIT_HOURLY
+            ));
+        }
+        let daily = launches
+            .iter()
+            .filter_map(|l| l["at"].as_u64())
+            .filter(|&t| now.saturating_sub(t) <= DAY_MS)
+            .count();
+        if daily >= LIMIT_DAILY {
+            return Some(format!(
+                "daily launch limit reached ({daily}/{limit})",
+                daily = daily,
+                limit = LIMIT_DAILY
+            ));
+        }
+    }
+
+    None
 }
 
 /// Per-worker role slices for hierarchical-mesh topology. Worker 0 = queen

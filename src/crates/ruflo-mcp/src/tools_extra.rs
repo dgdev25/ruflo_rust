@@ -27,11 +27,26 @@ fn write_state(name: &str, v: &Value) -> Result<(), RufloError> {
     if let Some(dir) = path.parent() {
         let _ = fs::create_dir_all(dir);
     }
-    let tmp = path.with_extension("json.tmp");
-    let bytes = serde_json::to_vec_pretty(v).unwrap_or_default();
-    fs::write(&tmp, &bytes)
-        .map_err(|e| RufloError::UpstreamAdapter { message: format!("write {name}: {e}") })?;
-    fs::rename(&tmp, &path)
+    // Create the tmp file with 0600 permissions (Unix) to prevent other
+    // users from reading state that may contain agent/task details.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut f = std::fs::OpenOptions::new()
+            .write(true).create(true).truncate(true).mode(0o600)
+            .open(path.with_extension("json.tmp"))
+            .map_err(|e| RufloError::UpstreamAdapter { message: format!("create tmp: {e}") })?;
+        use std::io::Write;
+        let bytes = serde_json::to_vec_pretty(v).unwrap_or_default();
+        f.write_all(&bytes).map_err(|e| RufloError::UpstreamAdapter { message: format!("write: {e}") })?;
+    }
+    #[cfg(not(unix))]
+    {
+        let bytes = serde_json::to_vec_pretty(v).unwrap_or_default();
+        fs::write(path.with_extension("json.tmp"), &bytes)
+            .map_err(|e| RufloError::UpstreamAdapter { message: format!("write {name}: {e}") })?;
+    }
+    fs::rename(path.with_extension("json.tmp"), &path)
         .map_err(|e| RufloError::UpstreamAdapter { message: format!("rename {name}: {e}") })
 }
 

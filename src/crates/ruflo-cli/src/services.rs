@@ -61,6 +61,122 @@ fn write_state(name: &str, v: &Value) -> bool {
     fs::rename(&tmp, &path).is_ok()
 }
 
+/// Stale-lock threshold. A lock older than this is assumed to belong to a
+/// crashed process and is taken over. Matches daemon.rs.
+const LOCK_STALE_MS: u64 = 10_000;
+
+#[cfg(unix)]
+fn open_create_new_private(path: &Path) -> std::io::Result<std::fs::File> {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+    let mut f = std::fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(path)?;
+    let _ = f.write_all(std::process::id().to_string().as_bytes());
+    Ok(f)
+}
+
+#[cfg(not(unix))]
+fn open_create_new_private(path: &Path) -> std::io::Result<std::fs::File> {
+    use std::io::Write;
+    let mut f = std::fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(path)?;
+    let _ = f.write_all(std::process::id().to_string().as_bytes());
+    Ok(f)
+}
+
+/// Unique lockfile per state file. Sits beside the JSON state so the lock is
+/// collocated with the data it protects and cleaned up with it.
+fn lock_path(name: &str) -> PathBuf {
+    state_dir().join(format!("{name}.lock"))
+}
+
+/// O_EXCL lockfile guard. Acquired before the read in a read-modify-write
+/// cycle and released (Drop) after the write. Stale locks (>LOCK_STALE_MS
+/// old) are taken over, matching daemon.rs LockGuard semantics. Unix-gated;
+/// on non-Unix targets the guard is a no-op stub (returns Ok immediately).
+#[cfg(unix)]
+struct LockGuard(PathBuf);
+
+#[cfg(unix)]
+impl LockGuard {
+    fn acquire(name: &str) -> Option<Self> {
+        let _ = fs::create_dir_all(state_dir());
+        let path = lock_path(name);
+        let deadline = now_ms() + 2000;
+        loop {
+            match open_create_new_private(&path) {
+                Ok(_) => return Some(LockGuard(path)),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    // Stale lock from a crashed process — take over.
+                    if let Ok(meta) = fs::metadata(&path) {
+                        if let Ok(mtime) = meta.modified() {
+                            let age = SystemTime::now()
+                                .duration_since(mtime)
+                                .map(|d| d.as_millis() as u64)
+                                .unwrap_or(0);
+                            if age > LOCK_STALE_MS {
+                                let _ = fs::remove_file(&path);
+                                continue;
+                            }
+                        }
+                    }
+                    if now_ms() > deadline {
+                        return None;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                Err(_) => return None,
+            }
+        }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for LockGuard {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
+
+/// No-op stub for non-Unix targets. File-based advisory locks are a Unix
+/// concept (O_EXCL, mode bits); on Windows/other the lock is a struct with
+/// no state and acquire is always Ok. Concurrency safety on those targets
+/// relies on the caller not running concurrent ruflo processes against the
+/// same state dir — same caveat as daemon.rs.
+#[cfg(not(unix))]
+struct LockGuard;
+
+#[cfg(not(unix))]
+impl LockGuard {
+    fn acquire(_name: &str) -> Option<Self> {
+        Some(LockGuard)
+    }
+}
+
+/// Transactional read-modify-write helper. Acquires a per-state-file lock,
+/// reads the current state, applies `f`, writes the result, and releases the
+/// lock on return. Returns true if the write succeeded. The lock is held for
+/// the entire cycle, preventing the lost-update race two concurrent writers
+/// would otherwise hit (both read same state, both modify, second write wins).
+#[allow(dead_code)]
+fn locked_write<F>(name: &str, f: F) -> bool
+where
+    F: FnOnce(&mut Value),
+{
+    let _guard = match LockGuard::acquire(name) {
+        Some(g) => g,
+        None => return false,
+    };
+    let mut state = read_state(name);
+    f(&mut state);
+    write_state(name, &state)
+}
+
 fn ensure_arr<'a>(v: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
     if v[key].is_null() {
         v[key] = json!([]);
@@ -78,6 +194,10 @@ pub mod bounded_pool {
     use super::*;
 
     pub fn acquire(pool_id: &str, max_concurrent: usize) -> Result<Value, String> {
+        // Hold the lock for the full read-check-modify-write cycle so two
+        // concurrent acquires can't both see capacity and both succeed.
+        let _guard = LockGuard::acquire("bounded-pool")
+            .ok_or_else(|| "bounded-pool lock contention".to_string())?;
         let mut state = read_state("bounded-pool");
         let key = pool_id;
         let active = state[key]["active"].as_array().cloned().unwrap_or_default();
@@ -93,6 +213,12 @@ pub mod bounded_pool {
     }
 
     pub fn release(pool_id: &str, slot_id: &str) -> bool {
+        // Lock around read-modify-write so a concurrent acquire can't observe
+        // a slot we're about to remove (and vice versa).
+        let _guard = match LockGuard::acquire("bounded-pool") {
+            Some(g) => g,
+            None => return false,
+        };
         let mut state = read_state("bounded-pool");
         if let Some(arr) = state[pool_id]["active"].as_array_mut() {
             let before = arr.len();
@@ -119,6 +245,12 @@ pub mod worker_queue {
     use super::*;
 
     pub fn enqueue(task: Value) -> Value {
+        // Lock so two concurrent enqueues produce two distinct queue entries
+        // rather than one lost update.
+        let _guard = match LockGuard::acquire("worker-queue") {
+            Some(g) => g,
+            None => return json!({}),
+        };
         let mut state = read_state("worker-queue");
         let queue = ensure_arr(&mut state, "queue");
         let entry = json!({
@@ -133,6 +265,8 @@ pub mod worker_queue {
     }
 
     pub fn dequeue() -> Option<Value> {
+        // Lock so two concurrent dequeuers can't both pop the same head.
+        let _guard = LockGuard::acquire("worker-queue")?;
         let mut state = read_state("worker-queue");
         let queue = ensure_arr(&mut state, "queue");
         if queue.is_empty() {
@@ -549,6 +683,10 @@ pub mod lease {
     use super::*;
 
     pub fn acquire(workspace: &str, holder: &str, ttl_ms: u64) -> Result<Value, String> {
+        // Lock around read-check-write so two callers can't both observe an
+        // unleased workspace and both "win" it (lost-update → split-brain lease).
+        let _guard = LockGuard::acquire("workspace-leases")
+            .ok_or_else(|| "workspace-leases lock contention".to_string())?;
         let mut state = read_state("workspace-leases");
         let now = now_ms();
         let existing = state[workspace].clone();
