@@ -49,6 +49,7 @@ mod prod_modules;
 mod repo_supervisor;
 mod providers;
 mod proxy;
+mod registry_api;
 mod route;
 mod security;
 mod services;
