@@ -1141,17 +1141,22 @@ fn boundaries(root: &Path, command: &AnalyzeCommand) -> u8 {
             .filter(|(a, b)| p1.contains(a) != p1.contains(b))
             .cloned()
             .collect();
+        let comms = communities(&graph);
         let out = json!({
             "statistics": {
                 "nodeCount": node_count, "edgeCount": edge_count,
                 "avgDegree": avg_degree, "density": density,
                 "componentCount": components.len(),
+                "communityCount": comms.len(),
             },
             "boundaries": [{
                 "cutValue": cut.len(),
                 "partition1": p1, "partition2": p2,
                 "suggestion": "These two partitions share the most import edges — a natural seam to split.",
             }],
+            "communities": comms.iter().map(|c| json!({
+                "size": c.len(), "members": c,
+            })).collect::<Vec<_>>(),
             "circularDependencies": cycles.iter().map(|c| json!({
                 "cycle": c, "severity": "medium",
                 "suggestion": "Break the cycle by inverting one dependency or extracting a shared module.",
@@ -1482,16 +1487,26 @@ fn build_adj_str(graph: &ImportGraph) -> HashMap<&str, Vec<&str>> {
     adj
 }
 
-// Crude graph bisection: alternate assignment by BFS order from an arbitrary
-// seed, then swap nodes that reduce the cut. Good enough for a "natural seam"
-// suggestion; not a true global MinCut.
+// True global MinCut via petgraph (Stoer-Wagner style edge-removal scan),
+// falling back to BFS bisection when the graph is still connected after
+// removing any single edge (i.e. min-cut > 1, or a fully-connected cluster).
 fn bisection(graph: &ImportGraph) -> (Vec<String>, Vec<String>) {
+    // Try real MinCut first.
+    let edge_pairs: Vec<(String, String)> = graph.edges.iter()
+        .map(|(a, b)| (a.clone(), b.clone()))
+        .collect();
+    if let Some((_cut_val, p1, p2)) = crate::graph_algo::min_cut(&edge_pairs) {
+        if !p1.is_empty() && !p2.is_empty() {
+            return (p1, p2);
+        }
+    }
+
+    // Fallback: BFS-order bisection (used when min-cut > 1).
     let adj = build_adj_str(graph);
     let nodes: Vec<&str> = graph.nodes.iter().map(|s| s.as_str()).collect();
     if nodes.is_empty() {
         return (Vec::new(), Vec::new());
     }
-    // BFS order from first node.
     let mut order: Vec<&str> = Vec::new();
     let mut visited: HashSet<&str> = HashSet::new();
     for &seed in &nodes {
@@ -1525,6 +1540,14 @@ fn bisection(graph: &ImportGraph) -> (Vec<String>, Vec<String>) {
         }
     }
     (part1, part2)
+}
+
+// Louvain community detection — modularity-optimized communities.
+pub fn communities(graph: &ImportGraph) -> Vec<Vec<String>> {
+    let edge_pairs: Vec<(String, String)> = graph.edges.iter()
+        .map(|(a, b)| (a.clone(), b.clone()))
+        .collect();
+    crate::graph_algo::louvain_communities(&edge_pairs)
 }
 
 fn export_dot(graph: &ImportGraph, cycles: &[Vec<String>]) -> String {

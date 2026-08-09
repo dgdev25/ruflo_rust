@@ -22,6 +22,7 @@ mod funnel;
 mod funnel_command;
 mod funnel_extra;
 mod gaia_bench;
+mod graph_algo;
 mod guidance;
 mod hooks;
 mod hive_mind;
