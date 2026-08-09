@@ -19,6 +19,7 @@ mod eject;
 mod embeddings;
 mod funnel;
 mod funnel_command;
+mod funnel_extra;
 mod gaia_bench;
 mod guidance;
 mod hooks;
