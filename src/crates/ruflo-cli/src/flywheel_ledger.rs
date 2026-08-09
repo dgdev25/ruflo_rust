@@ -176,6 +176,10 @@ pub fn promote(candidate: &str, expected_champion_hash: &str) -> Result<Value, S
     // Record the promotion as an immutable receipt.
     drop(_g);
     append_receipt("promote", &new_champ);
+    // Record the evolve-proof accept gate (V2 behavioral).
+    let _ = crate::services::evolve_proof_v2::accept(candidate, 1.0, 0.5);
+    // Record the flywheel transaction commit (V2 behavioral).
+    let _ = crate::services::flywheel_tx_v2::commit_atomic("promote", new_champ.clone());
     Ok(new_champ)
 }
 

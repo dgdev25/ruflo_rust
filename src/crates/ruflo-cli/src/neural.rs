@@ -255,6 +255,14 @@ fn train(root: &Path, command: &NeuralCommand) -> u8 {
     println!("  Classes:        {}", class_map.len());
     println!("\n\u{2714} SONA MLP trained via backprop + EWC++ consolidation.");
     println!("  Weights: {}", weights_path.display());
+    // V2 behavioral: record training data audit (weight_eft_v2).
+    if examples_count > 0 {
+        let _ = crate::services::weight_eft_v2::build_training_data("router-decisions", 1.0 - final_loss.min(1.0));
+    }
+    // V2 behavioral: propose next improvement (flywheel_proposer_v2).
+    let _ = crate::services::flywheel_proposer_v2::propose("neural-train");
+    // V2 behavioral: record ruvector-training session (ruvector_training_v2).
+    let _ = crate::services::ruvector_training_v2::run_training(command.epochs.max(1));
     if examples_count == 0 {
         eprintln!("[NOTE] No router decisions found to train on. Run tasks via `ruflo route` first.");
     }
