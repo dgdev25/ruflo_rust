@@ -36,6 +36,7 @@ mod plugins;
 mod policy;
 mod prompt;
 mod process_cmd;
+mod prod_modules;
 mod providers;
 mod proxy;
 mod route;
