@@ -188,10 +188,13 @@ fn run_op(root: &Path, op: &str, command: &PolicyCommand) -> Result<Value, Strin
             }))
         }
         "rule" => {
-            match pos(1) {
+            // `command.args` excludes the leading `policy rule` tokens, so the
+            // action ("add"/"list") sits at index 0 and the JSON payload (for
+            // add) at index 1.
+            match pos(0) {
                 Some("add") => {
                     require_interactive()?;
-                    let rule = arg_json(pos(2), "rule add")?;
+                    let rule = arg_json(pos(1), "rule add")?;
                     let mut state = load_state(root);
                     if let Some(arr) = state["rules"].as_array() {
                         let mut new_rules = arr.clone();

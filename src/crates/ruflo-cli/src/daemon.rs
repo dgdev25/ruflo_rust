@@ -436,6 +436,12 @@ fn stop_all() -> u8 {
     // Enumerate running ruflo/claude-flow daemon processes and SIGTERM them.
     // /proc is Linux-specific; on other platforms there is no portable
     // enumeration, so report zero and let the per-workspace state drive stops.
+    //
+    // We must never kill our own ancestry: the ruflo process running this code
+    // is itself launched from a shell/test-runner whose cmdline often contains
+    // "ruflo" (via the repo path) and "daemon" (via the subcommand arg or the
+    // parent binary name). Collect the full ancestor PID set and skip them.
+    let ancestors = ancestor_pids();
     let mut killed = 0u32;
     #[cfg(unix)]
     {
@@ -444,7 +450,7 @@ fn stop_all() -> u8 {
                 let name = e.file_name();
                 let name = name.to_string_lossy();
                 let Ok(pid) = name.parse::<u32>() else { continue };
-                if pid == std::process::id() {
+                if pid == std::process::id() || ancestors.contains(&pid) {
                     continue;
                 }
                 if let Ok(cmdline) = fs::read_to_string(e.path().join("cmdline")) {
@@ -459,6 +465,38 @@ fn stop_all() -> u8 {
     }
     println!("Stopped {killed} daemon process(es) across all workspaces.");
     0
+}
+
+/// Walk `/proc/<pid>/stat` from the current process up through every parent,
+/// returning the set of ancestor PIDs (excluding self). Used by `stop_all` to
+/// avoid killing the invoking shell, test runner, or any other parent that
+/// legitimately has "ruflo"+"daemon" in its cmdline.
+#[cfg(unix)]
+fn ancestor_pids() -> std::collections::HashSet<u32> {
+    let mut set = std::collections::HashSet::new();
+    let mut cur = std::process::id();
+    // Bounded walk: a few hundred hops max is plenty for any real process tree.
+    for _ in 0..512 {
+        let Ok(stat) = fs::read_to_string(format!("/proc/{cur}/stat")) else { break };
+        // /proc/<pid>/stat is "pid (comm) state ppid ...". comm may contain
+        // spaces/parens, so find the last ')' and parse after it.
+        let Some(after_comm) = stat.rfind(')') else { break };
+        let mut fields = stat[after_comm + 1..].split_whitespace();
+        fields.next(); // state
+        let Some(ppid_str) = fields.next() else { break };
+        let Ok(ppid) = ppid_str.parse::<u32>() else { break };
+        if ppid == 0 || ppid == 1 || ppid == cur || set.contains(&ppid) {
+            break;
+        }
+        set.insert(ppid);
+        cur = ppid;
+    }
+    set
+}
+
+#[cfg(not(unix))]
+fn ancestor_pids() -> std::collections::HashSet<u32> {
+    std::collections::HashSet::new()
 }
 
 // ---- status -----------------------------------------------------------------
