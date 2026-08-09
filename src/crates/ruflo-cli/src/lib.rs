@@ -1881,7 +1881,12 @@ Subcommands:
         }
         Err(error) => {
             eprintln!("[ERROR] {error}");
-            ExitCode::from(1)
+            let exit = if error.starts_with(command::UNSUPPORTED_COMMAND_ERROR_CODE) {
+                ERROR_EXIT
+            } else {
+                1
+            };
+            ExitCode::from(exit)
         }
     }
 }

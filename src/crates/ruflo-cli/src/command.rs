@@ -1,5 +1,9 @@
 use std::ffi::OsString;
 
+/// Stable error code emitted when an invocation is outside the native CLI
+/// surface. Consumers can match this prefix without parsing human guidance.
+pub const UNSUPPORTED_COMMAND_ERROR_CODE: &str = "cli.unsupported";
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParsedCommand {
     Version,
@@ -2073,7 +2077,7 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
                 None => String::new(),
             };
             Err(format!(
-                "unsupported native CLI invocation: {}{hint}",
+                "{UNSUPPORTED_COMMAND_ERROR_CODE}: unsupported native CLI invocation: {}{hint}",
                 args.join(" ")
             ))
         }
@@ -2324,7 +2328,7 @@ fn config_positionals(
 mod tests {
     use std::ffi::OsString;
 
-    use super::{parse, ParsedCommand};
+    use super::{parse, ParsedCommand, UNSUPPORTED_COMMAND_ERROR_CODE};
 
     fn argv(values: &[&str]) -> Vec<OsString> {
         std::iter::once("ruflo")
@@ -2437,6 +2441,7 @@ mod tests {
     fn known_family_with_unknown_subcommand_is_rejected_not_downgraded_to_overview() {
         let error = parse(argv(&["gaia-bench", "invented-subcommand"]))
             .expect_err("unknown subcommand must fail parsing");
+        assert!(error.starts_with(UNSUPPORTED_COMMAND_ERROR_CODE));
         assert!(error.contains("unsupported native CLI invocation"));
         assert!(error.contains("gaia-bench invented-subcommand"));
 
