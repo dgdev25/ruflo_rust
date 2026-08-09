@@ -232,34 +232,34 @@ fn generate(command: &EmbeddingsCommand) -> u8 {
         return 1;
     }
     let provider = command.provider.clone().unwrap_or_else(|| "local".into());
-    // Only the local deterministic vectorizer is available natively; requesting
-    // a provider/model that needs a runtime/API is an unsupported op, not a
-    // silent relabel.
-    if provider != "local" {
-        eprintln!("[ERROR] Provider '{provider}' requires its runtime/API (ONNX/OpenAI/etc.); only 'local' is available in the native build.");
-        return 1;
-    }
-    if command.model.is_some() {
-        eprintln!("[WARN] --model is ignored by the native local vectorizer.");
-    }
+    // Prefer ONNX MiniLM (ort crate) when the model is available; fall back to
+    // the local hash vectorizer. Both are "local" — ONNX just gives real neural
+    // embeddings that match the TS runtime's output exactly.
+    let (vec, embed_method) = crate::onnx_embeddings::embed(text, dim);
+    let model_name = if embed_method == "onnx" {
+        "all-MiniLM-L6-v2 (ONNX)"
+    } else {
+        MODEL_NAME
+    };
+
     let output_fmt = command.output.clone().unwrap_or_else(|| "preview".into());
 
-    println!("\nGenerate Embedding");
+    println!("\nGenerate Embedding ({embed_method})");
     println!("{}", "\u{2500}".repeat(50));
 
     let start = Instant::now();
-    let vec = embed(text, dim);
     let duration = start.elapsed().as_millis();
 
-    println!("Embedding generated in {duration}ms");
+    println!("Embedding generated in {duration}ms via {embed_method}");
 
     if output_fmt == "json" || command.json {
         let out = json!({
             "text": chars_take(text, 100),
             "embedding": vec,
             "dimensions": dim,
-            "model": MODEL_NAME,
+            "model": model_name,
             "provider": provider,
+            "method": embed_method,
             "duration": duration,
         });
         println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());

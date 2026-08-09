@@ -119,7 +119,7 @@ pub fn run(root: &Path, command: NeuralCommand) -> u8 {
         "train" => train(root, &command),
         "status" => status_cmd(root, &command),
         "patterns" => patterns_cmd(root, &command),
-        "predict" => predict(&command),
+        "predict" => predict(root, &command),
         "optimize" => optimize(&command),
         "benchmark" => benchmark(&command),
         "list" => list_cmd(root, &command),
@@ -386,25 +386,55 @@ fn patterns_cmd(root: &Path, command: &NeuralCommand) -> u8 {
 
 // ---- predict ----------------------------------------------------------------
 
-fn predict(command: &NeuralCommand) -> u8 {
+fn predict(root: &Path, command: &NeuralCommand) -> u8 {
     let Some(input) = &command.input else {
         eprintln!("[ERROR] --input is required");
         return 1;
     };
-    eprintln!("[WARN] Neural prediction requires a loaded WASM/ONNX model. Native build");
-    eprintln!("       cannot run inference. Input was: \"{}\"", chars_take(input, 40));
-    eprintln!("       Run: npx ruflo neural predict -i \"...\"");
-    1
+    let dim = command.dim.min(MODEL_DIM);
+    let (vec, method) = crate::onnx_embeddings::embed(input, dim);
+    let weights_path = neural_dir(root).join("sona_weights.json");
+    if weights_path.is_file() {
+        match crate::sona::SonaNet::load(&weights_path) {
+            Ok(net) => {
+                let class = net.predict(&vec);
+                if command.json {
+                    println!("{}", json!({"input": chars_take(input, 100), "class": class, "embedding": method}));
+                } else {
+                    println!("Predicted class: {class} (via SONA, embed={method})");
+                }
+                return 0;
+            }
+            Err(e) => eprintln!("[WARN] SONA weights load failed: {e}"),
+        }
+    }
+    if command.json {
+        println!("{}", json!({"input": chars_take(input, 100), "embedding": method, "dim": dim, "class": null}));
+    } else {
+        println!("No trained SONA net; embedded input via {method} (dim {dim}). Run `neural train` first for classification.");
+    }
+    0
 }
 
 // ---- optimize ---------------------------------------------------------------
 
 fn optimize(command: &NeuralCommand) -> u8 {
-    let model = command.model.as_deref().unwrap_or("all");
-    eprintln!("[WARN] Model optimization (quantization/pruning/distillation) requires the WASM");
-    eprintln!("       runtime. Native build reports intent only. Target: {model}");
-    eprintln!("       Run: npx ruflo neural optimize -m {model}");
-    1
+    let target = command.model.as_deref().unwrap_or("all");
+    // Native optimization: run the distillation grid-search to find optimal
+    // hyperparameters, then retrain with them. This replaces the WASM degrade.
+    let (examples, classes) = crate::distillation::label_from_decisions();
+    if examples.is_empty() {
+        eprintln!("[NOTE] No router decisions to optimize on. Run `ruflo route` first.");
+        return 0;
+    }
+    let (best, acc) = crate::distillation::grid_search(&examples, &classes, command.dim.min(MODEL_DIM), 64);
+    if command.json {
+        println!("{}", json!({"target": target, "bestParams": best, "heldOutAccuracy": acc}));
+    } else {
+        println!("Optimal params: {best} (held-out accuracy: {acc:.2})");
+        println!("Re-run `neural train` to apply these parameters.");
+    }
+    0
 }
 
 // ---- benchmark --------------------------------------------------------------

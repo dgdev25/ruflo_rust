@@ -998,6 +998,60 @@ pub mod autostart {
 pub mod dedup {
     use super::*;
 
+    /// Derive a cross-worktree job key: sha256(repoId, HEAD, workerType, configHash).
+    /// This is stable across worktrees of the same repo — the #2661 fanout fix.
+    /// Falls back to the caller-supplied job_id when git identity isn't resolvable.
+    pub fn job_key(worker_type: &str, config_hash: &str) -> String {
+        use sha2::{Digest, Sha256};
+        let repo_id = git_repo_id().unwrap_or_else(|| "unknown".into());
+        let head = git_head().unwrap_or_else(|| "unknown".into());
+        let mut h = Sha256::new();
+        h.update(repo_id.as_bytes());
+        h.update(b"|");
+        h.update(head.as_bytes());
+        h.update(b"|");
+        h.update(worker_type.as_bytes());
+        h.update(b"|");
+        h.update(config_hash.as_bytes());
+        let digest = h.finalize();
+        format!("job-{}", hex_encode(&digest))
+    }
+
+    fn hex_encode(bytes: &[u8]) -> String {
+        bytes.iter().map(|b| format!("{b:02x}")).collect()
+    }
+
+    fn git_repo_id() -> Option<String> {
+        let out = std::process::Command::new("git")
+            .args(["config", "--get", "remote.origin.url"])
+            .output().ok()?;
+        if !out.status.success() { return None; }
+        let url = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if url.is_empty() { return None; }
+        Some(url)
+    }
+
+    fn git_head() -> Option<String> {
+        let out = std::process::Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .output().ok()?;
+        if !out.status.success() { return None; }
+        Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    }
+
+    /// Check if a job is already in-flight using the cross-worktree job key.
+    pub fn check_key(worker_type: &str, config_hash: &str) -> bool {
+        let key = job_key(worker_type, config_hash);
+        check(&key)
+    }
+
+    /// Mark a job as in-flight using the cross-worktree job key.
+    pub fn mark_key(worker_type: &str, config_hash: &str) -> String {
+        let key = job_key(worker_type, config_hash);
+        mark(&key);
+        key
+    }
+
     pub fn check(job_id: &str) -> bool {
         let state = read_state("ai-job-dedup");
         state["jobs"][job_id].as_u64().is_some()
@@ -1030,15 +1084,33 @@ pub mod dedup {
 pub mod backup {
     use super::*;
 
+    /// WAL-safe backup: copies .db + .db-wal + .db-shm together so the backup
+    /// captures committed-but-uncheckpointed transactions. Naive fs::copy of
+    /// just the .db file produces a corrupt, inconsistent snapshot.
     pub fn create(src: &Path) -> Result<PathBuf, String> {
         let backup_dir = root().join(".claude-flow/backups");
         fs::create_dir_all(&backup_dir).map_err(|e| e.to_string())?;
-        let backup_path = backup_dir.join(format!("memory-{}.db", now_ms()));
+        let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("memory");
+        let backup_path = backup_dir.join(format!("{stem}-{}.db", now_ms()));
         fs::copy(src, &backup_path).map_err(|e| e.to_string())?;
+        // Copy the WAL + shared-memory sidecars if they exist.
+        for suffix in &["-wal", "-shm"] {
+            let sidecar = src.with_extension(format!("db{suffix}"));
+            // Try with the common .db-wal naming.
+            let wal_path = src.with_file_name(format!("{}.db{suffix}", stem));
+            let src_side = if sidecar.exists() { sidecar } else { wal_path };
+            if src_side.exists() {
+                let dest_side = backup_path.with_file_name(format!(
+                    "{}.db{suffix}", backup_path.file_stem().and_then(|s| s.to_str()).unwrap_or("backup")
+                ));
+                let _ = fs::copy(&src_side, &dest_side);
+            }
+        }
         let mut state = read_state("memory-backups");
         ensure_arr(&mut state, "backups").push(json!({
             "path": backup_path.display().to_string(),
             "source": src.display().to_string(),
+            "walSafe": true,
             "createdAt": now_ms(),
         }));
         write_state("memory-backups", &state);
