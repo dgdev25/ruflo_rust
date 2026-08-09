@@ -2,13 +2,13 @@
 
 # Ruflo — Native Rust AI Orchestration CLI
 
-**Zero Node.js dependency. Pure Rust. 30-195x faster.**
+**Native Rust CLI and core, with an optional napi-rs addon.**
 
 [![Rust](https://img.shields.io/badge/Rust-1.97+-orange.svg)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](#license)
-[![Tests](https://img.shields.io/badge/tests-516%20passing-green.svg)](#testing)
-[![Clippy](https://img.shields.io/badge/clippy-0%20warnings-green.svg)](#testing)
-[![MCP Tools](https://img.shields.io/badge/MCP-347%20tools-blue.svg)](#mcp-tools)
+[![Parity](https://img.shields.io/badge/native%20parity-partial-yellow.svg)](docs/capabilities/native-capability-manifest.json)
+[![MCP Tools](https://img.shields.io/badge/MCP-4%20typed%20tools-blue.svg)](#mcp-tools)
+[![N-API](https://img.shields.io/badge/N--API-addon%20included-blue.svg)](#n-api-addon-and-release-status)
 
 </div>
 
@@ -16,163 +16,130 @@
 
 ## What is this?
 
-Ruflo is a complete native Rust rewrite of the [ruflo](https://github.com/ruvnet/ruflo) AI agent orchestration CLI — originally a TypeScript/Node.js application. Every command, service, and MCP tool has been ported to pure Rust with **zero Node.js runtime dependencies**.
+Ruflo is a native Rust implementation of selected [ruflo](https://github.com/ruvnet/ruflo) CLI, persistence, MCP, and orchestration contracts. `ruflo` and `claude-flow` are Rust executables; `@ruflo/native` provides an optional in-process Node integration through a real napi-rs addon.
 
-The result: a **39 MB single binary** (vs 2 GB npm package) that starts in **4ms** (vs 148ms), with no Node runtime, no `npm install`, no WASM bridge, no Transformers.js — just Rust.
+It is deliberately not presented as a complete replacement for the original Node project. The checked capability manifest currently claims **partial native parity**: unsupported CLI and MCP operations fail explicitly instead of returning success-shaped placeholder results.
 
-## Performance vs Node
+## Benchmark status
 
-Full benchmark report: [`docs/benchmarks/node-vs-rust-full.md`](docs/benchmarks/node-vs-rust-full.md)
+The former Node-versus-Rust speed and size figures are retracted. They timed unequal implementations and incorrectly described ordinary Node CLI paths as Ruflo N-API calls.
 
-| Benchmark | Node.js | Rust | Speedup |
-|-----------|---------|------|---------|
-| Cold start | 148ms | 4ms | **30x** |
-| Memory store (100 entries) | 46.5s | 291ms | **159x** |
-| Embeddings (10 texts) | 4.7s | 23ms | **195x** |
-| 7-step E2E workflow | 2,375ms | 44ms | **53x** |
-| Binary size | 2.0 GB | 39 MB | **51x smaller** |
-| MCP tools/list latency | ~200ms | ~110ms | **2x** |
+Use the [benchmark methodology](docs/benchmarks/node-vs-rust-methodology.md) and `scripts/bench-node-vs-rust.sh` for equivalent CLI measurements. The N-API suite measures only deterministic core functions through the real addon; it does not establish semantic-memory or full CLI parity.
 
 ## Quick Start
 
 ```bash
 # Build
-cargo build --release
+cargo build --release --locked
 
-# Initialize a project
-./target/release/ruflo init
+# Check the native CLI
+./target/release/ruflo --version
 
-# Start an agent swarm (spawns real claude/codex subprocesses)
-./target/release/ruflo swarm start --objective "fix the failing tests" --workers 3
-
-# Start the MCP server (347 tools)
+# Start the MCP server (four typed, implemented tools)
 ./target/release/ruflo mcp start
 
-# Semantic search via RuVector HNSW
-./target/release/ruflo memory search -q "authentication patterns"
-
-# Route a task via Thompson-sampling bandit
-./target/release/ruflo route task "implement user authentication"
+# Inspect the capability boundary before relying on a Node-era command
+cat docs/capabilities/native-capability-manifest.json
 ```
+
+See the [parity remediation checklist](docs/plans/parity-remediation-checklist.md) for the current verified and unproven contracts.
 
 ## Architecture
 
-### 9 Rust Crates
+### Rust workspace
 
 | Crate | Purpose |
 |-------|---------|
-| `ruflo-cli` | Command dispatcher + all 48 services + 58 command modules |
-| `ruflo-mcp` | MCP stdio/http dispatcher + 347 tool handlers |
+| `ruflo-cli` | Native command dispatcher and CLI services |
+| `ruflo-core` | Process-independent deterministic core operations |
+| `ruflo-napi` | Thin napi-rs `cdylib` adapter over `ruflo-core` |
+| `ruflo-mcp` | MCP dispatcher for four typed native tools |
 | `ruflo-storage` | SQLite + RuVector RVF (HNSW vector search) |
 | `ruflo-runtime` | Transport layer (stdio, HTTP, NoSlim) |
 | `ruflo-config` | Effective config + policy engine (ADR-324) |
 | `ruflo-types` | Shared types + error taxonomy |
 | `ruflo-actions` | GitHub Actions + CI helpers |
 | `ruflo-codex-cli` | Codex subprocess bridge |
-| `ruflo-memory` | Memory entry types |
+| `ruflo-memory` | Hybrid retrieval policy primitives |
 
-### Native Replacements (zero Node deps)
+### Native implementation boundaries
 
-| TS Component | Rust Equivalent |
+| Area | Native implementation |
 |--------------|-----------------|
-| Transformers.js (ONNX) | `ort` crate + all-MiniLM-L6-v2 (384-dim) |
-| hnswlib-node | RuVector `.rvf` (SIMD HNSW, git-pinned) |
-| tree-sitter (Node) | `tree-sitter` crate (Rust+TS+Python+Go+Java+C) |
-| Node graph algorithms | `petgraph` (MinCut, Louvain, SCC, Dijkstra) |
-| Q-learning router | Thompson-sampling bandit (Beta posterials) |
-| WASM SONA training | Native MLP backpropagation + EWC++ Fisher |
-| Node swarm (MCP bridge) | Direct subprocess spawning (`std::process::Command`) |
-| sql.js (SQLite WASM) | `rusqlite` (native SQLite via bundled C) |
-| Ed25519 signing | HMAC-SHA256 (RFC 2104, no extra dep) |
-| IPFS HTTP client | `curl` subprocess + native CIDv1 |
-| OAuth PKCE (browser) | RFC 7636 S256 (verified against test vector) |
+| Persistent metadata | `rusqlite` over the compatible `memory_entries` schema |
+| Native vector index | RuVector `.rvf` via pinned adapters |
+| BGE semantic path | Native tokenizer, query prefix, CLS pooling, and hybrid reranking policy |
+| Node integration | napi-rs addon for deterministic `ruflo-core` functions |
+| MCP | Four typed tools with JSON schemas and explicit unsupported errors |
 
-### Key Subsystems
+### N-API addon and release status
 
-- **SONA Neural Net** — Full MLP (input→hidden→output) with SGD+momentum, L2 regularization, cross-entropy loss, EWC++ (Elastic Weight Consolidation) with Fisher Information Matrix. Trains on router decision history. `src/crates/ruflo-cli/src/sona.rs`
-- **Thompson Bandit Router** — Per-agent Beta(α,β) posteriors sampled via Marsaglia-Tsang Gamma. Keyword matching as capability prior. `src/crates/ruflo-cli/src/route.rs`
-- **RuVector HNSW** — k-NN vector search via `.rvf` files. Backend-tagged to prevent hash↔ONNX vector mismatch. `src/crates/ruflo-storage/src/rvf_adapter.rs`
-- **Flywheel Ledger** — Hash-chained append-only JSONL with HMAC-SHA256 signatures + compare-and-swap promotion. ADR-322. `src/crates/ruflo-cli/src/flywheel_ledger.rs`
-- **Pheromone Swarm** — APSC (Adaptive Pheromone Swarm Coordinator) with EMA fitness, eligibility thresholds, suspension/reactivation. `src/crates/ruflo-cli/src/swarm_exec.rs`
+- `packages/ruflo-native` contains the JavaScript loader and TypeScript declarations for `@ruflo/native`.
+- The addon is built from `ruflo-napi` and has Node ABI and equality-gated benchmark coverage.
+- Five native release targets are configured: Linux x86_64/aarch64, macOS x86_64/aarch64, and Windows x86_64.
+- A tagged, five-target release and published per-platform npm packages have not yet supplied distribution proof. Private-repository releases upload archives, checksums, and SPDX SBOMs but cannot use GitHub artifact attestations.
+
+Read [platform support](docs/release/platform-support.md) before treating a target as release-verified.
 
 ## MCP Tools
 
-347 tools across 20+ domains:
+The native MCP server advertises only the four implemented, typed contracts:
 
-| Domain | Tools | Backend |
+| Tool | Backend |
 |--------|-------|---------|
-| memory | store/retrieve/search/stats | SQLite + RVF HNSW |
-| agent | spawn/list/status/terminate/execute | State + subprocess |
-| swarm | init/status/shutdown/coordinate | State + pheromone |
-| embeddings | generate/search/compare/ingest | ort ONNX + hash fallback |
-| security | scan/defend/PII/threat | Regex + AIDefence |
-| neural | train/predict/distill/optimize | SONA MLP + EWC++ |
-| route | task/feedback/stats | Thompson bandit |
-| graph | scc/boundaries/communities | petgraph |
-| crypto | sha256/hmac/base64/uuid | Native |
-| wasm | create/prompt/gallery/status | Subprocess isolation |
-| browser | open/screenshot/snapshot/eval | Chromium headless |
-| + 20 more domains | | |
+| `agent_spawn` | Native tracked-agent response |
+| `memory_store` | Persistent SQLite memory entry |
+| `memory_retrieve` | Persistent SQLite lookup |
+| `memory_search` | Keyword fallback search |
+
+Historical catalog names that do not have an equivalent native handler return a deterministic `tool.unsupported` error. They are not advertised as available.
 
 ## Testing
 
 ```bash
-# Run all tests (516 tests)
-cargo test --workspace
+# Run the workspace suite
+cargo test --workspace --locked
 
-# Clippy (0 warnings)
-cargo clippy --workspace
+# Enforce the capability claim gate
+bash scripts/verify-capability-manifest.sh
 
 # Release build
-cargo build --release
+cargo build --release --locked
 
 # Windows cross-compile
 cargo build --target x86_64-pc-windows-gnu -p ruflo --no-default-features
 ```
 
-Test coverage:
-- 265 unit tests in `src/`
-- 251 integration tests in `tests/`
-- 16 byte-parity fixtures (overview output matches TS reference)
-- 34 differential command tests (Node vs Rust)
-- 13 end-to-end smoke tests
-- Full benchmark report: [`docs/benchmarks/node-vs-rust-full.md`](docs/benchmarks/node-vs-rust-full.md)
+The capability gate prevents a `full-native-parity` claim while any registered capability is unproven. It is a truthfulness gate, not proof that every Node feature has been ported.
 
 ## Commands
 
-58 command families. Key commands:
+The CLI includes native command families and deterministic unsupported-command errors. Do not infer Node feature parity from a command name alone. Key native surfaces include:
 
 | Command | Description |
 |---------|-------------|
-| `init` | Set up project (hooks, agents, settings, MCP config) |
-| `swarm start` | Spawn N agent workers (claude/codex subprocess) |
-| `route task` | Thompson-sampling task→agent routing |
-| `neural train` | Train SONA MLP on router decisions |
-| `neural predict` | Classify input via trained SONA |
-| `neural distill` | Full distillation pipeline (label→tune→fit) |
-| `memory search` | Semantic k-NN via RuVector HNSW |
-| `memory rebuild-index` | Re-embed all entries with active backend |
-| `embeddings search` | RVF-backed semantic similarity |
-| `embeddings ingest` | Embed + store in RVF HNSW |
-| `analyze boundaries` | Refactor seams (MinCut + Louvain) |
-| `auth login` | OAuth PKCE flow (RFC 7636) |
-| `security scan` | Regex-based secret/vuln detection |
-| `transfer-store publish` | Native CIDv1 + IPFS gateway download |
-| `appliance build` | RVFA manifest with SHA-256 checksums |
-| `policy evaluate` | HMAC-signed policy receipts |
-| `workflow run` | Native step-by-step workflow execution |
+| `memory store/retrieve/search` | Durable memory operations; semantic search uses BGE/RVF only after an explicit compatible index rebuild |
+| `memory rebuild-index` | Re-embeds active entries into the native RVF index |
+| `mcp start` | Stdio MCP server for the typed tools listed above |
+| `embeddings ingest/search` | Native RVF-backed vector ingestion and search |
+| `auth` | Session-only token handling; no project-local credential persistence |
+| `providers test` | Bounded provider connectivity classifications |
+
+See the [parity checklist](docs/plans/parity-remediation-checklist.md) and [audit](docs/audits/audit-2026-08-09-3.md) for contract-level evidence and remaining gaps.
 
 ## Windows
 
-Cross-compiles to `x86_64-pc-windows-gnu`. Two build paths:
-- **Debug** (no ONNX): `cargo build --target x86_64-pc-windows-gnu --no-default-features`
-- **Release** (with ONNX): `cargo build --features onnx-dynamic` + ship `onnxruntime.dll`
+Windows GNU cross-compilation is checked without ONNX:
 
-CI workflows in `.github/workflows/` handle both paths automatically.
+```bash
+cargo build --target x86_64-pc-windows-gnu -p ruflo --no-default-features
+```
+
+The native release workflow builds a separate Windows MSVC archive and addon. See [platform support](docs/release/platform-support.md) for the five-target matrix and its evidence requirements.
 
 ## ADRs
 
-10 Architecture Decision Records in `docs/adr/`:
+11 Architecture Decision Records in `docs/adr/`:
 
 | ADR | Status | Title |
 |-----|--------|-------|
@@ -185,7 +152,8 @@ CI workflows in `.github/workflows/` handle both paths automatically.
 | 0007 | Superseded | Codex-only dual-run (superseded by 0008) |
 | 0008 | Implemented | Native Rust swarm execution (claude + codex) |
 | 0009 | Accepted | RVF HNSW sufficient — DiskANN not adopted |
-| 0010 | Implemented | Zero Node dependency — native rebuild complete |
+| 0010 | Implemented | Native-only CLI rebuild boundary |
+| 0011 | Implemented | Process-independent core through N-API |
 
 ## Project Structure
 
@@ -194,26 +162,29 @@ ruflo_rust/
 ├── src/
 │   ├── crates/
 │   │   ├── ruflo-cli/        # Commands, services, SONA, swarm, security
-│   │   ├── ruflo-mcp/        # MCP dispatcher, 347 tools, policy
+│   │   ├── ruflo-core/       # Process-independent core operations
+│   │   ├── ruflo-napi/       # napi-rs cdylib adapter
+│   │   ├── ruflo-mcp/        # Typed MCP dispatcher and policy
 │   │   ├── ruflo-storage/    # SQLite, RuVector RVF adapter
 │   │   ├── ruflo-runtime/    # Transport (stdio, HTTP)
 │   │   ├── ruflo-config/     # Config + policy engine
 │   │   ├── ruflo-types/      # Shared types + errors
 │   │   ├── ruflo-actions/    # GitHub Actions
 │   │   ├── ruflo-codex-cli/  # Codex bridge
-│   │   └── ruflo-memory/     # Memory types
+│   │   └── ruflo-memory/     # Hybrid retrieval policy
 │   └── bin/
 │       ├── ruflo/            # Main binary
 │       ├── claude-flow/      # claude-flow wrapper
 │       └── claude-flow-codex/# codex wrapper
-├── tests/                    # 251 integration tests
+├── packages/ruflo-native/    # JavaScript loader and addon declarations
+├── tests/                    # Contract, migration, RVF, and platform tests
 ├── docs/
-│   ├── adr/                  # 10 ADRs
+│   ├── adr/                  # 11 ADRs
 │   ├── audits/               # Audit reports
 │   ├── benchmarks/           # Node vs Rust reports
 │   └── plans/                # Implementation plans
 ├── scripts/                  # Fixture capture + verification
-├── .github/workflows/        # CI (Windows cross-compile)
+├── .github/workflows/        # CI and native-release matrix
 └── Cargo.toml                # Workspace root
 ```
 
