@@ -1,0 +1,13 @@
+# Cross-compile targets for the native Rust CLI.
+#
+# Windows GNU target — cross-compiles from Linux with mingw-w64 installed:
+#   sudo apt install mingw-w64
+#   rustup target add x86_64-pc-windows-gnu
+#   cargo build --target x86_64-pc-windows-gnu -p ruflo-cli
+#
+# Note: ruflo-storage bundles SQLite via libsqlite3-sys, which needs the
+# mingw C compiler at build time. Pure-Rust crates (ruflo-config, ruflo-types)
+# cross-check without it — verified via `cargo check --target x86_64-pc-windows-gnu`.
+
+[target.x86_64-pc-windows-gnu]
+linker = "x86_64-w64-mingw32-gcc"

@@ -1,0 +1,35 @@
+name: windows-cross
+
+# T11 — Windows cross-compile smoke.
+# Builds the pure-Rust crates for x86_64-pc-windows-gnu from Linux.
+# Full ruflo-cli build requires mingw-w64 (provides the C compiler that
+# libsqlite3-sys + ort need); this job installs it so the complete CLI links.
+#
+# The native Rust CLI has ZERO Node.js dependency — this workflow proves the
+# Windows binary can be produced entirely from the Rust toolchain.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  windows-gnu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+      - name: Install mingw-w64
+        run: sudo apt-get update && sudo apt-get install -y mingw-w64
+      - name: Cross-check pure-Rust crates (no C deps)
+        run: cargo check --target x86_64-pc-windows-gnu -p ruflo-config -p ruflo-types
+      - name: Cross-build full CLI
+        run: cargo build --target x86_64-pc-windows-gnu -p ruflo-cli
+      - name: Verify .exe produced
+        run: |
+          test -f target/x86_64-pc-windows-gnu/debug/ruflo.exe || \
+            ls target/x86_64-pc-windows-gnu/debug/*.exe
