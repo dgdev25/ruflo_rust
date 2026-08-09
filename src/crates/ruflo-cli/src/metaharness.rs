@@ -104,22 +104,16 @@ pub fn run(_root: &Path, command: MetaCommand) -> u8 {
     }
 }
 
-/// Walk up from cwd to find `plugins/ruflo-metaharness/scripts/` containing
-/// `_harness.mjs` and the required script.
+/// Find `plugins/ruflo-metaharness/scripts/` containing `_harness.mjs` and the
+/// required script. Pinned to cwd + the binary's install prefix only — NEVER
+/// walks ancestor directories (security: an untrusted checkout could plant
+/// attacker-controlled JS in an ancestor's plugins/ dir).
 fn locate_plugin_scripts(required_script: &str) -> Option<PathBuf> {
     let cwd = std::env::current_dir().ok()?;
-    let mut candidates = Vec::new();
-    // from cwd and each parent (up to 8 levels)
-    let mut p = cwd.clone();
-    for _ in 0..8 {
-        candidates.push(p.join("plugins/ruflo-metaharness/scripts"));
-        candidates.push(p.join("node_modules/@claude-flow/cli/plugins/ruflo-metaharness/scripts"));
-        if let Some(parent) = p.parent() {
-            p = parent.to_path_buf();
-        } else {
-            break;
-        }
-    }
+    let candidates = vec![
+        cwd.join("plugins/ruflo-metaharness/scripts"),
+        cwd.join("node_modules/@claude-flow/cli/plugins/ruflo-metaharness/scripts"),
+    ];
     for dir in &candidates {
         if dir.join("_harness.mjs").exists() && dir.join(required_script).exists() {
             return Some(dir.clone());
