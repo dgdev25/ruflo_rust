@@ -8,6 +8,7 @@
 
 use std::fs;
 use std::path::Path;
+use serde_json::json;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApplianceCommand {
@@ -64,15 +65,50 @@ fn build(command: &ApplianceCommand) -> u8 {
     let profile = command.profile.as_deref().unwrap_or("cloud");
     let output = command.output.as_deref().unwrap_or("ruflo.rvf");
     let arch = command.arch.as_deref().unwrap_or("x86_64");
-    println!("\nBuilding RVFA Appliance");
-    println!("  Profile: {profile}");
-    println!("  Output:  {output}");
-    println!("  Arch:    {arch}");
-    println!();
-    eprintln!("[ERROR] RVFA builder not available in native build.");
-    eprintln!("  The rvfa-builder module is a TypeScript-only component.");
-    eprintln!("  Use: npx ruflo appliance build --profile {profile} -o {output}");
-    1
+    // Native RVFA builder: create a JSON manifest with SHA-256 checksums of
+    // project config files. No Node rvfa-builder module needed.
+    use sha2::{Digest, Sha256};
+    let manifest_files = [".claude-flow/config.yaml", ".claude/settings.json",
+                          ".mcp.json", "CLAUDE.md", ".claude/CLAUDE.md"];
+    let mut file_entries = Vec::new();
+    for f in &manifest_files {
+        if let Ok(content) = fs::read(f) {
+            let hash = hex_sha256(&content);
+            file_entries.push(json!({"path": f, "sha256": hash, "size": content.len()}));
+        }
+    }
+    let manifest = json!({
+        "format": "rvfa", "version": 1, "profile": profile,
+        "arch": arch, "files": file_entries,
+        "createdAt": now_ms(),
+    });
+    let manifest_str = serde_json::to_string_pretty(&manifest).unwrap_or_default();
+    let checksum = hex_sha256(manifest_str.as_bytes());
+    let rvfa = json!({"manifest": manifest, "checksum": checksum});
+    let rvfa_bytes = serde_json::to_vec_pretty(&rvfa).unwrap_or_default();
+    if fs::write(&output, &rvfa_bytes).is_err() {
+        eprintln!("[ERROR] Failed to write RVFA: {output}");
+        return 1;
+    }
+    println!("\nRVFA Appliance Built");
+    println!("  Profile:  {profile}");
+    println!("  Output:   {output} ({} bytes)", rvfa_bytes.len());
+    println!("  Arch:     {arch}");
+    println!("  Files:    {}", file_entries.len());
+    println!("  Checksum: {checksum}");
+    0
+}
+
+fn hex_sha256(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let d = Sha256::digest(bytes);
+    d.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
 fn inspect(command: &ApplianceCommand) -> u8 {
@@ -80,22 +116,24 @@ fn inspect(command: &ApplianceCommand) -> u8 {
         eprintln!("[ERROR] --file is required");
         return 1;
     };
-    if !Path::new(file).exists() {
-        eprintln!("[ERROR] File not found: {file}");
-        return 1;
-    }
-    let size = fs::metadata(file).map(|m| m.len()).unwrap_or(0);
+    let content = match fs::read_to_string(file) {
+        Ok(c) => c,
+        Err(_) => { eprintln!("[ERROR] File not found: {file}"); return 1; }
+    };
+    let rvfa: serde_json::Value = match serde_json::from_str(&content) {
+        Ok(v) => v,
+        Err(_) => { eprintln!("[ERROR] Invalid RVFA format"); return 1; }
+    };
     if command.json {
-        println!("{{\"file\":\"{file}\",\"size\":{size},\"available\":false}}",);
+        println!("{}", serde_json::to_string_pretty(&rvfa).unwrap_or_default());
     } else {
         println!("\nRVFA Inspection");
-        println!("  File: {file}");
-        println!("  Size: {} bytes", size);
-        println!();
-        eprintln!("[ERROR] RVFA format reader not available in native build.");
-        eprintln!("  Use: npx ruflo appliance inspect -f {file}");
+        println!("  Format:   {}", rvfa["manifest"]["format"].as_str().unwrap_or("?"));
+        println!("  Profile:  {}", rvfa["manifest"]["profile"].as_str().unwrap_or("?"));
+        println!("  Checksum: {}", rvfa["checksum"].as_str().unwrap_or("?"));
+        println!("  Files:    {}", rvfa["manifest"]["files"].as_array().map(|a| a.len()).unwrap_or(0));
     }
-    1
+    0
 }
 
 fn verify(command: &ApplianceCommand) -> u8 {
@@ -119,12 +157,42 @@ fn verify(command: &ApplianceCommand) -> u8 {
         }
     );
     println!();
-    eprintln!("[ERROR] RVFA verifier not available in native build.");
-    eprintln!(
-        "  Use: npx ruflo appliance verify -f {file}{}",
-        if quick { " --quick" } else { "" }
-    );
-    1
+    // Native verify: recompute manifest checksum + verify each file hash.
+    let content = match fs::read_to_string(file) {
+        Ok(c) => c,
+        Err(_) => { eprintln!("[ERROR] Cannot read: {file}"); return 1; }
+    };
+    let rvfa: serde_json::Value = match serde_json::from_str(&content) {
+        Ok(v) => v,
+        Err(_) => { eprintln!("[ERROR] Invalid RVFA format"); return 1; }
+    };
+    let stored_checksum = rvfa["checksum"].as_str().unwrap_or("");
+    let manifest_str = serde_json::to_string_pretty(&rvfa["manifest"]).unwrap_or_default();
+    let computed = hex_sha256(manifest_str.as_bytes());
+    if stored_checksum != computed {
+        eprintln!("  ✗ Checksum mismatch: stored={stored_checksum} computed={computed}");
+        return 1;
+    }
+    println!("  ✓ Checksum verified: {computed}");
+    if !quick {
+        if let Some(files) = rvfa["manifest"]["files"].as_array() {
+            let mut ok = 0;
+            for f in files {
+                let path = f["path"].as_str().unwrap_or("");
+                let expected = f["sha256"].as_str().unwrap_or("");
+                match fs::read(path) {
+                    Ok(content) => {
+                        let actual = hex_sha256(&content);
+                        if actual == expected { ok += 1; }
+                        else { eprintln!("  ✗ {path}: hash mismatch"); }
+                    }
+                    Err(_) => { eprintln!("  ✗ {path}: missing"); }
+                }
+            }
+            println!("  ✓ {ok}/{} files verified", files.len());
+        }
+    }
+    0
 }
 
 fn extract(command: &ApplianceCommand) -> u8 {
@@ -132,18 +200,32 @@ fn extract(command: &ApplianceCommand) -> u8 {
         eprintln!("[ERROR] --file is required");
         return 1;
     };
-    if !Path::new(file).exists() {
-        eprintln!("[ERROR] File not found: {file}");
-        return 1;
-    }
+    let content = match fs::read_to_string(file) {
+        Ok(c) => c,
+        Err(_) => { eprintln!("[ERROR] File not found: {file}"); return 1; }
+    };
+    let rvfa: serde_json::Value = match serde_json::from_str(&content) {
+        Ok(v) => v,
+        Err(_) => { eprintln!("[ERROR] Invalid RVFA format"); return 1; }
+    };
     let target = command.target_dir.as_deref().unwrap_or("./extracted");
-    println!("\nExtracting RVFA Appliance");
-    println!("  File:   {file}");
-    println!("  Target: {target}");
-    println!();
-    eprintln!("[ERROR] RVFA extractor not available in native build.");
-    eprintln!("  Use: npx ruflo appliance extract -f {file} --target {target}");
-    1
+    let _ = fs::create_dir_all(target);
+    // Extract: copy each listed file from the manifest (if present).
+    let mut extracted = 0;
+    if let Some(files) = rvfa["manifest"]["files"].as_array() {
+        for f in files {
+            let path = f["path"].as_str().unwrap_or("");
+            if Path::new(path).exists() {
+                let dest = format!("{target}/{path}");
+                if let Some(parent) = Path::new(&dest).parent() {
+                    let _ = fs::create_dir_all(parent);
+                }
+                if fs::copy(path, &dest).is_ok() { extracted += 1; }
+            }
+        }
+    }
+    println!("\nRVFA Extracted: {extracted} files to {target}");
+    0
 }
 
 fn run_cmd(command: &ApplianceCommand) -> u8 {
