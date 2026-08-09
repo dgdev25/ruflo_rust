@@ -1,8 +1,9 @@
 # Platform Support
 
-Status as of 2026-08-07: historical five-platform evidence is retained in the
-release-promotion record. This repository intentionally has no GitHub Actions
-workflows; run the platform smoke scripts on the target hosts before promotion.
+Status as of 2026-08-09: Windows build and release workflows exist. Linux and
+macOS release artifacts are not yet automated, so the full five-platform matrix
+is not a completed release claim; run the platform smoke scripts on target
+hosts before promotion.
 
 ## Supported release matrix
 
