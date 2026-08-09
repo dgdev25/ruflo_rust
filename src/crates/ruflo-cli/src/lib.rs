@@ -22,6 +22,7 @@ mod embeddings;
 mod funnel;
 mod funnel_command;
 mod funnel_extra;
+mod flywheel_ledger;
 mod gaia_bench;
 mod graph_algo;
 mod guidance;
