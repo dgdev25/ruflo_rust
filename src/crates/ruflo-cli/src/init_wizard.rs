@@ -114,6 +114,15 @@ fn generate_settings() -> Value {
             ],
             "UserPromptSubmit": [
                 {"hooks": [{"type": "command", "command": "ruflo hooks route -t \"$CLAUDE_PROMPT\""}]}
+            ],
+            "SessionStart": [
+                {"hooks": [{"type": "command", "command": "ruflo memory search -q \"recent decisions\" -n patterns --limit 3"}]}
+            ],
+            "SessionEnd": [
+                {"hooks": [{"type": "command", "command": "ruflo session save"}]}
+            ],
+            "Stop": [
+                {"hooks": [{"type": "command", "command": "ruflo hooks post-task --task-id \"$CLAUDE_SESSION_ID\" --success true"}]}
             ]
         },
         "statusLine": {
@@ -256,5 +265,27 @@ mod tests {
         assert!(settings["hooks"]["PreToolUse"].is_array());
         assert!(settings["hooks"]["PostToolUse"].is_array());
         assert!(settings["statusLine"]["command"].is_string());
+    }
+
+    #[test]
+    fn settings_has_full_hook_lifecycle() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        run_full_init(dir.path());
+        let raw = fs::read_to_string(dir.path().join(".claude/settings.json")).unwrap();
+        let settings: Value = serde_json::from_str(&raw).unwrap();
+        // All Claude Code lifecycle hook events present.
+        for event in ["PreToolUse", "PostToolUse", "UserPromptSubmit",
+                      "SessionStart", "SessionEnd", "Stop"] {
+            assert!(settings["hooks"][event].is_array(), "missing hook event {event}");
+        }
+        // statusLine + MCP config present.
+        assert!(settings["statusLine"]["command"].is_string());
+        let mcp: Value = serde_json::from_str(
+            &fs::read_to_string(dir.path().join(".mcp.json")).unwrap()
+        ).unwrap();
+        assert!(mcp["mcpServers"]["ruflo"]["command"].is_string());
+        // CLAUDE.md exists.
+        assert!(dir.path().join(".claude/CLAUDE.md").is_file());
     }
 }
