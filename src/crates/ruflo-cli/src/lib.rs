@@ -27,6 +27,7 @@ mod issues;
 mod lifecycle;
 mod metaharness;
 mod neural;
+mod output;
 mod performance;
 mod plugins;
 mod policy;
