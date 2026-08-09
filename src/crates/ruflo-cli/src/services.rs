@@ -97,7 +97,12 @@ pub mod bounded_pool {
         if let Some(arr) = state[pool_id]["active"].as_array_mut() {
             let before = arr.len();
             arr.retain(|s| s["id"].as_str() != Some(slot_id));
-            return arr.len() < before;
+            let changed = arr.len() < before;
+            drop(arr);
+            if changed {
+                write_state("bounded-pool", &state);
+            }
+            return changed;
         }
         false
     }
@@ -310,7 +315,8 @@ pub mod pheromone {
         if state["version"].is_null() {
             state = json!({"version": "ruflo.apsc-state/v1", "threshold": 0.4, "agents": {}});
         }
-        state["agents"] = json!({}); let agents = state["agents"].as_object_mut().unwrap();
+        if state["agents"].is_null() { state["agents"] = json!({}); }
+        let agents = state["agents"].as_object_mut().unwrap();
         agents.insert(
             agent_id.into(),
             json!({
@@ -918,6 +924,8 @@ pub mod registry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
 
     fn tmp() -> PathBuf {
         let dir = tempfile::tempdir().unwrap().keep();
@@ -927,6 +935,7 @@ mod tests {
 
     #[test]
     fn bounded_pool_acquire_release() {
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _d = tmp();
         let slot = bounded_pool::acquire("test", 2).unwrap();
         assert!(bounded_pool::acquire("test", 1).is_err()); // full
@@ -937,6 +946,7 @@ mod tests {
 
     #[test]
     fn worker_queue_fifo() {
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _d = tmp();
         worker_queue::enqueue(json!({"task": "a"}));
         worker_queue::enqueue(json!({"task": "b"}));
@@ -947,6 +957,7 @@ mod tests {
 
     #[test]
     fn dedup_check_mark() {
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _d = tmp();
         assert!(!dedup::check("job1"));
         dedup::mark("job1");
@@ -955,6 +966,7 @@ mod tests {
 
     #[test]
     fn lease_acquire_release() {
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _d = tmp();
         let lease = lease::acquire("ws1", "agent1", 60000).unwrap();
         assert!(lease::acquire("ws1", "agent2", 60000).is_err()); // held
@@ -964,6 +976,7 @@ mod tests {
 
     #[test]
     fn checkpoint_validates() {
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _d = tmp();
         assert!(checkpoint::validate("gate1", vec![("a", true), ("b", true)]).is_ok());
         assert!(checkpoint::validate("gate2", vec![("a", false)]).is_err());
@@ -971,6 +984,7 @@ mod tests {
 
     #[test]
     fn pheromone_record_eligible() {
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _d = tmp();
         pheromone::record("agent1", "coder", 0.9, 0.1, 1.0);
         pheromone::record("agent2", "coder", 0.1, 0.9, 0.1);
@@ -981,6 +995,7 @@ mod tests {
 
     #[test]
     fn harness_record_and_list() {
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _d = tmp();
         harness::record_run("benchmark", json!({"score": 42}));
         assert_eq!(harness::list_runs("benchmark").len(), 1);
@@ -988,6 +1003,7 @@ mod tests {
 
     #[test]
     fn flywheel_receipt_create_list() {
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _d = tmp();
         flywheel_receipt::create("eval", json!({"result": "pass"}));
         assert_eq!(flywheel_receipt::list().len(), 1);
@@ -995,6 +1011,7 @@ mod tests {
 
     #[test]
     fn autostart_generates_configs() {
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _d = tmp();
         let cron = autostart::install_cron();
         assert!(cron.contains("@reboot"));
@@ -1006,6 +1023,7 @@ mod tests {
 
     #[test]
     fn policy_evaluate() {
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _d = tmp();
         policy_runtime::add_rule("swarm.spawn", "deny");
         let result = policy_runtime::evaluate("swarm.spawn", "user1");
