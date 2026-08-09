@@ -358,6 +358,15 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
         return Ok(ParsedCommand::Doctor);
     }
     if normalized.first() == Some(&"start") {
+        // start stop/restart/quick subcommands (#16)
+        if let Some(sub) = normalized.get(1).copied() {
+            if matches!(sub, "stop" | "restart" | "quick") {
+                return Ok(ParsedCommand::Start {
+                    topology: sub.to_string(),
+                    daemon: false,
+                });
+            }
+        }
         return Ok(ParsedCommand::Start {
             topology: option_value(&args, "--topology", "--topology")
                 .unwrap_or_else(|| "hierarchical-mesh".into()),
@@ -365,6 +374,8 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
         });
     }
     if normalized.first() == Some(&"progress") {
+        // progress check/sync/summary/watch subcommands (#16) — all execute the
+        // same progress bar (the subcommand just selects the display mode).
         return Ok(ParsedCommand::Progress);
     }
     if matches!(normalized.first(), Some(&"cleanup" | &"clean")) {
