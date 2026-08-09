@@ -18,7 +18,7 @@
 
 Ruflo is a Rust codebase for building native Ruflo-derived applications, adapters, and experiments. It contains a reference CLI, reusable core and persistence crates, a typed MCP boundary, and an optional napi-rs addon for selected deterministic core operations.
 
-It is **not** a drop-in replacement for the original [Node Ruflo](https://github.com/ruvnet/ruflo) application. The checked capability manifest claims **partial native parity**: unsupported CLI and MCP operations fail explicitly instead of returning success-shaped placeholder results.
+It is **not** a drop-in replacement for the original [Node Ruflo](https://github.com/ruvnet/ruflo) application. The checked capability manifest claims **partial native parity**: unsupported CLI subcommands fail with deterministic non-zero errors; MCP discovery lists only implemented typed tools, and unimplemented calls return `tool.unsupported`. Ruflo never presents an unimplemented operation as successful.
 
 Use this repository when you want to build a Rust-native variant around the contracts that are already implemented, or reuse its components inside another Rust application. Keep the Node implementation for workflows whose contract is not explicitly verified here.
 
