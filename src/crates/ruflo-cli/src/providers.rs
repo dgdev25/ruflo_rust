@@ -5,6 +5,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use serde_json::{json, Value};
 
@@ -228,6 +229,46 @@ fn configure(root: &Path, command: &ProvidersCommand) -> u8 {
     0
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum Connectivity { Connected, Authentication(u16), Unexpected(u16), Timeout, Failed }
+
+fn endpoint(provider: &str, base_url: Option<&str>) -> Option<(String, Vec<(&'static str, String)>)> {
+    let key = provider.to_ascii_lowercase();
+    let key_value = base_url.unwrap_or("");
+    let url = if !key_value.is_empty() { key_value.to_owned() } else { match key.as_str() {
+        "anthropic" => "https://api.anthropic.com/v1/models".into(),
+        "openai" => "https://api.openai.com/v1/models".into(),
+        "google" => "https://generativelanguage.googleapis.com/v1beta/models".into(),
+        "ollama" => "http://localhost:11434".into(), _ => return None,
+    }};
+    Some((url, Vec::new()))
+}
+
+fn connectivity(provider: &str, token: Option<&str>, base_url: Option<&str>) -> Connectivity {
+    let Some((url, mut headers)) = endpoint(provider, base_url) else { return Connectivity::Failed; };
+    if let Some(token) = token {
+        match provider.to_ascii_lowercase().as_str() {
+            "anthropic" => { headers.push(("x-api-key", token.into())); headers.push(("anthropic-version", "2023-06-01".into())); }
+            "google" => { let separator = if url.contains('?') { "&" } else { "?" }; return request(format!("{url}{separator}key={token}"), headers); }
+            _ => headers.push(("authorization", format!("Bearer {token}"))),
+        }
+    }
+    request(url, headers)
+}
+
+fn request(url: String, headers: Vec<(&'static str, String)>) -> Connectivity {
+    let agent = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(5))).build().new_agent();
+    let mut request = agent.get(&url);
+    for (name, value) in headers { request = request.header(name, &value); }
+    match request.call() {
+        Ok(response) if response.status().is_success() => Connectivity::Connected,
+        Ok(response) if matches!(response.status().as_u16(), 401 | 403) => Connectivity::Authentication(response.status().as_u16()),
+        Ok(response) => Connectivity::Unexpected(response.status().as_u16()),
+        Err(error) if error.to_string().to_ascii_lowercase().contains("timeout") => Connectivity::Timeout,
+        Err(_) => Connectivity::Failed,
+    }
+}
+
 fn test_providers(root: &Path, command: &ProvidersCommand) -> u8 {
     let config = load_config(root);
     let to_test: Vec<&Provider> = if let Some(ref name) = command.provider {
@@ -253,18 +294,19 @@ fn test_providers(root: &Path, command: &ProvidersCommand) -> u8 {
                     .get(p.config_name)
                     .and_then(|v| v.get("apiKey"))
                     .is_some());
-        // Actual connectivity test deferred (no HTTP client); check key presence.
+        let token = std::env::var(p.env_var).ok().or_else(|| config.get(p.config_name).and_then(|v| v.get("apiKey")).and_then(Value::as_str).map(str::to_owned));
+        let base_url = command.base_url.as_deref().or_else(|| config.get(p.config_name).and_then(|v| v.get("baseUrl")).and_then(Value::as_str));
         let no_key_msg = format!("No API key ({})", p.env_var);
-        let (icon, msg): (&str, &str) = if has_key {
-            pass_count += 1;
-            ("\u{2714}", "API key present")
-        } else if !p.env_var.is_empty() {
-            ("\u{2718}", &no_key_msg)
-        } else {
-            ("\u{2714}", "Local provider (no key needed)")
-        };
+        let message = if !p.env_var.is_empty() && !has_key { no_key_msg } else { match connectivity(p.config_name, token.as_deref(), base_url) {
+            Connectivity::Connected => { pass_count += 1; "Connected successfully".into() }
+            Connectivity::Authentication(status) => format!("Authentication failed (HTTP {status})"),
+            Connectivity::Unexpected(status) => format!("Unexpected response (HTTP {status})"),
+            Connectivity::Timeout => "Connection timed out (5s)".into(),
+            Connectivity::Failed => "Connection failed".into(),
+        }};
+        let icon = if message == "Connected successfully" { "\u{2714}" } else { "\u{2718}" };
         let _ = active;
-        println!("  {icon}  {}: {msg}", p.name);
+        println!("  {icon}  {}: {message}", p.name);
     }
     println!("\n  {pass_count}/{} provider(s) passed.", to_test.len());
     0

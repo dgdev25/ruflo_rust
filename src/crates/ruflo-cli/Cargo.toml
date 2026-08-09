@@ -41,6 +41,7 @@ ruflo-types = { path = "../ruflo-types" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 url = { workspace = true }
+ureq = { workspace = true }
 sha2 = { workspace = true }
 regex = { workspace = true }
 once_cell = { workspace = true }
