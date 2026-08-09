@@ -28,6 +28,7 @@ mod flywheel_ledger;
 mod gaia_bench;
 mod graph_algo;
 mod guidance;
+mod harness_exec;
 mod hooks;
 mod hive_mind;
 mod init_wizard;
