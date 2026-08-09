@@ -724,14 +724,36 @@ Subcommands:
             namespace,
             limit,
             path,
-        }) => match open_memory_store(path.as_deref())
-            .and_then(|store| store.search_keyword(namespace.as_deref(), &query, limit))
-        {
-            Ok(entries) => {
+        }) => match open_memory_store(path.as_deref()).and_then(|store| {
+            if crate::onnx_embeddings::bge_model_available()
+                && store.backend_tag().as_deref() == Some("bge-base-en-v1.5")
+            {
+                let vector = crate::onnx_embeddings::embed_bge_query(&query).ok_or_else(|| {
+                    ruflo_types::RufloError::invalid_input(
+                        "memory.bge",
+                        "BGE model assets became unavailable during query embedding",
+                    )
+                })?;
+                let vector = vector.into_iter().map(|value| value as f32).collect::<Vec<_>>();
+                let entries = store
+                    .search_semantic(&vector, limit.saturating_mul(4), crate::onnx_embeddings::BGE_DIM as u16, "bge-base-en-v1.5")?
+                    .into_iter()
+                    .map(|(entry, _score)| entry)
+                    .filter(|entry| namespace.as_deref().is_none_or(|expected| entry.namespace == expected))
+                    .take(limit)
+                    .collect::<Vec<_>>();
+                Ok((entries, "BGE semantic search"))
+            } else {
+                store
+                    .search_keyword(namespace.as_deref(), &query, limit)
+                    .map(|entries| (entries, "keyword search"))
+            }
+        }) {
+            Ok((entries, method)) => {
                 for entry in &entries {
                     println!("{}\t{}\t{}", entry.namespace, entry.key, entry.content);
                 }
-                println!("Found {} result(s) via keyword search", entries.len());
+                println!("Found {} result(s) via {method}", entries.len());
                 ExitCode::SUCCESS
             }
             Err(error) => ruflo_error(error),
@@ -794,8 +816,18 @@ Subcommands:
             match open_memory_store(path.as_deref()) {
                 Ok(store) => {
                     // Determine the active backend (ONNX if model present, else hash).
-                    let backend = if onnx_embeddings::model_available() { "onnx" } else { "hash" };
-                    let dim = onnx_embeddings::ONNX_DIM;
+                    let backend = if onnx_embeddings::bge_model_available() {
+                        "bge-base-en-v1.5"
+                    } else if onnx_embeddings::model_available() {
+                        "onnx"
+                    } else {
+                        "hash"
+                    };
+                    let dim = if backend == "bge-base-en-v1.5" {
+                        onnx_embeddings::BGE_DIM
+                    } else {
+                        onnx_embeddings::ONNX_DIM
+                    };
                     // Reset the old index (clears backend tag + stale RVF ids).
                     if let Err(e) = store.reset_semantic_index() {
                         return ruflo_error(e);
@@ -806,7 +838,17 @@ Subcommands:
                     };
                     let mut ingested = 0u64;
                     for (ns, key, content) in &entries {
-                        let (vec, _) = onnx_embeddings::embed(content, dim);
+                        let vec = if backend == "bge-base-en-v1.5" {
+                            match onnx_embeddings::embed_bge_document(content) {
+                                Some(vector) => vector,
+                                None => {
+                                    eprintln!("[WARN] rebuild skip {ns}/{key}: BGE document embedding failed");
+                                    continue;
+                                }
+                            }
+                        } else {
+                            onnx_embeddings::embed(content, dim).0
+                        };
                         let vf32: Vec<f32> = vec.iter().map(|x| *x as f32).collect();
                         match store.ingest_semantic(ns, key, &vf32, dim as u16, backend) {
                             Ok(_) => ingested += 1,
