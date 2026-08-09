@@ -2567,3 +2567,132 @@ pub mod learned_routing_v2 {
         ranked
     }
 }
+
+// ---- 5 more behavioral services ----
+
+/// fable-harness behavioral: LLM-as-judge via subprocess.
+pub mod fable_v2 {
+    use super::*;
+    /// Judge a trajectory by spawning claude/codex to evaluate it.
+    pub fn judge(trajectory: &str, criteria: &str) -> Value {
+        let prompt = format!("Judge this trajectory against: {criteria}\n\nTrajectory:\n{trajectory}\n\nRespond PASS or FAIL with one sentence reason.");
+        let result = crate::services::headless::execute("fable-judge", "claude", &prompt, 60_000, &[]);
+        let verdict = if result["status"].as_str() == Some("completed") {
+            let stdout = result["stdout"].as_str().unwrap_or("");
+            if stdout.to_lowercase().contains("pass") { "pass" }
+            else if stdout.to_lowercase().contains("fail") { "fail" }
+            else { "inconclusive" }
+        } else { "error" };
+        let entry = json!({"verdict": verdict, "criteria": criteria, "at": now_ms()});
+        let mut state = read_state("fable-harness");
+        ensure_arr(&mut state, "judgments").push(entry.clone());
+        write_state("fable-harness", &state);
+        entry
+    }
+}
+
+/// flywheel-proposer behavioral: propose improvements from historical data.
+pub mod flywheel_proposer_v2 {
+    use super::*;
+    pub fn propose(source: &str) -> Value {
+        // Analyze the source (recent task outcomes) for improvement candidates.
+        let decisions = std::fs::read_to_string(".claude-flow/router_decisions.jsonl").unwrap_or_default();
+        let task_count = decisions.lines().count();
+        let candidates = if task_count > 10 {
+            vec![
+                json!({"candidate": "route-optimization", "source": source, "rationale": "10+ decisions accumulated — retrain SONA"}),
+                json!({"candidate": "budget-tuning", "source": source, "rationale": "adjust concurrent/hourly caps from observed spend"}),
+            ]
+        } else if task_count > 0 {
+            vec![json!({"candidate": "baseline-collection", "source": source, "rationale": "collecting baseline data"})]
+        } else {
+            vec![]
+        };
+        let entry = json!({"proposals": candidates, "source": source, "decisionCount": task_count, "at": now_ms()});
+        let mut state = read_state("flywheel-proposals");
+        ensure_arr(&mut state, "proposals").push(entry.clone());
+        write_state("flywheel-proposals", &state);
+        entry
+    }
+}
+
+/// ruvector-training behavioral: delegate to native SONA/distillation.
+pub mod ruvector_training_v2 {
+    use super::*;
+    pub fn run_training(epochs: usize) -> Value {
+        // Delegate to the native distillation pipeline (SONA MLP + EWC++).
+        let result = crate::distillation::run(384, 64, epochs);
+        let entry = json!({
+            "pipeline": "native-sona-ewc++", "epochs": epochs,
+            "result": result, "at": now_ms(),
+        });
+        let mut state = read_state("ruvector-training");
+        ensure_arr(&mut state, "sessions").push(entry.clone());
+        write_state("ruvector-training", &state);
+        entry
+    }
+}
+
+/// pheromone enforcement behavioral: suspend agents below threshold.
+pub mod pheromone_v2 {
+    use super::*;
+    /// Check if an agent is eligible for dispatch (above the APSC threshold).
+    /// Returns false if the agent's EMA fitness is below threshold → suspend.
+    pub fn is_eligible(agent_id: &str) -> bool {
+        let state = read_state("pheromone-adaptive");
+        let threshold = state["threshold"].as_f64().unwrap_or(0.3);
+        let fitness = state["agents"][agent_id]["emaFitness"].as_f64();
+        match fitness {
+            Some(f) => f >= threshold,
+            None => true, // unknown agent → eligible (no history to penalize)
+        }
+    }
+    /// Suspend an agent manually.
+    pub fn suspend(agent_id: &str, reason: &str) -> Value {
+        let mut state = read_state("pheromone-adaptive");
+        if state["agents"][agent_id].is_null() {
+            state["agents"][agent_id] = json!({});
+        }
+        state["agents"][agent_id]["suspended"] = json!(true);
+        state["agents"][agent_id]["suspendReason"] = json!(reason);
+        state["agents"][agent_id]["suspendedAt"] = json!(now_ms());
+        write_state("pheromone-adaptive", &state);
+        json!({"agent": agent_id, "suspended": true, "reason": reason})
+    }
+    /// Reactivate a suspended agent.
+    pub fn reactivate(agent_id: &str) -> Value {
+        let mut state = read_state("pheromone-adaptive");
+        if !state["agents"][agent_id].is_null() {
+            state["agents"][agent_id]["suspended"] = json!(false);
+            state["agents"][agent_id]["reactivatedAt"] = json!(now_ms());
+        }
+        write_state("pheromone-adaptive", &state);
+        json!({"agent": agent_id, "reactivated": true})
+    }
+}
+
+/// worker_daemon behavioral: spawn daemon workers on interval.
+pub mod worker_daemon_v2 {
+    use super::*;
+    /// Tick: process one item from the worker queue via headless executor.
+    pub fn tick(worker_type: &str) -> Value {
+        let task = crate::services::worker_queue::dequeue();
+        match task {
+            Some(t) => {
+                let task_desc = t["task"].to_string();
+                let result = crate::services::headless::execute(
+                    worker_type, "claude", &task_desc, 120_000, &[]
+                );
+                let entry = json!({
+                    "workerType": worker_type, "task": t,
+                    "result": result["status"], "at": now_ms(),
+                });
+                let mut state = read_state("worker-daemon");
+                ensure_arr(&mut state, "processed").push(entry.clone());
+                write_state("worker-daemon", &state);
+                entry
+            }
+            None => json!({"status": "idle", "workerType": worker_type, "at": now_ms()}),
+        }
+    }
+}
