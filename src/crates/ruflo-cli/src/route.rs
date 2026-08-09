@@ -156,10 +156,13 @@ fn route_task(root: &Path, command: &RouteCommand) -> u8 {
             }
         }
     }
-    // Seeded deterministic tiebreak when --seed provided
+    // Seeded deterministic tiebreak — only breaks ties when multiple agents
+    // share the best score (best_score == 0 means no keyword match at all).
     if let Some(seed) = command.seed {
-        let agents: Vec<&str> = AGENTS.iter().map(|(id, _, _)| *id).collect();
-        best_agent = agents[(seed as usize) % agents.len()];
+        if best_score == 0 {
+            let agents: Vec<&str> = AGENTS.iter().map(|(id, _, _)| *id).collect();
+            best_agent = agents[(seed as usize) % agents.len()];
+        }
     }
     if command.json {
         println!(

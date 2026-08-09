@@ -179,13 +179,15 @@ impl Dispatcher {
             .filter(|tool| context.allows_capability(&tool.definition.capability.name))
             .map(|tool| tool.definition.json_schema())
             .collect::<Vec<_>>();
-        // Append the extended tool set definitions.
+        // Append the extended tool set definitions — respecting deny policy.
         for (name, desc) in crate::tools_extra::definitions() {
-            tools.push(json!({
-                "name": name,
-                "description": desc,
-                "inputSchema": {"type": "object", "properties": {}},
-            }));
+            if self.policy.is_discoverable(&context.caller, name) {
+                tools.push(json!({
+                    "name": name,
+                    "description": desc,
+                    "inputSchema": {"type": "object", "properties": {}},
+                }));
+            }
         }
         json!({ "tools": tools })
     }
@@ -203,7 +205,7 @@ impl Dispatcher {
                 .iter()
                 .any(|(name, _)| *name == call.name);
         if is_extra {
-            // Authorize then dispatch to tools_extra.
+            // Authorize + capability-check then dispatch to tools_extra.
             self.policy.authorize_request(
                 &context.caller,
                 &call.name,
@@ -213,6 +215,11 @@ impl Dispatcher {
                     duration_ms: context.duration_ms,
                 },
             )?;
+            // Apply the same per-request capability gate the core path uses.
+            // The capability name matches the tool name (registered above).
+            if !context.allows_capability(&call.name) {
+                return Err(RufloError::unauthorized(&call.name));
+            }
             return crate::tools_extra::handle(&call.name, &call.arguments);
         }
 

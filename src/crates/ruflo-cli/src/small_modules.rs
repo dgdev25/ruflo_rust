@@ -84,16 +84,31 @@ pub mod vault {
         }
     }
 
-    fn vault_key() -> Vec<u8> {
+    fn vault_key() -> Result<Vec<u8>, String> {
         std::env::var("RUFLO_VAULT_KEY")
-            .unwrap_or_else(|_| "ruflo-default-vault-key-v3".into())
-            .into_bytes()
+            .map(|k| k.into_bytes())
+            .map_err(|_| "RUFLO_VAULT_KEY not set — refusing to store credentials with a publicly-known default key".to_string())
     }
 
-    pub fn store(key: &str, value: &str) -> Value {
-        let vk = vault_key();
-        // Nonce derived from current time (now_ms) — unique per store call.
-        let nonce = now_ms().to_be_bytes();
+    /// Unique nonce: timestamp + PID + atomic counter. Avoids keystream reuse
+    /// even when two calls land in the same millisecond (same-process or
+    /// cross-process with PID difference).
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NONCE_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    fn unique_nonce() -> [u8; 16] {
+        let ts = now_ms();
+        let pid = std::process::id() as u64;
+        let ctr = NONCE_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let mut n = [0u8; 16];
+        n[..8].copy_from_slice(&(ts ^ ctr.rotate_left(32)).to_be_bytes());
+        n[8..].copy_from_slice(&pid.to_be_bytes());
+        n
+    }
+
+    pub fn store(key: &str, value: &str) -> Result<Value, String> {
+        let vk = vault_key()?;
+        let nonce = unique_nonce();
         // Keystream XOR (confidentiality).
         let mut ct = value.as_bytes().to_vec();
         let ks = keystream(&vk, &nonce, ct.len());
@@ -106,24 +121,24 @@ pub mod vault {
         let mac = hmac_sha256(&vk, &mac_input);
         let mac_b64 = base64_encode(&mac);
         let nonce_b64 = base64_encode(&nonce);
-        json!({
+        Ok(json!({
             "key": key,
             "value": b64,
             "nonce": nonce_b64,
             "mac": mac_b64,
             "encrypted": true,
             "storedAt": now_ms()
-        })
+        }))
     }
 
     pub fn retrieve(entry: &Value) -> Option<String> {
+        let vk = vault_key().ok()?;
         let b64 = entry["value"].as_str()?;
         let nonce_b64 = entry["nonce"].as_str()?;
         let mac_b64 = entry["mac"].as_str()?;
         let ct = base64_decode(b64)?;
         let nonce = base64_decode(nonce_b64)?;
         let stored_mac = base64_decode(mac_b64)?;
-        let vk = vault_key();
         // Recompute MAC and constant-time compare — fail if mismatched.
         let mut mac_input = Vec::with_capacity(nonce.len() + ct.len());
         mac_input.extend_from_slice(&nonce);
@@ -328,18 +343,19 @@ mod tests {
     #[test]
     fn vault_store_retrieve() {
         let _g = VAULT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        std::env::remove_var("RUFLO_VAULT_KEY");
-        let entry = vault::store("api_key", "sk-secret-123");
+        std::env::set_var("RUFLO_VAULT_KEY", "test-vault-key");
+        let entry = vault::store("api_key", "sk-secret-123").unwrap();
         assert_eq!(entry["encrypted"], true);
         let recovered = vault::retrieve(&entry).unwrap();
         assert_eq!(recovered, "sk-secret-123");
+        std::env::remove_var("RUFLO_VAULT_KEY");
     }
 
     #[test]
     fn vault_wrong_key_fails() {
         let _g = VAULT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         std::env::set_var("RUFLO_VAULT_KEY", "key-a");
-        let entry = vault::store("k", "secret");
+        let entry = vault::store("k", "secret").unwrap();
         std::env::set_var("RUFLO_VAULT_KEY", "key-b");
         // With the authenticated seal, MAC verification fails under the wrong
         // key and retrieve returns None rather than garbled plaintext.
@@ -350,8 +366,8 @@ mod tests {
     #[test]
     fn vault_tamper_detected() {
         let _g = VAULT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        std::env::remove_var("RUFLO_VAULT_KEY");
-        let mut entry = vault::store("k", "topsecret");
+        std::env::set_var("RUFLO_VAULT_KEY", "test-vault-key");
+        let mut entry = vault::store("k", "topsecret").unwrap();
         // Flip a bit in the stored ciphertext — retrieve must fail the MAC.
         let mut b64 = entry["value"].as_str().unwrap().to_string();
         // Toggle trailing '=' handling: replace first non-pad char with another.
@@ -361,6 +377,7 @@ mod tests {
         }
         entry["value"] = json!(b64);
         assert!(vault::retrieve(&entry).is_none());
+        std::env::remove_var("RUFLO_VAULT_KEY");
     }
 
     #[test]

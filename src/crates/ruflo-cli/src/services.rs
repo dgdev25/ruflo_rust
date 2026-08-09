@@ -31,6 +31,16 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+/// Process-local atomic counter for unique IDs — prevents collisions when two
+/// calls land in the same millisecond.
+use std::sync::atomic::{AtomicU64, Ordering};
+static ID_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+fn unique_id(prefix: &str) -> String {
+    let ctr = ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("{prefix}-{}-{ctr}", now_ms())
+}
+
 fn root() -> PathBuf {
     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
@@ -204,7 +214,7 @@ pub mod bounded_pool {
         if active.len() >= max_concurrent {
             return Err(format!("pool `{pool_id}` at capacity ({max_concurrent})"));
         }
-        let slot = json!({"id": format!("slot-{}", now_ms()), "acquiredAt": now_ms()});
+        let slot = json!({"id": unique_id("slot"), "acquiredAt": now_ms()});
         let mut arr = active;
         arr.push(slot.clone());
         state[key] = json!({"active": arr, "max": max_concurrent});
@@ -254,7 +264,7 @@ pub mod worker_queue {
         let mut state = read_state("worker-queue");
         let queue = ensure_arr(&mut state, "queue");
         let entry = json!({
-            "id": format!("wq-{}", now_ms()),
+            "id": unique_id("wq"),
             "task": task,
             "status": "queued",
             "enqueuedAt": now_ms(),
@@ -363,7 +373,7 @@ pub mod container_pool {
 
     pub fn create(image: &str, cmd: &str) -> Value {
         let entry = json!({
-            "id": format!("container-{}", now_ms()),
+            "id": unique_id("container"),
             "image": image,
             "command": cmd,
             "status": "created",
@@ -658,7 +668,7 @@ pub mod distillation {
         let mut state = read_state("memory-distillation");
         let episodes = ensure_arr(&mut state, "episodes");
         let episode = json!({
-            "id": format!("ep-{}", now_ms()),
+            "id": unique_id("ep"),
             "source": source,
             "summary": summary,
             "patterns": patterns,
@@ -826,7 +836,7 @@ pub mod harness {
         let file = format!("harness-{harness_type}");
         let mut state = read_state(&file);
         let run = json!({
-            "id": format!("run-{}", now_ms()),
+            "id": unique_id("run"),
             "data": data,
             "recordedAt": now_ms(),
         });
@@ -912,7 +922,7 @@ pub mod flywheel_receipt {
     pub fn create(event: &str, payload: Value) -> Value {
         let mut state = read_state("flywheel-receipts");
         let receipt = json!({
-            "id": format!("rcpt-{}", now_ms()),
+            "id": unique_id("rcpt"),
             "event": event,
             "payload": payload,
             "createdAt": now_ms(),
@@ -932,7 +942,7 @@ pub mod flywheel_tx {
     use super::*;
     pub fn commit(action: &str, data: Value) -> Value {
         let mut state = read_state("flywheel-transactions");
-        let tx = json!({"id": format!("tx-{}", now_ms()), "action": action, "data": data, "committedAt": now_ms()});
+        let tx = json!({"id": unique_id("tx"), "action": action, "data": data, "committedAt": now_ms()});
         ensure_arr(&mut state, "transactions").push(tx.clone());
         write_state("flywheel-transactions", &state);
         tx

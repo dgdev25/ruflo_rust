@@ -22,7 +22,7 @@ impl SlimTransportAdapter for NoSlimTransportAdapter {
         Ok(false)
     }
     fn activate(&self, _endpoint: &str) -> Result<(), String> {
-        unreachable!("unavailable adapter cannot activate")
+        Err("unavailable adapter cannot activate".into())
     }
 }
 

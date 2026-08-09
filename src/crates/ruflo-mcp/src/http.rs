@@ -83,7 +83,20 @@ impl IdentityValidator {
             token.split_once('.').ok_or(RufloError::Unauthenticated)?;
         let expected_signature =
             sign_segment(payload_segment.as_bytes(), &self.config.hmac_secret)?;
-        if signature_segment != expected_signature {
+        // Constant-time comparison to avoid leaking signature information via
+        // early-exit timing differences. XOR all bytes (and length mismatch)
+        // into an accumulator and check the accumulator is zero.
+        let sig_bytes = signature_segment.as_bytes();
+        let exp_bytes = expected_signature.as_bytes();
+        let mut diff: u8 = 0;
+        diff |= (sig_bytes.len() ^ exp_bytes.len()) as u8;
+        let max = sig_bytes.len().max(exp_bytes.len());
+        for i in 0..max {
+            let s = sig_bytes.get(i).copied().unwrap_or(0);
+            let e = exp_bytes.get(i).copied().unwrap_or(0);
+            diff |= s ^ e;
+        }
+        if diff != 0 {
             return Err(RufloError::Unauthenticated);
         }
 
@@ -302,6 +315,7 @@ async fn handle_mcp_inner(
 
     let started = Instant::now();
     let active_executions = state.active_requests.fetch_add(1, Ordering::SeqCst);
+    let _active_guard = ActiveGuard::new(state.active_requests.clone());
     let context = RequestContext::remote(identity.clone(), bytes.len(), active_executions, 0);
 
     let response = match method.as_str() {
@@ -447,8 +461,28 @@ async fn handle_mcp_inner(
         )),
     };
 
-    state.active_requests.fetch_sub(1, Ordering::SeqCst);
+    // _active_guard drops here, decrementing active_requests on every path
+    // (including early `?` returns inside the match arms above).
     response
+}
+
+/// RAII guard that decrements `active_requests` on drop. Ensures the counter
+/// is always released on every return path (happy path, `?` early returns,
+/// and panics) so the active-request count never leaks.
+struct ActiveGuard {
+    counter: Arc<AtomicUsize>,
+}
+
+impl ActiveGuard {
+    fn new(counter: Arc<AtomicUsize>) -> Self {
+        Self { counter }
+    }
+}
+
+impl Drop for ActiveGuard {
+    fn drop(&mut self) {
+        self.counter.fetch_sub(1, Ordering::SeqCst);
+    }
 }
 
 fn check_rate_limit(state: &HttpState, subject: &str) -> Result<(), RufloError> {
