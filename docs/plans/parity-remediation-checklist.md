@@ -13,6 +13,6 @@ parses.
 - [ ] Bounded provider connectivity verification and classifications
 - [ ] Populated Node persistence migration/interoperability fixtures
 - [x] Shared process-independent Rust core API
-- [x] Real napi-rs Ruflo addon and Node ABI tests
+- [x] Real napi-rs Ruflo addon, Node ABI tests, and equality-gated persistent benchmark
 - [ ] Platform release matrix for CLI and addon packages
 - [ ] Reconciled release docs, audit evidence, and ADR implementation notes

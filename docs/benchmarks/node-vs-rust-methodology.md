@@ -33,16 +33,12 @@ contract test first.
 
 ## NAPI acceptance criteria
 
-No Ruflo NAPI addon currently exists in this checkout. A dependency on
-`@napi-rs/keyring` is not evidence that Ruflo's CLI, embeddings, memory, or
-security paths run through NAPI.
-
-Before publishing a native-compute comparison, add a distributable `napi-rs`
-package that calls a shared public Rust core API, then benchmark the exact same
-input and result validation in both modes. Record addon version, platform,
-Node version, Rust compiler, CPU governor, warmup count, and raw samples. The
-NAPI suite must run in one persistent Node process; otherwise it is simply the
-end-to-end CLI suite again.
+The bounded native-core comparison is available through
+`BENCH_OUTPUT=/tmp/napi.json scripts/bench-napi-core.sh`. It builds the real
+addon, warms persistent Node and direct Rust processes separately, checks
+provider/dimensions/vector-fingerprint equality before timing, and writes raw
+nanosecond samples. It measures deterministic core operations only; it does
+not claim semantic-model, memory, or cold-CLI parity.
 
 ## Prohibited comparisons
 
