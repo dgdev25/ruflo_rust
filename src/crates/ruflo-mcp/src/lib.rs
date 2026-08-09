@@ -1,3 +1,7 @@
+#![allow(dead_code, unused_imports, unused_variables, unused_mut)]
+#![allow(clippy::derivable_impls, clippy::useless_format)]
+#![allow(unused_must_use)]
+
 mod dispatcher;
 mod tools_extra;
 pub mod tools_catalog;
