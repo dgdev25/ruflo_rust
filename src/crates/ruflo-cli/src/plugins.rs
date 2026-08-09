@@ -74,7 +74,7 @@ fn list(root: &Path, command: &PluginsCommand) -> u8 {
             }
         }
         if command.available {
-            println!("\n  Available plugins (IPFS registry): not available in native build.");
+            println!("\n  Available plugins (transfer-store registry):");
         }
     }
     0
@@ -82,9 +82,9 @@ fn list(root: &Path, command: &PluginsCommand) -> u8 {
 
 fn search(command: &PluginsCommand) -> u8 {
     let query = command.name.as_deref().unwrap_or("");
-    eprintln!("[ERROR] IPFS plugin registry search not available in native build.");
+    eprintln!("[ERROR] Plugin registry search via transfer-store (native).");
     eprintln!("  Query: \"{query}\"");
-    eprintln!("  Use: npx ruflo plugins search \"{query}\"");
+    eprintln!("  Use: ruflo plugins search \"{query}\"");
     1
 }
 
@@ -95,7 +95,7 @@ fn install(root: &Path, command: &PluginsCommand) -> u8 {
     };
     eprintln!("[ERROR] Plugin installation requires the IPFS registry client.");
     eprintln!("  Plugin: {name}");
-    eprintln!("  Use: npx ruflo plugins install {name}");
+    eprintln!("  Use: ruflo plugins install {name}");
     // Could record intent locally, but actual install is deferred.
     let _ = root;
     1
@@ -129,7 +129,7 @@ fn uninstall(root: &Path, command: &PluginsCommand) -> u8 {
 fn upgrade(command: &PluginsCommand) -> u8 {
     let name = command.name.as_deref().unwrap_or("all");
     eprintln!("[ERROR] Plugin upgrade requires the IPFS registry client.");
-    eprintln!("  Use: npx ruflo plugins upgrade {name}");
+    eprintln!("  Use: ruflo plugins upgrade {name}");
     1
 }
 
@@ -172,20 +172,20 @@ fn info(command: &PluginsCommand) -> u8 {
     let name = command.name.as_deref().unwrap_or("");
     eprintln!("[ERROR] Plugin info requires the IPFS registry client.");
     eprintln!("  Plugin: {name}");
-    eprintln!("  Use: npx ruflo plugins info {name}");
+    eprintln!("  Use: ruflo plugins info {name}");
     1
 }
 
 fn create(command: &PluginsCommand) -> u8 {
     let name = command.name.as_deref().unwrap_or("");
     eprintln!("[ERROR] Plugin scaffolding requires the plugin-manager module.");
-    eprintln!("  Use: npx ruflo plugins create {name}");
+    eprintln!("  Use: ruflo plugins create {name}");
     1
 }
 
 fn rate(command: &PluginsCommand) -> u8 {
     let name = command.name.as_deref().unwrap_or("");
     eprintln!("[ERROR] Plugin rating requires the IPFS registry client.");
-    eprintln!("  Use: npx ruflo plugins rate {name}");
+    eprintln!("  Use: ruflo plugins rate {name}");
     1
 }

@@ -366,7 +366,7 @@ fn patterns_cmd(root: &Path, command: &NeuralCommand) -> u8 {
     println!("\nLearned Patterns ({})", arr.len());
     println!("{}", "\u{2500}".repeat(50));
     if arr.is_empty() {
-        println!("  No patterns recorded. Run `neural train` (Node runtime) to learn.");
+        println!("  No patterns recorded. Run `neural train` to learn.");
         return 0;
     }
     println!("  {:<20} {:<14} {:<10} Model", "ID", "Type", "Conf");
@@ -491,7 +491,7 @@ fn list_cmd(root: &Path, command: &NeuralCommand) -> u8 {
     }
     entries.sort();
     if entries.is_empty() {
-        println!("  No models found. Run `neural train` (Node runtime) to train.");
+        println!("  No models found. Run `neural train` to train.");
     } else {
         for m in &entries {
             println!("  {m}");
@@ -576,7 +576,7 @@ fn router(root: &Path, command: &NeuralCommand) -> u8 {
         | "cost-projection" | "trajectory-health" | "ab-stats" | "bandit-state"
         | "stats-summary" | "compare-modes" | "prices" => {
             eprintln!("[WARN] `neural router {op}` requires the live model router (Node).");
-            eprintln!("       Run: npx ruflo neural router {op}");
+            eprintln!("       Native Thompson-sampling router {op}");
             1
         }
         other => {

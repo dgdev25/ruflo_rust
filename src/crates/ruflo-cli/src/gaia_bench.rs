@@ -50,10 +50,10 @@ pub fn run(_root: &Path, command: GaiaBenchCommand) -> u8 {
                 println!("  Models:      {models}");
             }
             println!();
-            eprintln!("[ERROR] GAIA benchmark not available in native build.");
+            eprintln!("[ERROR] GAIA benchmark requires external GAIA dataset + LLM provider (not Node-specific).");
             eprintln!("  Requires dataset access + LLM provider adapters.");
             eprintln!(
-                "  Use: npx ruflo gaia-bench run --level {level}{}",
+                "  Use: ruflo gaia-bench run --level {level}{}",
                 if smoke { " --smoke-only" } else { "" }
             );
             1

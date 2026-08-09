@@ -492,10 +492,10 @@ fn collections(command: &EmbeddingsCommand) -> u8 {
     println!("{}", "\u{2500}".repeat(50));
     if !Path::new(&db_path).exists() {
         println!("  No memory store at {db_path}.");
-        println!("  Native build cannot enumerate sql.js namespaces — use a Node runtime.");
+        println!("  Native build reads from RVF store (not sql.js).");
         return 0;
     }
-    eprintln!("[WARN] Native collections cannot read the sql.js store. Use `npx ruflo embeddings collections`.");
+    eprintln!("[WARN] Native collections cannot read the sql.js store. Use `ruflo embeddings collections`.");
     0
 }
 
@@ -508,11 +508,11 @@ fn index_cmd(command: &EmbeddingsCommand) -> u8 {
     match action.as_str() {
         "status" => {
             println!("  Index: not built (native build has no HNSW runtime)");
-            println!("  Build with: npx ruflo embeddings index build");
+            println!("  Use `ruflo memory rebuild-index` to build HNSW");
         }
         "build" | "rebuild" | "optimize" => {
             eprintln!("[WARN] HNSW index build requires the ONNX + hnswlib runtime (Node).");
-            eprintln!("       Run: npx ruflo embeddings index {action}");
+            eprintln!("       Use `ruflo memory rebuild-index` for HNSW");
         }
         other => {
             eprintln!("[ERROR] Unknown index action: {other} (build|rebuild|status|optimize)");
@@ -750,7 +750,7 @@ fn neural(command: &EmbeddingsCommand) -> u8 {
     println!("\nNeural Embedding Operations ({action})");
     println!("{}", "\u{2500}".repeat(50));
     eprintln!("[WARN] Neural embedding ops (MoE attention, drift detection) require the ONNX");
-    eprintln!("       runtime. Native build reports status only. Use `npx ruflo embeddings neural {action}`.");
+    eprintln!("       SONA learning is native — use `ruflo neural train`.");
     0
 }
 

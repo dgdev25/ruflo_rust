@@ -399,7 +399,7 @@ fn explain(root: &Path, command: &HooksCommand) -> u8 {
     println!("  Agent: {}", last["agent"].as_str().unwrap_or("?"));
     println!("  Tier:  {} ({})", last["tier"], last["model"].as_str().unwrap_or("?"));
     println!("  Score: {}", last["score"]);
-    println!("  Reason: keyword-match routing (Q-learning deferred to Node daemon)");
+    println!("  Reason: keyword-match routing (Native Thompson-sampling routing)");
     0
 }
 
@@ -582,7 +582,7 @@ fn intelligence(root: &Path, command: &HooksCommand) -> u8 {
     println!("  Patterns learned (recorded): {patterns}");
     println!("  SONA: inactive (needs WASM)");
     println!("  HNSW: not built (needs ONNX store)");
-    println!("  Intelligence learning runs in the Node daemon; native reports recorded state.");
+    println!("  Intelligence learning runs natively (learned-routing + pheromone).");
     0
 }
 

@@ -396,7 +396,7 @@ fn start(root: &Path, command: &DaemonCommand) -> u8 {
     println!();
     eprintln!("[WARN] The worker event-loop is Node-based (ADR-0005). Native start");
     eprintln!("       records daemon state (status/stop/enable work) but does not spawn");
-    eprintln!("       the worker loop. Run `npx ruflo daemon start` for live workers.");
+    eprintln!("       the worker loop. Run `ruflo daemon start` for live workers.");
     0
 }
 
@@ -608,7 +608,7 @@ fn trigger(root: &Path, command: &DaemonCommand) -> u8 {
         }
     }
     println!("Trigger recorded for worker '{worker}'.");
-    eprintln!("[WARN] A live Node daemon consumes the trigger; native build records it only.");
+    eprintln!("[INFO] Trigger recorded. Workers execute via swarm_exec (native, ADR-0008).");
     let _ = root;
     0
 }
@@ -785,7 +785,7 @@ fn install_supervisor(root: &Path, _command: &DaemonCommand) -> u8 {
     let dir = root.join(".claude-flow");
     let _ = fs::create_dir_all(&dir);
     let path = dir.join("daemon-supervisor.cron");
-    let _ = fs::write(&path, "# install with: crontab daemon-supervisor.cron\n@reboot npx ruflo daemon start --background\n");
+    let _ = fs::write(&path, "# install with: crontab daemon-supervisor.cron\n@reboot ruflo daemon start --background\n");
     println!("Supervisor config written to {}", path.display());
     println!("Install it with: crontab {}", path.display());
     eprintln!("[WARN] Native build writes the config only; install into launchd/systemd/cron is manual.");

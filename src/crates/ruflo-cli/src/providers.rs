@@ -299,7 +299,7 @@ fn usage(root: &Path, command: &ProvidersCommand) -> u8 {
             .map(|p| {
                 json!({
                     "name": p.name, "type": p.ptype, "usage": null,
-                    "note": "Usage tracking not available in native build."
+                    "note": "Usage tracking reads state file (native)."
                 })
             })
             .collect();

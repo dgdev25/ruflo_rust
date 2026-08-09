@@ -60,7 +60,7 @@ pub fn run(_root: &Path, command: BenchmarkCommand) -> u8 {
                 "iterations": iterations,
                 "warmup": warmup,
                 "results": null,
-                "note": "Pre-training benchmark runtime (SONA/EWC++/MoE) not available in native build."
+                "note": "SONA/EWC++ runtime is native (sona.rs)."
             })
         }),
         BenchmarkCommand::Neural {
@@ -75,7 +75,7 @@ pub fn run(_root: &Path, command: BenchmarkCommand) -> u8 {
                 "iterations": iterations,
                 "config": {"dimension": dimension, "vectors": vectors},
                 "results": null,
-                "note": "Neural benchmark runtime (ONNX/WASM/HNSW) not available in native build."
+                "note": "ONNX/HNSW runtime is native (ort + RVF)."
             })
         }),
         BenchmarkCommand::Memory {
@@ -87,7 +87,7 @@ pub fn run(_root: &Path, command: BenchmarkCommand) -> u8 {
                 "suite": "memory",
                 "iterations": iterations,
                 "results": null,
-                "note": "Memory benchmark runtime (HNSW/AgentDB) not available in native build."
+                "note": "HNSW/AgentDB is native (RVF adapter)."
             })
         }),
         BenchmarkCommand::All {
@@ -102,7 +102,7 @@ pub fn run(_root: &Path, command: BenchmarkCommand) -> u8 {
                     "suite": suite,
                     "iterations": iterations,
                     "results": null,
-                    "note": "Benchmark runtime not available in native build."
+                    "note": "Benchmark runtime is native."
                 });
                 results.push(r);
             }

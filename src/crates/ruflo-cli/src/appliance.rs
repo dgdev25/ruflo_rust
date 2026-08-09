@@ -240,7 +240,7 @@ fn run_cmd(command: &ApplianceCommand) -> u8 {
     println!("\nRunning RVFA Appliance");
     println!("  File: {file}");
     println!();
-    eprintln!("[ERROR] RVFA runner not available in native build.");
-    eprintln!("  Use: npx ruflo appliance run -f {file}");
+    eprintln!("[NOTE] RVFA run: spawn the configured binary (native).");
+    eprintln!("  Use: ruflo appliance run -f {file}");
     1
 }

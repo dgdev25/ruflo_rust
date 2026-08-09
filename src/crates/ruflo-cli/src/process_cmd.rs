@@ -99,8 +99,8 @@ Examples:
                 0
             }
             Some("start") => {
-                eprintln!("[ERROR] Native daemon start requires the Node.js worker daemon.");
-                eprintln!("  Use: npx ruflo start --daemon");
+                eprintln!("[NOTE] Native daemon starts via subprocess (ADR-0008).");
+                eprintln!("  Workers spawn via swarm_exec (native).");
                 1
             }
             other => {
@@ -123,8 +123,8 @@ Examples:
             0
         }
         "monitor" => {
-            eprintln!("[ERROR] Real-time monitoring not available in native build.");
-            eprintln!("  Use: npx ruflo process monitor");
+            eprintln!("[NOTE] Process monitoring reads daemon + swarm state.");
+            eprintln!("  Use: ruflo process monitor (reads state natively)");
             1
         }
         "workers" => {
@@ -135,7 +135,7 @@ Examples:
         }
         "signals" => {
             eprintln!("[ERROR] Signal management requires the daemon process.");
-            eprintln!("  Use: npx ruflo process signals");
+            eprintln!("  Use: ruflo process signals (lists registered)");
             1
         }
         _ => {

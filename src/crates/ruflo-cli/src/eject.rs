@@ -60,7 +60,7 @@ fn run_eject(repo_root: &Path, opts: EjectOptions) -> u8 {
     let Some(name) = opts.name.clone().filter(|n| !n.is_empty()) else {
         eprintln!("[ERROR] eject: --name is required");
         eprintln!();
-        eprintln!("Example: npx ruflo eject --name my-harness");
+        eprintln!("Example: ruflo eject --name my-harness");
         return 2;
     };
 

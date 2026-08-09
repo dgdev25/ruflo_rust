@@ -26,7 +26,7 @@ const SUBCOMMANDS: &[(&str, &str)] = &[
     ("bench", "bench.mjs"),
 ];
 
-const OVERVIEW: &str = r####"npx ruflo metaharness <subcommand> [options]
+const OVERVIEW: &str = r####"ruflo metaharness <subcommand> [options]
 
 Subcommands:
   score         5-dimension harness readiness scorecard

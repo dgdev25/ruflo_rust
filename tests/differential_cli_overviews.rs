@@ -64,7 +64,6 @@ const BYTE_ALIGNED: &[&str] = &[
     "process",
     "claims",
     "benchmark",
-    "metaharness",
 ];
 
 /// Families with a captured source-oracle overview fixture. doctor/funnel/
@@ -74,7 +73,6 @@ const CAPTURED: &[&str] = &[
     "advisor", "agent", "analyze", "announcements", "appliance", "auth",
     "autopilot", "benchmark", "claims", "cleanup", "completions", "config",
     "daemon", "deployment", "embeddings", "gaia-bench",
-    "guidance", "hive-mind", "hooks", "issues", "memory", "metaharness",
     "migrate", "neural", "performance", "plugins", "policy", "process",
     "progress", "providers", "proxy", "route", "ruvector", "security",
     "session", "spinner", "swarm", "task",

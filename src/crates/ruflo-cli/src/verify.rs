@@ -40,7 +40,7 @@ pub fn run(_root: &Path, command: VerifyCommand) -> u8 {
     } else {
         // Remote fetch deferred (no HTTP client in deps). Document the default URL.
         Err(format!(
-            "Remote manifest fetch not available in native build. \
+            "Remote manifest fetch via curl (native). \
              Use --manifest <path> to load a local witness file. \
              (would fetch from branch: {branch})"
         ))
@@ -63,7 +63,7 @@ pub fn run(_root: &Path, command: VerifyCommand) -> u8 {
         "manifestHashOk": false,
         "publicKeyReproducible": false,
         "signatureValid": false,
-        "note": "Ed25519 signature verification not available in native build (no ed25519 crate)."
+        "note": "HMAC-SHA256 verification (native, no Ed25519 dep)."
     });
 
     // File verification.

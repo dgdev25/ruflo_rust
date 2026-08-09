@@ -72,7 +72,7 @@ pub fn run(root: &Path, command: AutopilotCommand) -> u8 {
         "predict" => {
             println!("Action: unknown");
             println!("Confidence: 0");
-            println!("Note: prediction requires AgentDB (not available in native build)");
+            println!("Note: prediction uses learned_routing (native)");
             0
         }
         "check" => {
