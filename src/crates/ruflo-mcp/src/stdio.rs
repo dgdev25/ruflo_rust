@@ -38,11 +38,11 @@ where
 
         let frame = line.trim_end_matches(&['\r', '\n'][..]).to_string();
         let request_context = RequestContext::local(frame.len());
-        let response = match serde_json::from_str::<Value>(&frame) {
-            Ok(request) => handle_request(&dispatcher, &request, request_context),
+        let request_value = match serde_json::from_str::<Value>(&frame) {
+            Ok(request) => request,
             Err(error) => {
                 let _ = writeln!(diagnostics, "mcp parse error: {error}");
-                json!({
+                let response = json!({
                     "jsonrpc": "2.0",
                     "id": Value::Null,
                     "error": {
@@ -55,10 +55,21 @@ where
                             }
                         }
                     }
-                })
+                });
+                serde_json::to_writer(&mut output, &response).map_err(io_error)?;
+                output.write_all(b"\n").map_err(io_error)?;
+                output.flush().map_err(io_error)?;
+                continue;
             }
         };
 
+        // JSON-RPC 2.0: a request without an "id" field is a notification.
+        // Notifications MUST NOT receive a response — return early.
+        if request_value.get("id").is_none() {
+            continue;
+        }
+
+        let response = handle_request(&dispatcher, &request_value, request_context);
         serde_json::to_writer(&mut output, &response).map_err(io_error)?;
         output.write_all(b"\n").map_err(io_error)?;
         output.flush().map_err(io_error)?;

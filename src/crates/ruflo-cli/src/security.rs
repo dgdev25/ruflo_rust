@@ -574,14 +574,16 @@ fn scan_secret_dir(root: &Path, dir: &Path, depth: i32, findings: &mut Vec<ScanF
     for entry in entries.flatten() {
         let name = entry.file_name();
         let name = name.to_string_lossy();
-        if skip_entry(&name) {
-            continue;
-        }
         let full = dir.join(name.as_ref());
         let Ok(ft) = entry.file_type() else {
             continue;
         };
         if ft.is_dir() {
+            // Only apply skip_entry to directories so dotfiles like `.env`
+            // are still scanned as files.
+            if skip_entry(&name) {
+                continue;
+            }
             scan_secret_dir(root, &full, depth - 1, findings, counts);
         } else if ft.is_file() && is_scanable_secret_file(&name) {
             scan_secret_file(root, &full, findings, counts);

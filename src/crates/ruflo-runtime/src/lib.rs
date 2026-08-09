@@ -72,7 +72,7 @@ impl Runtime {
     pub fn spawn_agent(&self, agent: NewAgent) -> Result<AgentHandle, RufloError> {
         validate_name("runtime.agent.name", &agent.name)?;
 
-        let mut state = self.inner.lock().expect("runtime mutex poisoned");
+        let mut state = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let id = AgentId::new(state.next_agent_id);
         state.next_agent_id += 1;
 
@@ -88,7 +88,7 @@ impl Runtime {
     pub fn create_task(&self, task: NewTask) -> Result<TaskHandle, RufloError> {
         validate_name("runtime.task.name", &task.name)?;
 
-        let mut state = self.inner.lock().expect("runtime mutex poisoned");
+        let mut state = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let id = TaskId::new(state.next_task_id);
         state.next_task_id += 1;
 
@@ -109,7 +109,7 @@ impl Runtime {
     pub fn init_swarm(&self, swarm: NewSwarm) -> Result<SwarmHandle, RufloError> {
         validate_name("runtime.swarm.name", &swarm.name)?;
 
-        let mut state = self.inner.lock().expect("runtime mutex poisoned");
+        let mut state = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         for agent_id in &swarm.agents {
             if !state.agents.contains_key(agent_id) {
                 return Err(unknown_handle_error(HandleRef::Agent(*agent_id)));
@@ -136,7 +136,7 @@ impl Runtime {
     }
 
     pub fn cancel_task(&self, task_id: TaskId) -> Result<TaskHandle, RufloError> {
-        let mut state = self.inner.lock().expect("runtime mutex poisoned");
+        let mut state = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let task = state
             .tasks
             .get_mut(&task_id)
@@ -167,7 +167,7 @@ impl Runtime {
     }
 
     pub fn get_handle(&self, id: impl Into<HandleRef>) -> Result<RuntimeHandle, RufloError> {
-        let state = self.inner.lock().expect("runtime mutex poisoned");
+        let state = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         match id.into() {
             HandleRef::Agent(id) => state
                 .agents
