@@ -11,7 +11,7 @@ and labelled ordinary Node CLI paths as NAPI-backed.
 | Suite | What it measures | Valid claim |
 |---|---|---|
 | End-to-end CLI | A new process, runtime startup, command dispatch, and an exactly equivalent command | User-observed CLI latency |
-| Native core through NAPI | The same Rust function invoked directly by Rust and through a published `napi-rs` addon in an already-running Node process | NAPI boundary and JavaScript-call overhead |
+| Native core through NAPI | The same deterministic operation invoked directly by Rust, through a published `napi-rs` addon, and through a literal JavaScript port in an already-running Node process | Native-addon speedup and NAPI boundary overhead |
 
 Neither suite substitutes for the other. NAPI reduces JavaScript-to-native work
 for a supported function, but it does not remove the Node process startup cost.
@@ -35,9 +35,11 @@ contract test first.
 
 The bounded native-core comparison is available through
 `BENCH_OUTPUT=/tmp/napi.json scripts/bench-napi-core.sh`. It builds the real
-addon, warms persistent Node and direct Rust processes separately, checks
+addon, warms persistent Node and direct Rust processes separately, compares a
+literal JavaScript port of the same deterministic function, checks
 provider/dimensions/vector-fingerprint equality before timing, and writes raw
-nanosecond samples. It measures deterministic core operations only; it does
+nano-second samples. The default profile is `release`; set `BENCH_PROFILE=debug`
+only when diagnosing. It measures deterministic core operations only; it does
 not claim semantic-model, memory, or cold-CLI parity.
 
 ## Prohibited comparisons

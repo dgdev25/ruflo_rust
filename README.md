@@ -46,7 +46,26 @@ When creating another Rust version of Ruflo, start by depending on or adapting t
 
 The former Node-versus-Rust speed and size figures are retracted. They timed unequal implementations and incorrectly described ordinary Node CLI paths as Ruflo N-API calls.
 
-Use the [benchmark methodology](docs/benchmarks/node-vs-rust-methodology.md) and `scripts/bench-node-vs-rust.sh` for equivalent CLI measurements. The N-API suite measures only deterministic core functions through the real addon; it does not establish semantic-memory or full CLI parity.
+### Apples-to-apples napi-rs core benchmark
+
+The table below measures the same 384-dimension deterministic embedding in a
+persistent Node process: a literal JavaScript port, then the real napi-rs
+addon. Every path produced the same provider, dimensions, and vector
+fingerprint before timing. It is evidence for this native-core operation only;
+it does not claim full CLI, memory, or semantic-model parity.
+
+| Execution path | Median latency | p95 latency | Throughput | Difference from JavaScript |
+|---|---:|---:|---:|---:|
+| Literal JavaScript reference | 29.1 µs | 51.6 µs | 34.4k ops/s | Baseline |
+| Node through `@ruflo/native` napi-rs addon | 23.6 µs | 25.4 µs | 42.4k ops/s | **1.23× faster** (19% lower median latency) |
+| Direct `ruflo-core` Rust | 1.56 µs | 1.64 µs | 641.8k ops/s | 18.7× faster compute baseline |
+
+Results: 1,000 measured iterations after 20 warmups, optimized release builds,
+on this repository's benchmark host. The complete raw samples and equality
+receipt are in [the N-API benchmark artifact](docs/benchmarks/results/2026-08-09-napi-core.json).
+
+Use the [benchmark methodology](docs/benchmarks/node-vs-rust-methodology.md)
+and `scripts/bench-node-vs-rust.sh` for equivalent CLI measurements.
 
 ## Quick Start
 
