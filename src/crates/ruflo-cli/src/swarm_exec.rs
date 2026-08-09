@@ -404,6 +404,22 @@ pub fn run_swarm(
         })
         .collect();
 
+    // Pheromone-adaptive feedback: record each worker's outcome so the
+    // APSC (Adaptive Pheromone Swarm Coordinator) updates per-agent EMA
+    // fitness + keep/suspend eligibility. Ports services/pheromone-adaptive.ts.
+    for r in &results {
+        let success = r.exit_code == 0 && !r.timed_out;
+        // Latency is unknown without timing each worker; use a neutral 1.0
+        // (within typical budget). The pheromone layer normalizes anyway.
+        let _ = crate::services::pheromone::record(
+            &format!("worker-{}", r.worker_idx),
+            "worker",
+            if success { 1.0 } else { 0.0 },
+            1.0,
+            1.0,
+        );
+    }
+
     // Release the active reservations now that every worker has finished. The
     // launches array is left intact — daemon.rs prunes entries older than 24h.
     {
@@ -685,3 +701,47 @@ impl SwarmOutcome {
 // Suppress unused warnings for helpers retained for future use.
 #[allow(dead_code)]
 fn _unused(_a: &Arc<Mutex<HashMap<String, String>>>, _b: ExitStatus) {}
+
+/// Work-stealing: when a worker is idle, find a stealable claim (an issue
+/// another agent marked available) and take it. Returns the stolen issue id
+/// or None. Ports the work-stealing half of services/claim-service.ts into
+/// the swarm path.
+pub fn steal_work(stealer: &str) -> Option<String> {
+    let stealable = crate::services::claim_service::stealable(None).ok()?;
+    let issue = stealable.first()?.clone();
+    let issue_id = issue["issueId"].as_str().or(issue["id"].as_str())?.to_string();
+    match crate::services::claim_service::steal(&issue_id, stealer, "worker") {
+        Ok(_) => Some(issue_id),
+        Err(_) => None,
+    }
+}
+
+/// Pheromone snapshot: the current per-agent EMA fitness + eligibility the
+/// APSC uses to keep/suspend workers. Exposed for swarm status display.
+pub fn pheromone_snapshot() -> Value {
+    let snap = crate::services::pheromone::get_state();
+    let eligible = crate::services::pheromone::eligible();
+    json!({
+        "agents": snap.get("agents").cloned().unwrap_or(json!({})),
+        "eligible": eligible,
+        "threshold": snap.get("threshold").cloned().unwrap_or(json!(null)),
+    })
+}
+
+#[cfg(test)]
+mod steal_tests {
+    use super::*;
+
+    #[test]
+    fn steal_work_returns_none_when_nothing_stealable() {
+        // No claims state → stealable() returns empty → None.
+        assert!(steal_work("test-stealer").is_none());
+    }
+
+    #[test]
+    fn pheromone_snapshot_returns_object() {
+        let snap = pheromone_snapshot();
+        assert!(snap.is_object());
+        assert!(snap["eligible"].is_array());
+    }
+}

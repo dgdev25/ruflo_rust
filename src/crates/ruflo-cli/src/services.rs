@@ -1801,6 +1801,24 @@ pub mod claim_service {
         Ok(())
     }
 
+    /// List all stealable issues (status == `stealable`). Optionally filtered
+    /// by preferred agent type. Drives the swarm work-stealing path.
+    pub fn stealable(preferred_type: Option<&str>) -> Result<Vec<Value>, String> {
+        let state = read_state(STATE_NAME);
+        let arr = state["claims"].as_array().cloned().unwrap_or_default();
+        let filtered: Vec<Value> = arr
+            .into_iter()
+            .filter(|c| c["status"].as_str() == Some("stealable"))
+            .filter(|c| match preferred_type {
+                Some(t) => c["preferredTypes"].as_array()
+                    .map(|a| a.iter().any(|x| x.as_str() == Some(t)))
+                    .unwrap_or(true),
+                None => true,
+            })
+            .collect();
+        Ok(filtered)
+    }
+
     /// Steal a stealable issue. The claimant becomes `stealer_agent_id` and
     /// status becomes `stolen` (terminal — must be re-claimed after release).
     pub fn steal(
