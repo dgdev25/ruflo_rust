@@ -1,11 +1,10 @@
 {
   "name": "@ruflo/native",
   "version": "3.34.0",
-  "private": true,
   "description": "Ruflo's napi-rs native core bindings.",
   "main": "index.js",
   "types": "index.d.ts",
-  "files": ["index.js", "index.d.ts", "ruflo-native.linux-x64-gnu.node"],
+  "files": ["index.js", "index.d.ts", "platform.js", "ruflo-native.*.node"],
   "scripts": { "test": "node --test test/*.test.js" },
   "engines": { "node": ">=18" }
 }

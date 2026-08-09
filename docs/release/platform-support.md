@@ -1,19 +1,21 @@
 # Platform Support
 
-Status as of 2026-08-09: Windows build and release workflows exist. Linux and
-macOS release artifacts are not yet automated, so the full five-platform matrix
-is not a completed release claim; run the platform smoke scripts on target
-hosts before promotion.
+Status as of 2026-08-09: `.github/workflows/native-release.yml` automates
+native-runner release archives for Linux x86_64/aarch64, macOS x86_64/aarch64,
+and Windows x86_64. Every archive contains `ruflo`, `claude-flow`, and the
+matching Ruflo N-API `.node` addon. The tag workflow verifies those filenames
+before publishing. This is automation, not retroactive evidence: a target is
+only release-verified after a successful tagged workflow run for that target.
 
 ## Supported release matrix
 
 | OS | Architecture | Rust target | Required host evidence |
 | --- | --- | --- | --- |
-| Linux | x86_64 | `x86_64-unknown-linux-gnu` | `cargo test --test platform_hooks`, workspace tests, POSIX smoke |
-| Linux | aarch64 | `aarch64-unknown-linux-gnu` | `cargo test --test platform_hooks`, workspace tests, POSIX smoke |
-| macOS | x86_64 | `x86_64-apple-darwin` | `cargo test --test platform_hooks`, workspace tests, POSIX smoke |
-| macOS | aarch64 | `aarch64-apple-darwin` | `cargo test --test platform_hooks`, workspace tests, POSIX smoke |
-| Windows | x86_64 | `x86_64-pc-windows-msvc` | `cargo test --test platform_hooks`, workspace tests, PowerShell smoke |
+| Linux | x86_64 | `x86_64-unknown-linux-gnu` | native runner archive, `platform_hooks`, N-API loader contract |
+| Linux | aarch64 | `aarch64-unknown-linux-gnu` | native ARM runner archive, `platform_hooks`, N-API loader contract |
+| macOS | x86_64 | `x86_64-apple-darwin` | native runner archive, `platform_hooks`, N-API loader contract |
+| macOS | aarch64 | `aarch64-apple-darwin` | native runner archive, `platform_hooks`, N-API loader contract |
+| Windows | x86_64 | `x86_64-pc-windows-msvc` | native runner archive, `platform_hooks`, N-API loader contract |
 
 ## What the smoke gate checks
 

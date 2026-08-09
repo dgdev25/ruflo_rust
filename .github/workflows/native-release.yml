@@ -13,25 +13,42 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            napi_suffix: linux-x64-gnu
+            napi_artifact: libruflo_napi.so
+            archive: tar.gz
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            napi_suffix: linux-arm64-gnu
+            napi_artifact: libruflo_napi.so
             archive: tar.gz
           - os: macos-13
             target: x86_64-apple-darwin
+            napi_suffix: darwin-x64
+            napi_artifact: libruflo_napi.dylib
             archive: tar.gz
           - os: macos-latest
             target: aarch64-apple-darwin
+            napi_suffix: darwin-arm64
+            napi_artifact: libruflo_napi.dylib
             archive: tar.gz
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            napi_suffix: win32-x64-msvc
+            napi_artifact: ruflo_napi.dll
             archive: zip
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-        with: { targets: ${{ matrix.target }} }
+        with:
+          toolchain: 1.97.0
+          targets: ${{ matrix.target }}
       - name: Test platform contract
         run: cargo test --test platform_hooks
-      - name: Build both public aliases
-        run: cargo build --release --target ${{ matrix.target }} -p ruflo -p claude-flow
+      - name: Build public aliases and N-API addon
+        run: cargo build --release --target ${{ matrix.target }} -p ruflo -p claude-flow -p ruflo-napi
+      - name: Verify portable N-API loader contract
+        run: node --test packages/ruflo-native/test/platform.test.js
       - name: Stage POSIX archive
         if: runner.os != 'Windows'
         shell: bash
@@ -40,6 +57,7 @@ jobs:
           mkdir "$stage"
           cp "target/${{ matrix.target }}/release/ruflo" "$stage/"
           cp "target/${{ matrix.target }}/release/claude-flow" "$stage/"
+          cp "target/${{ matrix.target }}/release/${{ matrix.napi_artifact }}" "$stage/ruflo-native.${{ matrix.napi_suffix }}.node"
           shasum -a 256 "$stage"/* > "$stage/SHA256SUMS"
           tar -czf "$stage.tar.gz" "$stage"
       - name: Stage Windows archive
@@ -50,6 +68,7 @@ jobs:
           New-Item -ItemType Directory -Force $stage
           Copy-Item "target/${{ matrix.target }}/release/ruflo.exe" $stage
           Copy-Item "target/${{ matrix.target }}/release/claude-flow.exe" $stage
+          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.napi_artifact }}" "$stage/ruflo-native.${{ matrix.napi_suffix }}.node"
           Get-ChildItem $stage -File | Get-FileHash -Algorithm SHA256 | ForEach-Object { "{0}  {1}" -f $_.Hash.ToLower(), $_.Name } | Set-Content "$stage/SHA256SUMS"
           Compress-Archive -Path $stage -DestinationPath "$stage.zip"
       - uses: actions/upload-artifact@v4
@@ -69,9 +88,15 @@ jobs:
       - name: Verify release asset set
         run: |
           test -f release-assets/ruflo-x86_64-unknown-linux-gnu.tar.gz
+          test -f release-assets/ruflo-aarch64-unknown-linux-gnu.tar.gz
           test -f release-assets/ruflo-x86_64-apple-darwin.tar.gz
           test -f release-assets/ruflo-aarch64-apple-darwin.tar.gz
           test -f release-assets/ruflo-x86_64-pc-windows-msvc.zip
+          tar -tzf release-assets/ruflo-x86_64-unknown-linux-gnu.tar.gz | grep -Fx 'ruflo-x86_64-unknown-linux-gnu/ruflo-native.linux-x64-gnu.node'
+          tar -tzf release-assets/ruflo-aarch64-unknown-linux-gnu.tar.gz | grep -Fx 'ruflo-aarch64-unknown-linux-gnu/ruflo-native.linux-arm64-gnu.node'
+          tar -tzf release-assets/ruflo-x86_64-apple-darwin.tar.gz | grep -Fx 'ruflo-x86_64-apple-darwin/ruflo-native.darwin-x64.node'
+          tar -tzf release-assets/ruflo-aarch64-apple-darwin.tar.gz | grep -Fx 'ruflo-aarch64-apple-darwin/ruflo-native.darwin-arm64.node'
+          unzip -Z1 release-assets/ruflo-x86_64-pc-windows-msvc.zip | grep -Fx 'ruflo-x86_64-pc-windows-msvc/ruflo-native.win32-x64-msvc.node'
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
