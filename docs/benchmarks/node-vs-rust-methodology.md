@@ -27,9 +27,9 @@ BENCH_OUTPUT=docs/benchmarks/results/node-vs-rust-$(date -u +%Y%m%dT%H%M%SZ).jso
 
 The runner performs five warmups and 30 measured iterations by default. Before
 timing, it requires matching exit status, stdout, and stderr. It records every
-sample plus median, p95, and mean in the JSON artifact. The current exact-parity
-cases are `--version` and `completions bash`; adding a case requires a semantic
-contract test first.
+sample plus median, p95, and mean in the JSON artifact. The current default
+exact-parity case is `--version`. Add another case through `BENCH_CASES` only
+after its semantic contract test passes.
 
 ## NAPI acceptance criteria
 

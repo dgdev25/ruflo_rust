@@ -2,9 +2,7 @@
 # Reproducible end-to-end CLI benchmark for commands with exact parity.
 #
 # This deliberately measures process startup, dispatch, and command execution.
-# It is not a native-compute or N-API benchmark: those require the same Rust
-# implementation to be invoked through a real napi-rs addon and directly from
-# Rust, which this repository does not yet provide.
+# It is separate from the native-core napi-rs benchmark.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -13,6 +11,7 @@ NODE_CLI=${NODE_CLI:-/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js}
 RUST_BIN=${RUST_BIN:-"$ROOT/target/release/ruflo"}
 ITERS=${BENCH_ITERS:-30}
 WARMUP=${BENCH_WARMUP:-5}
+CASES=${BENCH_CASES:-version}
 OUTPUT=${BENCH_OUTPUT:?Set BENCH_OUTPUT to a JSON path for the raw measurements.}
 
 [[ "$ITERS" =~ ^[1-9][0-9]*$ ]] || { echo "BENCH_ITERS must be a positive integer" >&2; exit 2; }
@@ -99,11 +98,15 @@ run_case() {
     "$(median "$rust_samples")" "$(p95 "$rust_samples")" "$(mean "$rust_samples")" >> "$CASE_FILE"
 }
 
-# These commands have byte-for-byte output parity in the current checkouts.
 # Add a case only after its semantic contract is verified, rather than timing a
-# command that happens to share an exit code.
-run_case version --version
-run_case completions-bash completions bash
+# command that happens to share an exit code. `version` is the only currently
+# verified default case; request future verified cases through BENCH_CASES.
+case ",$CASES," in
+  *,version,*) run_case version --version ;;
+esac
+case ",$CASES," in
+  *,completions-bash,*) run_case completions-bash completions bash ;;
+esac
 
 {
   printf '{\n'
@@ -112,7 +115,7 @@ run_case completions-bash completions bash
   printf '  "measured_at_utc": "%s",\n' "$(date -u +%FT%TZ)"
   printf '  "iterations": %s,\n' "$ITERS"
   printf '  "warmup_iterations": %s,\n' "$WARMUP"
-  printf '  "methodology": {"contract":"exit 0 and exact stdout/stderr before timing","scope":"cold process startup plus dispatch and command execution","napi_native_compute":"not measured: this checkout has no Ruflo napi-rs addon"},\n'
+  printf '  "methodology": {"contract":"exit 0 and exact stdout/stderr before timing","scope":"cold process startup plus dispatch and command execution","napi_native_compute":"measured separately by scripts/bench-napi-core.sh"},\n'
   printf '  "cases": ['
   paste -sd, "$CASE_FILE"
   printf ']\n}\n'

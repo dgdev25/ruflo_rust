@@ -64,6 +64,20 @@ Results: 1,000 measured iterations after 20 warmups, optimized release builds,
 on this repository's benchmark host. The complete raw samples and equality
 receipt are in [the N-API benchmark artifact](docs/benchmarks/results/2026-08-09-napi-core.json).
 
+### Exact-output CLI startup benchmark
+
+This is a different measurement: a fresh process runs `--version`, after exact
+stdout, stderr, and exit-status equality is established. It includes runtime
+startup and dispatch, and does **not** use N-API.
+
+| CLI implementation | Median latency | p95 latency | Rust difference |
+|---|---:|---:|---:|
+| Original Node CLI | 25.0 ms | 38.0 ms | Baseline |
+| Native Rust CLI | 12.5 ms | 16.0 ms | **2.0× faster** (50% lower median latency) |
+
+Results: 100 measured iterations after 20 warmups. The raw, equality-checked
+samples are in [the CLI benchmark artifact](docs/benchmarks/results/2026-08-09-cli-parity.json).
+
 Use the [benchmark methodology](docs/benchmarks/node-vs-rust-methodology.md)
 and `scripts/bench-node-vs-rust.sh` for equivalent CLI measurements.
 
