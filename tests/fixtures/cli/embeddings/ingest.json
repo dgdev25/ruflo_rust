@@ -1,0 +1,8 @@
+{
+  "$comment": "Reference for `ruflo embeddings ingest` (RVF HNSW backend).",
+  "ingested": 1,
+  "id": 1,
+  "backend": "ruvector-rvf-hnsw",
+  "embedding": "hash",
+  "path": ".swarm/memory.rvf"
+}

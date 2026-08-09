@@ -1,0 +1,8 @@
+{
+  "$comment": "Reference PKCE components for `ruflo auth login` (RFC 7636 S256).",
+  "codeChallengeMethod": "S256",
+  "knownVector": {
+    "verifier": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+    "challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+  }
+}

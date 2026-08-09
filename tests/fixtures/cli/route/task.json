@@ -1,0 +1,7 @@
+{
+  "$comment": "Byte-parity reference for `ruflo route task` Thompson-sampling output (JSON).",
+  "agent": "coder",
+  "task": "refactor the module",
+  "confidence": 0,
+  "samples": []
+}

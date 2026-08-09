@@ -17,6 +17,12 @@ test -f "$fixtures_root/cli/embeddings/overview.json"
 test -f "$fixtures_root/cli/hive-mind/overview.json"
 test -f "$fixtures_root/cli/neural/overview.json"
 test -f "$fixtures_root/cli/hooks/overview.json"
+test -f "$fixtures_root/cli/route/task.json"
+test -f "$fixtures_root/cli/route/feedback.json"
+test -f "$fixtures_root/cli/transfer-store/publish.json"
+test -f "$fixtures_root/cli/neural/train.json"
+test -f "$fixtures_root/cli/embeddings/ingest.json"
+test -f "$fixtures_root/cli/auth/login.json"
 test -f "$fixtures_root/mcp/tools-list.json"
 test -f "$fixtures_root/persistence/README.md"
 
@@ -28,6 +34,7 @@ cargo test --test config_command
 cargo test --test cleanup_command
 cargo test --test transport_command
 cargo test --test deployment_command
+cargo test --test new_capability_fixtures
 
 if grep -rnE '/home/[^"/]+|/Users/[^"/]+|[A-Za-z]:\\\\Users\\\\[^"\\]+' "$fixtures_root"; then
   echo "fixture verification failed: absolute user path detected" >&2

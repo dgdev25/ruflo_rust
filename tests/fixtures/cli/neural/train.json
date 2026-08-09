@@ -1,0 +1,10 @@
+{
+  "$comment": "Reference for `ruflo neural train` SONA output (backend native-sona).",
+  "modelId": "model-X",
+  "pattern": "coordination",
+  "backend": "native-sona",
+  "epochs": 20,
+  "examplesTrained": 0,
+  "finalLoss": 0.0,
+  "classes": []
+}

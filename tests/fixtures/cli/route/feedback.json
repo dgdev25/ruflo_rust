@@ -1,0 +1,6 @@
+{
+  "$comment": "Reference for `ruflo route feedback --agent X --success` (JSON).",
+  "agent": "coder",
+  "feedback": true,
+  "updated": true
+}
