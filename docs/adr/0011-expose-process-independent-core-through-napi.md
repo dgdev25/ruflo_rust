@@ -27,6 +27,14 @@ vectorizer from BGE/MiniLM semantic-model parity.
 - Stateful semantic memory is withheld until it has an explicit confined
   context and source-derived interoperability contract.
 
+## Implementation note — 2026-08-09
+
+Implemented by `ruflo-core`, `ruflo-napi`, and `packages/ruflo-native`.
+`native-release.yml` builds matching Linux x86_64/aarch64, macOS x86_64/aarch64,
+and Windows x86_64 addon artifacts beside both native CLI aliases. The public
+API remains intentionally bounded; it must not be used to imply BGE semantic
+memory parity or NPM publication until those contracts have their own evidence.
+
 ## Alternatives
 
 - Wrap the CLI through Node child processes — rejected because it is not N-API.
