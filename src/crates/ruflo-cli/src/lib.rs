@@ -31,6 +31,7 @@ mod output;
 mod performance;
 mod plugins;
 mod policy;
+mod prompt;
 mod process_cmd;
 mod providers;
 mod proxy;
