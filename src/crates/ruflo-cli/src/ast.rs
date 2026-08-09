@@ -91,9 +91,9 @@ fn analyze_treesitter(path: &str, source: &str, lang: &str) -> Option<AstAnalysi
     let mut structs = Vec::new();
     let mut imports = Vec::new();
 
-    // Walk all named nodes once, classify by kind.
-    let mut cursor = root.walk();
-    for node in root.named_descendants() {
+    // Walk all named nodes once, classify by kind (DFS via the cursor stack).
+    let mut stack: Vec<tree_sitter::Node> = vec![root];
+    while let Some(node) = stack.pop() {
         let kind = node.kind();
         match kind {
             // Rust
@@ -145,8 +145,13 @@ fn analyze_treesitter(path: &str, source: &str, lang: &str) -> Option<AstAnalysi
             }
             _ => {}
         }
+        // Push named children onto the DFS stack.
+        let mut i = 0usize;
+        while let Some(child) = node.named_child(i) {
+            stack.push(child);
+            i += 1;
+        }
     }
-    drop(cursor);
     drop(language);
 
     let loc = source.lines().count();

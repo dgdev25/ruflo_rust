@@ -8,6 +8,7 @@
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use serde_json::{json, Value};
 
@@ -162,10 +163,69 @@ fn login(root: &Path, command: &AuthCommand) -> u8 {
         return 1;
     }
 
-    // Store the code as the credential (token exchange would hit the token
-    // endpoint with verifier — left to the operator/server side in this
-    // serverless flow). Persist what we have so the profile is marked in.
+    // Token exchange: POST code + verifier (+ optional client_secret) to the
+    // token endpoint. Falls back to storing the bare code if no token endpoint
+    // is configured (the serverless flow).
+    let token_url = std::env::var("RUFLO_OAUTH_TOKEN_URL").ok();
+    let client_secret = std::env::var("RUFLO_OAUTH_CLIENT_SECRET").ok();
+    let redirect = "http://localhost:8765/callback";
+
+    if let Some(token_url) = token_url {
+        match exchange_code(&token_url, &code, &verifier, client_secret.as_deref(),
+                            &client_id, redirect)
+        {
+            Ok(access_token) => {
+                return store_token(root, &profile, &access_token, "oauth-pkce");
+            }
+            Err(e) => {
+                eprintln!("[WARN] Token exchange failed ({e}); storing authorization code.");
+            }
+        }
+    }
     store_token(root, &profile, &code, "oauth-pkce")
+}
+
+/// Exchange an authorization code for an access token via the standard OAuth2
+/// PKCE token endpoint (RFC 6749 §4.1.3 + RFC 7636). Uses curl (no HTTP dep).
+fn exchange_code(
+    token_url: &str,
+    code: &str,
+    verifier: &str,
+    client_secret: Option<&str>,
+    client_id: &str,
+    redirect_uri: &str,
+) -> Result<String, String> {
+    let mut form = format!(
+        "grant_type=authorization_code&code={code}&code_verifier={verifier}\
+         &client_id={client_id}&redirect_uri={redirect_uri}"
+    );
+    if let Some(secret) = client_secret {
+        form.push_str(&format!("&client_secret={secret}"));
+    }
+
+    let output = Command::new("curl")
+        .args([
+            "-sS", "-X", "POST", token_url,
+            "-H", "Content-Type: application/x-www-form-urlencoded",
+            "-H", "Accept: application/json",
+            "-d", &form,
+        ])
+        .output()
+        .map_err(|e| format!("curl: {e}"))?;
+    if !output.status.success() {
+        return Err(format!("HTTP {}", output.status));
+    }
+    let body = String::from_utf8_lossy(&output.stdout);
+    let v: Value = serde_json::from_str(&body)
+        .map_err(|e| format!("non-JSON token response: {e}"))?;
+    if let Some(err) = v.get("error") {
+        let desc = v.get("error_description").and_then(Value::as_str).unwrap_or("");
+        return Err(format!("{}: {}", err, desc));
+    }
+    v.get("access_token")
+        .and_then(Value::as_str)
+        .map(|s| s.to_string())
+        .ok_or_else(|| "no access_token in response".into())
 }
 
 /// Store a credential under a profile, persisting via atomic write.

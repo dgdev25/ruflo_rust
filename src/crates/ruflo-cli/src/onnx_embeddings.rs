@@ -15,6 +15,8 @@ use serde_json::{json, Value};
 
 /// Default embedding dimension for all-MiniLM-L6-v2.
 pub const ONNX_DIM: usize = 384;
+/// Max sequence length the MiniLM tokenizer pads/truncates to.
+const MAX_SEQ_LEN: usize = 128;
 
 /// Model directory under the user's cache.
 fn model_dir() -> PathBuf {
@@ -52,31 +54,137 @@ pub fn embed(text: &str, dim: usize) -> (Vec<f64>, &'static str) {
     (embed_hash(text, dim), "hash")
 }
 
-/// ONNX inference: tokenize → run model → mean-pool → normalize.
-/// TODO: Full implementation requires ort 2.0 API verification.
-/// The ort 2.0-rc13 API has changed significantly from 1.x — the session
-/// builder, tensor creation, and run patterns need careful integration.
-/// For now this returns None (falls back to hash), preserving CLI
-/// functionality while the ONNX path is completed in a focused follow-up.
-fn embed_onnx(_text: &str) -> Option<Vec<f64>> {
-    // The full implementation will:
-    // 1. Load tokenizer from tokenizer.json via tokenizers::Tokenizer::from_file()
-    // 2. Encode text → input_ids + attention_mask
-    // 3. Create ort tensors from encoded input
-    // 4. Run ONNX session
-    // 5. Mean-pool last_hidden_state (mask-aware)
-    // 6. L2-normalize → Vec<f64>
-    //
-    // The ort 2.0-rc.13 API requires:
-    //   ort::environment() → ort::Environment (global init)
-    //   Session::builder()?.commit()? → Session
-    //   session.run(ort::inputs![input_ids, attention_mask]?)?
-    //   output["last_hidden_state"].try_extract_tensor::<f32>()?
-    //
-    // This is blocked on verifying the exact ort 2.0 tensor creation API
-    // against the crate docs. The hash fallback ensures the CLI works today.
-    None
+/// ONNX inference: tokenize → run model → mask-aware mean-pool → L2-normalize.
+///
+/// Loads the all-MiniLM-L6-v2 ONNX session + tokenizer once (cached in a
+/// process-wide OnceLock), encodes the text to input_ids + attention_mask,
+/// runs the model, mean-pools last_hidden_state weighted by the attention
+/// mask, and L2-normalizes. Returns None only if the model isn't loaded or
+/// inference fails (caller falls back to the hash vectorizer).
+fn embed_onnx(text: &str) -> Option<Vec<f64>> {
+    let ctx = ONNX_CTX.get_or_init(|| OnnxCtx::load().ok());
+    let ctx = ctx.as_ref()?;
+
+    // 1. Tokenize.
+    let encoding = ctx.tokenizer.encode(text, true).ok()?;
+    let input_ids: Vec<i64> = encoding.get_ids().iter().map(|&id| id as i64).collect();
+    let attention_mask: Vec<i64> = encoding.get_attention_mask().iter().map(|&m| m as i64).collect();
+    let token_type_ids: Vec<i64> = encoding.get_type_ids().iter().map(|&t| t as i64).collect();
+    let seq_len = input_ids.len();
+    if seq_len == 0 {
+        return Some(vec![0.0; ONNX_DIM]);
+    }
+
+    // 2. Build input tensors [1, seq_len] (pad/truncate to MAX_SEQ_LEN).
+    let (input_ids, attention_mask, token_type_ids) = pad_to(
+        input_ids, attention_mask, token_type_ids, MAX_SEQ_LEN,
+    );
+    let shape = vec![1_i64, MAX_SEQ_LEN as i64];
+
+    let ids_tensor = ort::value::Tensor::from_array((shape.clone(), input_ids)).ok()?;
+    let mask_tensor = ort::value::Tensor::from_array((shape.clone(), attention_mask)).ok()?;
+    let type_tensor = ort::value::Tensor::from_array((shape, token_type_ids)).ok()?;
+
+    // 3. Run the session.
+    let mut session = ctx.session.lock().ok()?;
+    let outputs = session.run(ort::inputs![ids_tensor, mask_tensor, type_tensor]).ok()?;
+
+    // 4. Extract last_hidden_state [1, seq_len, hidden].
+    let hidden = outputs[0].try_extract_tensor::<f32>().ok()?;
+    let (_shape, data) = hidden; // (Shape, &[f32])
+    // hidden_dim = total / MAX_SEQ_LEN.
+    let hidden_dim = data.len() / MAX_SEQ_LEN;
+    if hidden_dim == 0 {
+        return None;
+    }
+
+    // 5. Mask-aware mean-pool over the real tokens, then L2-normalize.
+    let mut pooled = vec![0f64; hidden_dim];
+    let mut token_count = 0u32;
+    for t in 0..MAX_SEQ_LEN {
+        // Attention mask is padded-truncated form; recover real mask length
+        // from the original encoding (token_count = original seq_len).
+        if t >= seq_len {
+            break;
+        }
+        let offset = t * hidden_dim;
+        for d in 0..hidden_dim {
+            pooled[d] += data[offset + d] as f64;
+        }
+        token_count += 1;
+    }
+    if token_count > 0 {
+        let n = token_count as f64;
+        for v in pooled.iter_mut() {
+            *v /= n;
+        }
+    }
+    let norm = pooled.iter().map(|x| x * x).sum::<f64>().sqrt();
+    if norm > 0.0 {
+        for v in pooled.iter_mut() {
+            *v /= norm;
+        }
+    }
+    Some(pooled)
 }
+
+/// Pad (or truncate) the three parallel token vectors to a fixed length so the
+/// ONNX model gets a rectangular batch.
+fn pad_to(
+    mut ids: Vec<i64>,
+    mut mask: Vec<i64>,
+    mut types: Vec<i64>,
+    len: usize,
+) -> (Vec<i64>, Vec<i64>, Vec<i64>) {
+    if ids.len() > len {
+        ids.truncate(len);
+        mask.truncate(len);
+        types.truncate(len);
+    } else {
+        let pad = len - ids.len();
+        ids.resize(len, 0);
+        mask.resize(len, 0); // padding tokens get attention_mask 0
+        types.resize(len, 0);
+        let _ = pad;
+    }
+    (ids, mask, types)
+}
+
+/// Cached ONNX context: tokenizer + a Mutex-guarded session (run() takes &mut).
+struct OnnxCtx {
+    tokenizer: tokenizers::Tokenizer,
+    session: std::sync::Mutex<ort::session::Session>,
+}
+
+impl OnnxCtx {
+    fn load() -> Result<Self, String> {
+        let model_path = onnx_model_path();
+        let tokenizer_path = tokenizer_path();
+        let tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_path)
+            .map_err(|e| format!("tokenizer load: {e}"))?;
+        // Pad/truncate to MAX_SEQ_LEN so every input is rectangular.
+        let mut tokenizer = tokenizer;
+        tokenizer.with_truncation(Some(tokenizers::TruncationParams {
+            max_length: MAX_SEQ_LEN,
+            ..Default::default()
+        }))
+        .map_err(|e| format!("truncation: {e}"))?;
+        tokenizer.with_padding(Some(tokenizers::PaddingParams {
+            strategy: tokenizers::PaddingStrategy::Fixed(MAX_SEQ_LEN),
+            ..Default::default()
+        }));
+        let session = ort::session::Session::builder()
+            .map_err(|e| format!("session builder: {e}"))?
+            .commit_from_file(&model_path)
+            .map_err(|e| format!("session commit: {e}"))?;
+        Ok(Self {
+            tokenizer,
+            session: std::sync::Mutex::new(session),
+        })
+    }
+}
+
+static ONNX_CTX: OnceLock<Option<OnnxCtx>> = OnceLock::new();
 
 /// Deterministic hash vectorizer (fallback when ONNX model unavailable).
 /// Same FNV-1a + char-trigram algorithm as embeddings.rs.

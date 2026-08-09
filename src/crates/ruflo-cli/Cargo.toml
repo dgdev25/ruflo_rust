@@ -11,9 +11,10 @@ description = "Shared native CLI dispatcher for the Ruflo and claude-flow wrappe
 path = "src/lib.rs"
 
 [features]
-default = []
-# Real AST analysis via tree-sitter. Off by default — grammars compile C code
-# and add ~30s to a clean build. Enable with --features ast.
+default = ["ast"]
+# Real AST analysis via tree-sitter (rust + typescript grammars). On by default
+# so `analyze ast` uses a real parser, not the regex fallback. The grammars
+# compile C and add ~30s to a clean build.
 ast = ["dep:tree-sitter", "dep:tree-sitter-rust", "dep:tree-sitter-typescript"]
 
 [dependencies]
