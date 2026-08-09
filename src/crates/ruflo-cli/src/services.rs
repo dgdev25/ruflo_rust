@@ -2696,3 +2696,166 @@ pub mod worker_daemon_v2 {
         }
     }
 }
+
+// ---- final 3 deep services: RVF file-level branching ----
+
+/// swarm-memory-branches behavioral: create/query/merge branches via RVF
+/// file copies. Each branch is a snapshot of the parent .rvf store.
+pub mod swarm_branches_v2 {
+    use super::*;
+
+    /// Create a memory branch by copying the parent RVF store. This is a full
+    /// file copy (not the 162-byte agenticow COW), but achieves the same
+    /// service-level behavior: isolated per-agent memory.
+    pub fn create_branch(name: &str, parent: &str) -> Result<Value, String> {
+        let parent_path = std::path::PathBuf::from(parent);
+        let branch_dir = root().join(".claude-flow/branches");
+        let _ = fs::create_dir_all(&branch_dir);
+        let branch_path = branch_dir.join(format!("{name}.rvf"));
+        if parent_path.exists() {
+            fs::copy(&parent_path, &branch_path).map_err(|e| e.to_string())?;
+        } else {
+            // No parent — start with an empty store (created on first ingest).
+        }
+        let entry = json!({
+            "name": name, "parent": parent,
+            "path": branch_path.display().to_string(),
+            "createdAt": now_ms(),
+        });
+        let mut state = read_state("swarm-branches");
+        if state["branches"].is_null() { state["branches"] = json!([]); }
+        if let Some(arr) = state["branches"].as_array_mut() {
+            arr.push(entry.clone());
+        }
+        write_state("swarm-branches", &state);
+        Ok(entry)
+    }
+
+    pub fn list_branches() -> Vec<Value> {
+        read_state("swarm-branches")["branches"].as_array().cloned().unwrap_or_default()
+    }
+
+    /// Merge a branch back into parent by overwriting the parent RVF store.
+    pub fn merge_branch(name: &str, parent: &str) -> Result<Value, String> {
+        let branch_dir = root().join(".claude-flow/branches");
+        let branch_path = branch_dir.join(format!("{name}.rvf"));
+        if !branch_path.exists() {
+            return Err(format!("branch '{name}' not found"));
+        }
+        fs::copy(&branch_path, parent).map_err(|e| e.to_string())?;
+        let entry = json!({"merged": name, "into": parent, "at": now_ms()});
+        let mut state = read_state("swarm-branches");
+        if let Some(arr) = state["branches"].as_array_mut() {
+            arr.retain(|b| b["name"].as_str() != Some(name));
+        }
+        write_state("swarm-branches", &state);
+        Ok(entry)
+    }
+
+    /// Query vectors in a branch (opens the branch RVF store for k-NN).
+    pub fn query_branch(name: &str, query_vec: &[f32], limit: usize) -> Result<Value, String> {
+        let branch_dir = root().join(".claude-flow/branches");
+        let branch_path = branch_dir.join(format!("{name}.rvf"));
+        if !branch_path.exists() {
+            return Err(format!("branch '{name}' not found"));
+        }
+        let config = ruflo_storage::AgentDbFixtureConfig::new(384);
+        let store = ruflo_storage::RvfPersistencePort::open_agentdb(&branch_path, config)
+            .map_err(|e| e.to_string())?;
+        let matches = store.search_agentdb(query_vec, limit).map_err(|e| e.to_string())?;
+        let results: Vec<Value> = matches.iter().map(|m| {
+            json!({"id": m.id, "distance": m.distance})
+        }).collect();
+        Ok(json!({"branch": name, "matches": results.len(), "results": results}))
+    }
+}
+
+/// checkpoint-gate behavioral: snapshot + conditional rollback via RVF file copy.
+pub mod checkpoint_v2 {
+    use super::*;
+
+    /// Create a checkpoint by copying the current RVF store to a snapshot.
+    pub fn checkpoint(store_path: &str, label: &str) -> Result<Value, String> {
+        let ckpt_dir = root().join(".claude-flow/checkpoints");
+        let _ = fs::create_dir_all(&ckpt_dir);
+        let ckpt_path = ckpt_dir.join(format!("{label}-{}.rvf", now_ms()));
+        let src = std::path::Path::new(store_path);
+        if src.exists() {
+            fs::copy(src, &ckpt_path).map_err(|e| e.to_string())?;
+        }
+        let entry = json!({
+            "label": label, "store": store_path,
+            "checkpoint": ckpt_path.display().to_string(),
+            "createdAt": now_ms(),
+        });
+        let mut state = read_state("checkpoints");
+        ensure_arr(&mut state, "checkpoints").push(entry.clone());
+        write_state("checkpoints", &state);
+        Ok(entry)
+    }
+
+    /// Rollback to a checkpoint by restoring the snapshot.
+    pub fn rollback(label: &str, store_path: &str) -> Result<Value, String> {
+        let state = read_state("checkpoints");
+        let ckpt = state["checkpoints"].as_array()
+            .and_then(|arr| arr.iter().rev().find(|c| c["label"].as_str() == Some(label)))
+            .cloned()
+            .ok_or_else(|| format!("checkpoint '{label}' not found"))?;
+        let ckpt_path = ckpt["checkpoint"].as_str().ok_or("missing path")?;
+        let src = std::path::Path::new(ckpt_path);
+        if src.exists() {
+            fs::copy(src, store_path).map_err(|e| e.to_string())?;
+        }
+        Ok(json!({"rolled": label, "restored": store_path, "at": now_ms()}))
+    }
+
+    /// Conditional rollback: only restore if a quality check fails.
+    pub fn rollback_on_fail(label: &str, store_path: &str, quality: f64, threshold: f64) -> Result<Value, String> {
+        if quality >= threshold {
+            return Ok(json!({"action": "keep", "quality": quality, "threshold": threshold}));
+        }
+        rollback(label, store_path)
+    }
+}
+
+/// git-workspace-identity behavioral: resolve repo identity shared across worktrees.
+pub mod git_identity_v2 {
+    use super::*;
+    /// Compute a stable repo identity from git config (shared across worktrees).
+    /// This is the #2661 fanout fix: all worktrees of the same repo get the same identity.
+    pub fn repo_identity() -> String {
+        // Try git common-dir (shared across worktrees).
+        let common_dir = std::process::Command::new("git")
+            .args(["rev-parse", "--git-common-dir"])
+            .output()
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .filter(|s| !s.is_empty());
+        let remote = std::process::Command::new("git")
+            .args(["config", "--get", "remote.origin.url"])
+            .output()
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .filter(|s| !s.is_empty());
+        // Identity = SHA-256 of (remote URL or common-dir).
+        use sha2::{Digest, Sha256};
+        let id_source = remote.or(common_dir).unwrap_or_else(|| "unknown".into());
+        let hash = Sha256::digest(id_source.as_bytes());
+        hash.iter().map(|b| format!("{b:02x}")).collect::<String>()[..16].to_string()
+    }
+
+    /// Check if two paths belong to the same repo (shared identity).
+    pub fn same_repo(path_a: &str, path_b: &str) -> bool {
+        let id_a = std::process::Command::new("git")
+            .args(["-C", path_a, "config", "--get", "remote.origin.url"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default();
+        let id_b = std::process::Command::new("git")
+            .args(["-C", path_b, "config", "--get", "remote.origin.url"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default();
+        !id_a.is_empty() && id_a == id_b
+    }
+}
