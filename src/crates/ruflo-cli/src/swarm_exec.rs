@@ -54,6 +54,7 @@ pub fn worker_prompt(objective: &str, worker_idx: usize, n_workers: usize, role:
 }
 
 /// Sanitize the environment: strip credential-like vars unless keep_env.
+#[allow(dead_code)]
 fn sanitized_env(keep_env: bool) -> Vec<(String, String)> {
     if keep_env {
         return std::env::vars().collect();
@@ -103,6 +104,7 @@ pub struct WorkerResult {
     pub stdout: String,
     pub stderr: String,
     pub exit_code: i32,
+    #[allow(dead_code)]
     pub timed_out: bool,
 }
 

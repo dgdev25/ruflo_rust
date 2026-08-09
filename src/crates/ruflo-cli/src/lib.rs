@@ -1933,6 +1933,7 @@ fn migrate_directory(
     Ok(format!("Migrated {src_rel} -> {dst_rel}"))
 }
 
+#[allow(dead_code)]
 fn swarm_worker_plan(swarm: &lifecycle::SwarmRecord, objective: &str) -> Vec<String> {
     let roles: &[&str] = match swarm.strategy.as_str() {
         "research" => &[

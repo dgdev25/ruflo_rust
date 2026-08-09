@@ -162,7 +162,7 @@ impl Dispatcher {
     }
 
     pub fn list_tools(&self, context: &RequestContext) -> Value {
-        let tools = self
+        let mut tools = self
             .registry
             .iter()
             .filter(|tool| {
@@ -172,17 +172,46 @@ impl Dispatcher {
             .filter(|tool| context.allows_capability(&tool.definition.capability.name))
             .map(|tool| tool.definition.json_schema())
             .collect::<Vec<_>>();
+        // Append the extended tool set definitions.
+        for (name, desc) in crate::tools_extra::definitions() {
+            tools.push(json!({
+                "name": name,
+                "description": desc,
+                "inputSchema": {"type": "object", "properties": {}},
+            }));
+        }
         json!({ "tools": tools })
     }
 
     pub fn call(&self, context: RequestContext, call: ToolCall) -> Result<ToolResult, RufloError> {
+        // Check core registry first.
         let tool = self
             .registry
             .iter()
-            .find(|tool| tool.definition.name == call.name)
-            .ok_or_else(|| {
-                RufloError::invalid_input("tool.not_found", format!("unknown tool `{}`", call.name))
-            })?;
+            .find(|tool| tool.definition.name == call.name);
+
+        // If not in core registry, check the extended tool set (tools_extra).
+        let is_extra = tool.is_none()
+            && crate::tools_extra::definitions()
+                .iter()
+                .any(|(name, _)| *name == call.name);
+        if is_extra {
+            // Authorize then dispatch to tools_extra.
+            self.policy.authorize_request(
+                &context.caller,
+                &call.name,
+                DispatchRequest {
+                    request_bytes: context.request_bytes,
+                    active_executions: context.active_executions,
+                    duration_ms: context.duration_ms,
+                },
+            )?;
+            return crate::tools_extra::handle(&call.name, &call.arguments);
+        }
+
+        let tool = tool.ok_or_else(|| {
+            RufloError::invalid_input("tool.not_found", format!("unknown tool `{}`", call.name))
+        })?;
 
         self.policy.authorize_request(
             &context.caller,
