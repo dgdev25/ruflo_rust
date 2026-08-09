@@ -178,6 +178,10 @@ fn run_stdio(binary: &str, input_lines: &[&str]) -> Output {
 }
 
 fn executable_path(binary: &str) -> PathBuf {
+    if let Some(executable) = std::env::var_os(smoke_bin_var(binary)) {
+        return executable.into();
+    }
+
     if let Some(executable) = std::env::var_os(cargo_bin_var(binary)) {
         return executable.into();
     }
@@ -224,6 +228,17 @@ fn build_workspace_binary(binary: &str) {
 
 fn cargo_bin_var(binary: &str) -> String {
     format!("CARGO_BIN_EXE_{}", binary.replace('-', "_"))
+}
+
+/// An explicit executable takes precedence in release CI so this smoke test
+/// exercises the same feature set that will be archived. In particular, the
+/// Windows release intentionally omits static ONNX Runtime and must never
+/// trigger an incidental default-feature child build.
+fn smoke_bin_var(binary: &str) -> String {
+    format!(
+        "RUFLO_SMOKE_BIN_{}",
+        binary.replace('-', "_").to_uppercase()
+    )
 }
 
 fn binary_package(binary: &str) -> &'static str {

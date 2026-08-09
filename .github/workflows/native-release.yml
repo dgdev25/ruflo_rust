@@ -48,14 +48,21 @@ jobs:
         with:
           toolchain: 1.97.0
           targets: ${{ matrix.target }}
-      - name: Test platform contract
+      - name: Build Windows CLI smoke binaries without ONNX
+        if: runner.os == 'Windows'
         shell: bash
-        run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            cargo test --test platform_hooks --no-default-features
-          else
-            cargo test --test platform_hooks
-          fi
+        run: cargo build -p ruflo -p claude-flow --no-default-features
+      - name: Test Windows platform contract
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          RUFLO_SMOKE_BIN_RUFLO: ${{ github.workspace }}/target/debug/ruflo.exe
+          RUFLO_SMOKE_BIN_CLAUDE_FLOW: ${{ github.workspace }}/target/debug/claude-flow.exe
+        run: cargo test --test platform_hooks --no-default-features
+      - name: Test POSIX platform contract
+        if: runner.os != 'Windows'
+        shell: bash
+        run: cargo test --test platform_hooks
       - name: Build public aliases and N-API addon
         shell: bash
         run: |
