@@ -798,11 +798,14 @@ Subcommands:
         Ok(ParsedCommand::MemoryStats { path }) => match open_memory_store(path.as_deref())
             .and_then(|store| {
                 let database_path = store.database_path().display().to_string();
-                store.stats().map(|stats| (database_path, stats))
+                let semantic_backend = store
+                    .backend_tag()
+                    .unwrap_or_else(|| "not-built".to_string());
+                store.stats().map(|stats| (database_path, semantic_backend, stats))
             }) {
-            Ok((database_path, stats)) => {
+            Ok((database_path, semantic_backend, stats)) => {
                 println!(
-                    "Memory Statistics\nBackend: SQLite metadata projection (semantic RVF CLI wiring pending)\nTotal Entries: {}\nEntries With Vectors: {}\nContent Bytes: {}\nLocation: {}",
+                    "Memory Statistics\nBackend: SQLite metadata + RVF semantic index ({semantic_backend})\nTotal Entries: {}\nEntries With Vectors: {}\nContent Bytes: {}\nLocation: {}",
                     stats.total_entries,
                     stats.entries_with_vectors,
                     stats.total_content_bytes,
