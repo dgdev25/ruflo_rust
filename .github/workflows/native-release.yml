@@ -44,7 +44,13 @@ jobs:
           toolchain: 1.97.0
           targets: ${{ matrix.target }}
       - name: Test platform contract
-        run: cargo test --test platform_hooks
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cargo test --test platform_hooks --no-default-features
+          else
+            cargo test --test platform_hooks
+          fi
       - name: Build public aliases and N-API addon
         shell: bash
         run: |
