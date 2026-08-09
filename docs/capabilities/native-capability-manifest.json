@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "claim": "partial-native-parity",
+  "generatedFrom": "docs/audits/audit-2026-08-09-3.md",
+  "capabilities": [
+    {"name": "cli-unsupported-failure", "status": "verified"},
+    {"name": "mcp-typed-discovery", "status": "verified"},
+    {"name": "session-only-auth", "status": "verified"},
+    {"name": "native-declarative-plugins", "status": "verified"},
+    {"name": "provider-connectivity", "status": "verified"},
+    {"name": "populated-memory-migration", "status": "verified"},
+    {"name": "semantic-bge-ranking-parity", "status": "unproven"},
+    {"name": "napi-platform-packages", "status": "unproven"},
+    {"name": "signed-sbom-release-bundles", "status": "unproven"}
+  ]
+}
