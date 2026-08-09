@@ -49,7 +49,7 @@ fn router_config_file(root: &Path) -> PathBuf {
 }
 
 fn router_decisions_file(root: &Path) -> PathBuf {
-    neural_dir(root).join("router-decisions.jsonl")
+    root.join(".claude-flow/router_decisions.jsonl")
 }
 
 fn read_json(path: &Path) -> Value {

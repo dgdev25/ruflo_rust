@@ -1333,6 +1333,34 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
                 .and_then(|v| v.parse::<usize>().ok()),
         }));
     }
+    if normalized.first() == Some(&"route") {
+        let operation = normalized.get(1).copied().unwrap_or("").to_string();
+        let task = option_value(&args, "--task", "-t")
+            .or_else(|| {
+                // Bare positional: `route task "description"`
+                if operation == "task" {
+                    normalized.get(2).map(|s| s.to_string())
+                } else {
+                    None
+                }
+            });
+        let success = if args.iter().any(|v| matches!(v.as_str(), "--success")) {
+            Some(true)
+        } else if args.iter().any(|v| matches!(v.as_str(), "--failure")) {
+            Some(false)
+        } else {
+            None
+        };
+        return Ok(ParsedCommand::Route(crate::route::RouteCommand {
+            operation,
+            task,
+            agent: option_value(&args, "--agent", "-a"),
+            success,
+            seed: option_value(&args, "--seed", "--seed")
+                .and_then(|v| v.parse::<u64>().ok()),
+            json: args.iter().any(|v| v == "--json" || v == "--format=json"),
+        }));
+    }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "store" {
         let key = option_value(&args, "--key", "-k").ok_or("memory key is required")?;
         let value = option_value(&args, "--value", "--value")
