@@ -4,7 +4,7 @@
 set -uo pipefail
 
 NODE="node /mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/bin/cli.js"
-RUST="/mnt/datadisk/dev/ruflo_rustv1/target/release/ruflo"
+RUST="/mnt/datadisk/dev/ruflo_rust/target/release/ruflo"
 ITERS=10
 T=$(mktemp -d)
 mkdir -p "$T/src"; echo 'const x="sk_live_1234567890abcdefghijkl";eval(y);' > "$T/src/app.js"
@@ -50,7 +50,7 @@ bench "Rust memory store"      $RUST memory store --key bench --value test --pat
 echo
 echo "--- Footprint ---"
 NODE_SIZE=$(du -sh /mnt/datadisk/dev/ruflo/v3/node_modules 2>/dev/null | cut -f1)
-RUST_SIZE=$(ls -lh /mnt/datadisk/dev/ruflo_rustv1/target/release/ruflo | awk '{print $5}')
+RUST_SIZE=$(ls -lh /mnt/datadisk/dev/ruflo_rust/target/release/ruflo | awk '{print $5}')
 printf "  Node node_modules: %-8s\n" "$NODE_SIZE"
 printf "  Rust binary:       %-8s\n" "$RUST_SIZE"
 echo

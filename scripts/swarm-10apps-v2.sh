@@ -3,7 +3,7 @@
 # simpler codex objectives. ruflo commands run AFTER the swarm build.
 set -uo pipefail  # no -e: continue on failure
 
-RUFLO="${1:-/mnt/datadisk/dev/ruflo_rustv1/target/release/ruflo}"
+RUFLO="${1:-/mnt/datadisk/dev/ruflo_rust/target/release/ruflo}"
 ROOT="/tmp/ruflo-swarm-test2"
 mkdir -p "$ROOT"
 PASS=0; FAIL=0

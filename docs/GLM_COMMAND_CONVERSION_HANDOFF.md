@@ -15,10 +15,10 @@ made.
 
 ## Current state: read this before editing
 
-- Repository: `/mnt/datadisk/dev/ruflo_rustv1`
+- Repository: `/mnt/datadisk/dev/ruflo_rust`
 - Branch: `main`
 - Current committed HEAD: `2a10906`
-- Remote: `origin` (`https://github.com/dgdev25/ruflo_rustv1.git`)
+- Remote: `origin` (`https://github.com/dgdev25/ruflo_rust.git`)
 - Official conversion total: **0/53 signed off**. Every command checkbox is still open.
 - About **18/53 families have some native Rust surface**, but most are incomplete.
 - The working tree contains substantial uncommitted conversion work and runtime-generated untracked
@@ -86,7 +86,7 @@ After addressing every finding, invoke Codex again to run the tests and inspect 
 codex exec \
   -m gpt-5.6-sol \
   -c 'model_reasoning_effort="medium"' \
-  -C /mnt/datadisk/dev/ruflo_rustv1 \
+  -C /mnt/datadisk/dev/ruflo_rust \
   "Independently test the <command> conversion. Run its focused unit and E2E tests through both ruflo and claude-flow, compare the fixture provenance and owning TypeScript source, run fmt and Clippy with warnings denied, and report exact commands/results. Do not edit files unless explicitly asked to fix a test-harness defect."
 ```
 
@@ -486,4 +486,3 @@ of scope for this session). This is an environment limitation, not a code gap.
 
 All 9 release gates pass. 368+ tests green (one pre-existing claims transient
 parallel-contention failure passes in isolation).
-

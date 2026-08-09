@@ -3,7 +3,7 @@
 # different ruflo-rust commands. Maximizes command coverage.
 set -euo pipefail
 
-RUFLO="${1:-/mnt/datadisk/dev/ruflo_rustv1/target/release/ruflo}"
+RUFLO="${1:-/mnt/datadisk/dev/ruflo_rust/target/release/ruflo}"
 ROOT="/tmp/ruflo-swarm-test"
 mkdir -p "$ROOT"
 PASS=0; FAIL=0

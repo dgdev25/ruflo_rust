@@ -190,7 +190,7 @@ CI workflows in `.github/workflows/` handle both paths automatically.
 ## Project Structure
 
 ```
-ruflo_rustv1/
+ruflo_rust/
 ├── src/
 │   ├── crates/
 │   │   ├── ruflo-cli/        # Commands, services, SONA, swarm, security

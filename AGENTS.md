@@ -1,4 +1,4 @@
-# ruflo_rustv1
+# ruflo_rust
 
 > Multi-agent orchestration framework for agentic coding
 

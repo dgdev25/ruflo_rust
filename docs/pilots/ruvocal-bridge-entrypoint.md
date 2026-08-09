@@ -13,7 +13,7 @@ The bridge received:
 
 ```text
 MCP_GROUP_INTELLIGENCE=false
-RUFLO_MCP_COMMAND=/mnt/datadisk/dev/ruflo_rustv1/target/debug/ruflo
+RUFLO_MCP_COMMAND=/mnt/datadisk/dev/ruflo_rust/target/debug/ruflo
 ```
 
 It started exactly one Ruflo backend, performed MCP initialization and
@@ -41,7 +41,7 @@ The same entrypoint was restarted with:
 ```text
 MCP_GROUP_INTELLIGENCE=false
 ENABLE_RUFLO=false
-RUFLO_MCP_COMMAND=/mnt/datadisk/dev/ruflo_rustv1/target/debug/ruflo
+RUFLO_MCP_COMMAND=/mnt/datadisk/dev/ruflo_rust/target/debug/ruflo
 ```
 
 The health endpoint reported zero external tools and no Ruflo backend; the MCP
