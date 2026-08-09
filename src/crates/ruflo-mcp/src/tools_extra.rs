@@ -117,6 +117,15 @@ pub fn definitions() -> Vec<(&'static str, &'static str)> {
         // Auth
         ("auth_status", "Show auth profile status."),
         ("auth_login_token", "Store a pre-obtained auth token (--token-stdin)."),
+        // Batch 2 — real native logic
+        ("memory_vector_search", "Semantic k-NN search over the RVF HNSW store."),
+        ("memory_stats", "Memory store entry counts + HNSW index status."),
+        ("security_scan_code", "Regex-based secret/vuln scan of a source string."),
+        ("code_symbols", "Extract function/class/struct/import symbols from source."),
+        ("hooks_route_task", "Keyword-based task→agent routing suggestion."),
+        ("benchmark_hash", "Time a hash-vectorizer embedding (latency probe)."),
+        ("providers_list", "List configured LLM providers."),
+        ("random_uuid", "Generate a v4 UUID (RFC 4122)."),
     ]
 }
 
@@ -469,6 +478,101 @@ pub fn handle(name: &str, args: &Value) -> Result<ToolResult, RufloError> {
             Ok(ToolResult::text(format!("logged in as {profile}"),
                 Some(json!({"profile": profile}))))
         }
+        // ---- Batch 2: real native logic ----
+        "memory_vector_search" => {
+            let query = req_str(args, "query")?;
+            let limit = opt_u64(args, "limit").unwrap_or(5) as usize;
+            let dim = opt_u64(args, "dim").unwrap_or(384) as u16;
+            let db = opt_str(args, "dbPath").unwrap_or_else(|| ".swarm/memory.rvf".into());
+            let path = std::path::Path::new(&db);
+            if !path.exists() {
+                return Err(RufloError::invalid_input("memory.store", format!("RVF store not found: {db}")));
+            }
+            let config = ruflo_storage::AgentDbFixtureConfig::new(dim);
+            let store = ruflo_storage::RvfPersistencePort::open_agentdb(path, config)
+                .map_err(|e| RufloError::invalid_input("memory.open", e.to_string()))?;
+            let (qvec, method) = inline_embed(&query, dim as usize);
+            let qf32: Vec<f32> = qvec.iter().map(|x| *x as f32).collect();
+            let matches = store.search_agentdb(&qf32, limit)
+                .map_err(|e| RufloError::invalid_input("memory.search", e.to_string()))?;
+            let results: Vec<Value> = matches.into_iter().map(|m| {
+                let sim = (1.0 - m.distance).clamp(-1.0, 1.0);
+                json!({"id": m.id, "distance": m.distance, "similarity": sim})
+            }).collect();
+            Ok(ToolResult::text(format!("{} match (via {method})", results.len()),
+                Some(json!({"results": results, "method": method}))))
+        }
+        "memory_stats" => {
+            let db = opt_str(args, "dbPath").unwrap_or_else(|| ".swarm/memory.rvf".into());
+            let path = std::path::Path::new(&db);
+            if !path.exists() {
+                return Ok(ToolResult::text("store absent",
+                    Some(json!({"exists": false, "path": db}))));
+            }
+            let config = ruflo_storage::AgentDbFixtureConfig::new(384);
+            let store = ruflo_storage::RvfPersistencePort::open_agentdb(path, config)
+                .map_err(|e| RufloError::invalid_input("memory.open", e.to_string()))?;
+            let status = store.status();
+            Ok(ToolResult::text(format!("{} vectors", status.total_vectors),
+                Some(json!({
+                    "exists": true, "totalVectors": status.total_vectors,
+                    "epoch": status.current_epoch, "readOnly": status.read_only,
+                }))))
+        }
+        "security_scan_code" => {
+            let code = req_str(args, "code")?;
+            let findings = security_scan(&code);
+            let n = findings.len();
+            Ok(ToolResult::text(format!("{n} finding(s)"),
+                Some(json!({"findings": findings, "count": n}))))
+        }
+        "code_symbols" => {
+            let source = req_str(args, "source")?;
+            let lang = opt_str(args, "language").unwrap_or_else(|| infer_lang(&source));
+            let symbols = extract_symbols(&source, &lang);
+            Ok(ToolResult::text(
+                format!("{} fn, {} class, {} struct",
+                    symbols["functions"].as_array().map(|a| a.len()).unwrap_or(0),
+                    symbols["classes"].as_array().map(|a| a.len()).unwrap_or(0),
+                    symbols["structs"].as_array().map(|a| a.len()).unwrap_or(0)),
+                Some(symbols)))
+        }
+        "hooks_route_task" => {
+            let task = req_str(args, "task")?;
+            let agent = route_keyword(&task);
+            Ok(ToolResult::text(format!("suggested agent: {agent}"),
+                Some(json!({"agent": agent, "task": task}))))
+        }
+        "benchmark_hash" => {
+            let text = req_str(args, "text")?;
+            let iters = opt_u64(args, "iterations").unwrap_or(1000) as usize;
+            let dim = opt_u64(args, "dim").unwrap_or(384) as usize;
+            let start = std::time::Instant::now();
+            for _ in 0..iters {
+                let _ = inline_embed(&text, dim);
+            }
+            let elapsed = start.elapsed();
+            Ok(ToolResult::text(format!("{iters} embeds in {:.2?}", elapsed),
+                Some(json!({
+                    "iterations": iters, "secs": elapsed.as_secs_f64(),
+                    "perOpMicros": (elapsed.as_secs_f64() / iters as f64) * 1e6,
+                }))))
+        }
+        "providers_list" => {
+            // Read providers from settings if present.
+            let st = read_state("providers.json");
+            let providers = st["providers"].as_array().cloned().unwrap_or_else(|| {
+                vec![json!({"id": "claude-code", "type": "subscription"}),
+                     json!({"id": "openai", "type": "api-key"}),
+                     json!({"id": "gemini", "type": "api-key"}),
+                     json!({"id": "ollama", "type": "local"})]
+            });
+            Ok(ToolResult::text(format!("{} provider(s)", providers.len()),
+                Some(json!({"providers": providers}))))
+        }
+        "random_uuid" => {
+            Ok(ToolResult::text("uuid", Some(json!({"uuid": uuid_v4()}))))
+        }
         _ => Err(RufloError::invalid_input("tool.not_found", format!("unknown tool: {name}"))),
     }
 }
@@ -577,6 +681,134 @@ fn base32_lower(bytes: &[u8]) -> String {
     out
 }
 
+// ---- Batch 2 helpers ----
+
+/// Regex-free secret/vulnerability scan. Detects common high-signal patterns:
+/// hardcoded API keys, passwords, tokens, eval/exec sinks, SQL string concat.
+fn security_scan(code: &str) -> Vec<Value> {
+    let mut out = Vec::new();
+    let lower = code.to_lowercase();
+    let secret_patterns = [
+        ("AWS Access Key", r#"AKIA[0-9A-Z]{16}"#),
+        ("GitHub Token", r#"gh[pousr]_[A-Za-z0-9]{36}"#),
+        ("OpenAI API Key", r#"sk-[A-Za-z0-9]{20,}"#),
+        ("Generic API key assignment", r#"(?i)api[_-]?key\s*[:=]\s*["'][A-Za-z0-9]{16,}["']"#),
+        ("Password assignment", r#"(?i)password\s*[:=]\s*["'][^"']{4,}["']"#),
+        ("Bearer token", r#"(?i)bearer\s+[A-Za-z0-9._-]{20,}"#),
+        ("Private key block", r#"-----BEGIN (RSA |EC |OPENSSH |)PRIVATE KEY-----"#),
+    ];
+    for (label, pat) in secret_patterns {
+        if let Ok(re) = regex_lite(pat) {
+            if re.is_match(code) {
+                out.push(json!({"type": "secret", "label": label, "severity": "high"}));
+            }
+        }
+    }
+    // Dangerous sinks.
+    let sinks = [
+        ("eval()", "eval("),
+        ("Function constructor", "new Function("),
+        ("exec / execSync (shell)", "execSync("),
+        ("child_process exec", "child_process"),
+        ("innerHTML assignment", ".innerHTML"),
+        ("document.write", "document.write("),
+        ("SQL string concatenation", "SELECT * FROM"),
+    ];
+    for (label, needle) in sinks {
+        if lower.contains(&needle.to_lowercase()) {
+            out.push(json!({"type": "sink", "label": label, "severity": "medium"}));
+        }
+    }
+    out
+}
+
+fn regex_lite(pat: &str) -> Result<regex::Regex, regex::Error> {
+    regex::Regex::new(pat)
+}
+
+fn infer_lang(source: &str) -> String {
+    if source.contains("fn ") && source.contains("let ") { "rust".into() }
+    else if source.contains("function ") || source.contains("const ") { "typescript".into() }
+    else if source.contains("def ") { "python".into() }
+    else { "unknown".into() }
+}
+
+fn extract_symbols(source: &str, lang: &str) -> Value {
+    let func_re = match lang {
+        "rust" => regex_lite(r"(?m)^\s*(?:pub\s+)?(?:async\s+)?fn\s+(\w+)").ok(),
+        "typescript" | "javascript" => regex_lite(r"\b(?:function|const)\s+(\w+)").ok(),
+        "python" => regex_lite(r"(?m)^\s*def\s+(\w+)").ok(),
+        _ => None,
+    };
+    let functions: Vec<String> = func_re
+        .map(|re| re.captures_iter(source)
+            .filter_map(|c| c.get(1).map(|m| m.as_str().to_string()))
+            .collect())
+        .unwrap_or_default();
+    let mut classes = Vec::new();
+    let mut structs = Vec::new();
+    if lang == "rust" {
+        if let Ok(re) = regex_lite(r"(?m)^\s*(?:pub\s+)?struct\s+(\w+)") {
+            for c in re.captures_iter(source) {
+                if let Some(m) = c.get(1) { structs.push(m.as_str().to_string()); }
+            }
+        }
+        if let Ok(re) = regex_lite(r"(?m)^\s*(?:pub\s+)?(?:enum|trait)\s+(\w+)") {
+            for c in re.captures_iter(source) {
+                if let Some(m) = c.get(1) { classes.push(m.as_str().to_string()); }
+            }
+        }
+    } else if matches!(lang, "typescript" | "javascript") {
+        if let Ok(re) = regex_lite(r"\b(?:class|interface)\s+(\w+)") {
+            for c in re.captures_iter(source) {
+                if let Some(m) = c.get(1) { classes.push(m.as_str().to_string()); }
+            }
+        }
+    }
+    json!({
+        "language": lang, "functions": functions,
+        "classes": classes, "structs": structs,
+    })
+}
+
+fn route_keyword(task: &str) -> String {
+    let t = task.to_lowercase();
+    let rules: &[(&str, &str)] = &[
+        ("security|vuln|cve|exploit", "security-architect"),
+        ("refactor|cleanup|simplif", "coder"),
+        ("test|spec|coverage", "tester"),
+        ("review|audit|inspect", "reviewer"),
+        ("perf|benchmark|optimi", "perf-engineer"),
+        ("research|investigat|analy", "researcher"),
+        ("design|architect|plan", "system-architect"),
+        ("deploy|release|publish", "release-manager"),
+    ];
+    for (pat, agent) in rules {
+        if let Ok(re) = regex_lite(&format!("(?i){pat}")) {
+            if re.is_match(&t) {
+                return agent.to_string();
+            }
+        }
+    }
+    "coder".into()
+}
+
+/// RFC 4122 v4 UUID using the inline PRNG.
+fn uuid_v4() -> String {
+    let mut b = [0u8; 16];
+    for i in 0..16 {
+        b[i] = (pseudo_rand_simple() * 256.0) as u8;
+    }
+    // Version + variant bits.
+    b[6] = (b[6] & 0x0F) | 0x40;
+    b[8] = (b[8] & 0x3F) | 0x80;
+    format!(
+        "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+        b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+        b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -621,5 +853,57 @@ mod tests {
         // instead assert the definitions + sampler shape only.
         let _ = st;
         let _ = sample_beta_simple(2.0, 2.0);
+    }
+}
+
+#[cfg(test)]
+mod batch2_tests {
+    use super::*;
+
+    #[test]
+    fn batch2_definitions_present() {
+        let names: Vec<&str> = definitions().iter().map(|(n, _)| *n).collect();
+        for r in ["memory_vector_search", "memory_stats", "security_scan_code",
+                  "code_symbols", "hooks_route_task", "benchmark_hash",
+                  "providers_list", "random_uuid"] {
+            assert!(names.contains(&r), "missing {r}");
+        }
+    }
+
+    #[test]
+    fn security_scan_finds_aws_key() {
+        let code = "const key = \"AKIAIOSFODNN7EXAMPLE\";";
+        let f = security_scan(code);
+        assert!(f.iter().any(|x| x["label"].as_str().unwrap_or("").contains("AWS")));
+    }
+
+    #[test]
+    fn security_scan_finds_eval() {
+        let f = security_scan("eval(userInput);");
+        assert!(f.iter().any(|x| x["type"].as_str() == Some("sink")));
+    }
+
+    #[test]
+    fn route_keyword_picks_security() {
+        assert_eq!(route_keyword("audit this for security vulns"), "security-architect");
+        assert_eq!(route_keyword("write tests for the module"), "tester");
+        assert_eq!(route_keyword("do something"), "coder");
+    }
+
+    #[test]
+    fn uuid_v4_format() {
+        let u = uuid_v4();
+        assert_eq!(u.len(), 36);
+        // version nibble = 4
+        let v = u.as_bytes()[14];
+        assert_eq!(v, b'4');
+    }
+
+    #[test]
+    fn extract_symbols_rust() {
+        let src = "struct Foo {}\nfn bar() {}\npub fn baz() {}";
+        let s = extract_symbols(src, "rust");
+        assert_eq!(s["structs"].as_array().unwrap().len(), 1);
+        assert_eq!(s["functions"].as_array().unwrap().len(), 2);
     }
 }
