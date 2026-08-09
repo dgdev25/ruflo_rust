@@ -46,7 +46,14 @@ jobs:
       - name: Test platform contract
         run: cargo test --test platform_hooks
       - name: Build public aliases and N-API addon
-        run: cargo build --release --target ${{ matrix.target }} -p ruflo -p claude-flow -p ruflo-napi
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cargo build --release --target ${{ matrix.target }} -p ruflo -p claude-flow --no-default-features
+          else
+            cargo build --release --target ${{ matrix.target }} -p ruflo -p claude-flow
+          fi
+          cargo build --release --target ${{ matrix.target }} -p ruflo-napi
       - name: Verify portable N-API loader contract
         run: node --test packages/ruflo-native/test/platform.test.js
       - name: Stage POSIX archive

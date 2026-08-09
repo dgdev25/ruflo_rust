@@ -200,18 +200,23 @@ fn build_workspace_binary(binary: &str) {
         return;
     }
 
-    let status = Command::new(env!("CARGO"))
-        .current_dir(repo_root())
-        .args([
-            "build",
-            "--quiet",
-            "--package",
-            binary_package(binary),
-            "--bin",
-            binary,
-        ])
-        .status()
-        .unwrap();
+    let mut command = Command::new(env!("CARGO"));
+    command.current_dir(repo_root()).args([
+        "build",
+        "--quiet",
+        "--package",
+        binary_package(binary),
+        "--bin",
+        binary,
+    ]);
+    // The distributed Windows CLI intentionally omits ONNX Runtime because
+    // its bundled native library has an incompatible C runtime contract with
+    // the MSVC dependency graph. The no-ONNX implementation exposes the same
+    // safe API and fails closed for BGE-specific operations.
+    if cfg!(target_os = "windows") {
+        command.arg("--no-default-features");
+    }
+    let status = command.status().unwrap();
 
     assert!(status.success());
     built.push(binary.to_string());

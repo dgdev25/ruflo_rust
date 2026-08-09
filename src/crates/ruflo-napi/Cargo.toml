@@ -14,3 +14,6 @@ crate-type = ["cdylib"]
 napi = { workspace = true }
 napi-derive = { workspace = true }
 ruflo-core = { path = "../ruflo-core" }
+
+[build-dependencies]
+napi-build = "2"

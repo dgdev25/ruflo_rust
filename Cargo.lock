@@ -1691,6 +1691,7 @@ name = "ruflo-napi"
 version = "3.34.0"
 dependencies = [
  "napi",
+ "napi-build",
  "napi-derive",
  "ruflo-core",
 ]
