@@ -382,6 +382,18 @@ pub fn run_swarm(
             let prompt = worker_prompt(objective, i, n, roles[i]);
             let agent_for_thread = agent.to_string();
             let cwd_owned = cwd.to_path_buf();
+            let worker_id = format!("worker-{i}");
+            // Pheromone eligibility gate: skip workers below the APSC threshold.
+            if !crate::services::pheromone_v2::is_eligible(&worker_id) {
+                return std::thread::spawn(move || WorkerResult {
+                    worker_idx: i,
+                    agent: agent_for_thread,
+                    stdout: String::new(),
+                    stderr: "skipped: below pheromone APSC threshold".into(),
+                    exit_code: -2,
+                    timed_out: false,
+                });
+            }
             std::thread::spawn(move || {
                 spawn_worker_with_idx(i, &agent_for_thread, &prompt, &cwd_owned, keep_env)
             })

@@ -411,7 +411,21 @@ fn model_route(root: &Path, command: &HooksCommand) -> u8 {
         return 1;
     };
     let lower = task.to_lowercase();
-    let (model, tier) = if lower.contains("security") || lower.contains("architect") {
+    // Try V2 discriminative ranking first (uses learned_routing_v2 with term rarity).
+    let agents = vec!["coder".to_string(), "reviewer".to_string(), "tester".to_string(),
+                      "security-architect".to_string(), "researcher".to_string()];
+    let ranked = crate::services::learned_routing_v2::rank_agents(&lower, &agents);
+    let (model, tier) = if !ranked.is_empty() && ranked[0].1 > 0.0 {
+        // Use the top-ranked agent to pick a model tier.
+        let top = &ranked[0].0;
+        if top.contains("security") || top.contains("architect") {
+            ("opus", 3)
+        } else if top.contains("tester") || top.contains("researcher") {
+            ("haiku", 1)
+        } else {
+            ("sonnet", 2)
+        }
+    } else if lower.contains("security") || lower.contains("architect") {
         ("opus", 3)
     } else if lower.contains("fix") || lower.contains("test") || lower.contains("doc") {
         ("haiku", 1)
