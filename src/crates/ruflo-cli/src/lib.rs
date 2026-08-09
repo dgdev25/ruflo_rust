@@ -46,6 +46,7 @@ mod security;
 mod services;
 mod settings;
 mod small_modules;
+mod sona;
 mod swarm_exec;
 mod spinner;
 mod transfer_store;
