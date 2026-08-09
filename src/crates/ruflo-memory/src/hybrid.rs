@@ -139,22 +139,28 @@ pub fn cosine_similarity(left: &[f32], right: &[f32]) -> f64 {
     }
 }
 
+/// Node's exported min/max normalizer. A constant non-empty input becomes
+/// `0.5`; an empty input remains empty.
+pub fn normalise(scores: &[f64]) -> Vec<f64> {
+    if scores.is_empty() {
+        return Vec::new();
+    }
+    let low = scores.iter().copied().fold(f64::INFINITY, f64::min);
+    let high = scores.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    if (high - low) < 1e-9 {
+        vec![0.5; scores.len()]
+    } else {
+        scores
+            .iter()
+            .map(|score| (score - low) / (high - low))
+            .collect()
+    }
+}
+
 pub fn hybrid_scores(cosine: &[f64], bm25: &[f64], alpha: f64) -> Option<Vec<f64>> {
     if cosine.len() != bm25.len() || !(0.0..=1.0).contains(&alpha) {
         return None;
     }
-    let normalise = |scores: &[f64]| {
-        let low = scores.iter().copied().fold(f64::INFINITY, f64::min);
-        let high = scores.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-        if (high - low) < 1e-9 {
-            vec![0.5; scores.len()]
-        } else {
-            scores
-                .iter()
-                .map(|score| (score - low) / (high - low))
-                .collect()
-        }
-    };
     let cosine = normalise(cosine);
     let bm25 = normalise(bm25);
     Some(
@@ -183,23 +189,22 @@ pub fn mmr_rerank<T: Clone>(
     }
     let mut chosen = Vec::new();
     while chosen.len() < limit && !candidates.is_empty() {
-        let (best, _) = candidates
-            .iter()
-            .enumerate()
-            .map(|(index, candidate)| {
-                let duplicate = chosen
-                    .iter()
-                    .map(|picked: &Ranked<T>| {
-                        cosine_similarity(&candidate.embedding, &picked.embedding)
-                    })
-                    .fold(0.0, f64::max);
-                (
-                    index,
-                    lambda * candidate.relevance - (1.0 - lambda) * duplicate,
-                )
-            })
-            .max_by(|(_, left), (_, right)| left.total_cmp(right))
-            .unwrap();
+        let mut best = 0;
+        let mut best_score = f64::NEG_INFINITY;
+        for (index, candidate) in candidates.iter().enumerate() {
+            let duplicate = chosen
+                .iter()
+                .map(|picked: &Ranked<T>| {
+                    cosine_similarity(&candidate.embedding, &picked.embedding)
+                })
+                .fold(0.0, f64::max);
+            let score = lambda * candidate.relevance - (1.0 - lambda) * duplicate;
+            // Node uses `if (score > bestScore)`, preserving input order on a tie.
+            if score > best_score {
+                best = index;
+                best_score = score;
+            }
+        }
         chosen.push(candidates.remove(best));
     }
     chosen
@@ -279,5 +284,37 @@ mod tests {
         assert!(focused > release);
         assert_eq!(type_penalty(Some("Merge main"), 0.5), 0.5);
         assert_eq!(type_penalty(Some("feat(memory): rotate token"), 0.5), 1.0);
+    }
+
+    #[test]
+    fn matches_node_hybrid_source_vectors_and_tie_order() {
+        assert_eq!(
+            tokenize("Refactor src/Auth/middleware.ts to use jwt-verify!"),
+            vec!["refactor", "src/auth/middleware.ts", "use", "jwt-verify"]
+        );
+        assert_eq!(tokenize("the cat is on a mat"), vec!["cat", "mat"]);
+        assert_eq!(normalise(&[0.5, 0.5, 0.5]), vec![0.5, 0.5, 0.5]);
+        assert!(
+            hybrid_scores(&[0.1, 0.5, 0.9], &[3.0, 1.0, 0.0], 0.5).unwrap()[0]
+                > hybrid_scores(&[0.1, 0.5, 0.9], &[3.0, 1.0, 0.0], 0.5).unwrap()[1]
+        );
+
+        let ties = mmr_rerank(
+            vec![
+                Ranked {
+                    value: "first",
+                    embedding: vec![1.0, 0.0],
+                    relevance: 1.0,
+                },
+                Ranked {
+                    value: "second",
+                    embedding: vec![1.0, 0.0],
+                    relevance: 1.0,
+                },
+            ],
+            1,
+            1.0,
+        );
+        assert_eq!(ties[0].value, "first");
     }
 }
