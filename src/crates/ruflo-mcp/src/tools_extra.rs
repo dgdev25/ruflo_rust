@@ -68,6 +68,24 @@ fn opt_u64(args: &Value, key: &str) -> Option<u64> {
     args.get(key).and_then(|v| v.as_u64())
 }
 
+// ---- pub wrappers for the catalog module ----
+
+pub fn state_path_pub(name: &str) -> PathBuf {
+    state_file(name)
+}
+pub fn read_state_pub(name: &str) -> Value {
+    read_state(name)
+}
+pub fn write_state_pub(name: &str, v: &Value) -> Result<(), RufloError> {
+    write_state(name, v)
+}
+pub fn inline_embed_pub(text: &str, dim: usize) -> (Vec<f64>, &'static str) {
+    inline_embed(text, dim)
+}
+pub fn security_scan_pub(code: &str) -> Vec<Value> {
+    security_scan(code)
+}
+
 pub fn definitions() -> Vec<(&'static str, &'static str)> {
     vec![
         ("agent_execute", "Execute a task on a spawned agent."),

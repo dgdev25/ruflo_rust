@@ -160,6 +160,13 @@ impl Dispatcher {
                 Capability::supported(name, 1),
             ));
         }
+        // Register the full catalog (279 tools) in the policy.
+        for (name, _desc) in crate::tools_catalog::definitions() {
+            capabilities.push(RegisteredCapability::new(
+                name,
+                Capability::supported(name, 1),
+            ));
+        }
         let policy = ToolPolicy::from_config(&config, &capabilities)?;
         Ok(Self {
             config,
@@ -181,6 +188,16 @@ impl Dispatcher {
             .collect::<Vec<_>>();
         // Append the extended tool set definitions — respecting deny policy.
         for (name, desc) in crate::tools_extra::definitions() {
+            if self.policy.is_discoverable(&context.caller, name) {
+                tools.push(json!({
+                    "name": name,
+                    "description": desc,
+                    "inputSchema": {"type": "object", "properties": {}},
+                }));
+            }
+        }
+        // Append the full catalog (279 tools) — respecting deny policy.
+        for (name, desc) in crate::tools_catalog::definitions() {
             if self.policy.is_discoverable(&context.caller, name) {
                 tools.push(json!({
                     "name": name,
@@ -221,6 +238,26 @@ impl Dispatcher {
                 return Err(RufloError::unauthorized(&call.name));
             }
             return crate::tools_extra::handle(&call.name, &call.arguments);
+        }
+        // Fall back to the full catalog (279 tools).
+        let is_catalog = tool.is_none()
+            && crate::tools_catalog::definitions()
+                .iter()
+                .any(|(name, _)| *name == call.name);
+        if is_catalog {
+            self.policy.authorize_request(
+                &context.caller,
+                &call.name,
+                DispatchRequest {
+                    request_bytes: context.request_bytes,
+                    active_executions: context.active_executions,
+                    duration_ms: context.duration_ms,
+                },
+            )?;
+            if !context.allows_capability(&call.name) {
+                return Err(RufloError::unauthorized(&call.name));
+            }
+            return crate::tools_catalog::handle(&call.name, &call.arguments);
         }
 
         let tool = tool.ok_or_else(|| {

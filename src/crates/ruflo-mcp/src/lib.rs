@@ -1,5 +1,6 @@
 mod dispatcher;
 mod tools_extra;
+pub mod tools_catalog;
 #[cfg(feature = "stateless-http")]
 mod http;
 mod stdio;
