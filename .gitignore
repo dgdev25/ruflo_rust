@@ -17,3 +17,10 @@
 .env
 .env.local
 .env.*.local
+target/
+.build/
+.cargo-cache/
+*.rvf
+*.rvf.lock
+*.rvf.idmap.json
+ruvector.db
