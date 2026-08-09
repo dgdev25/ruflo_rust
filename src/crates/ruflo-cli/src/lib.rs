@@ -550,7 +550,7 @@ Subcommands:
   - pool          - Manage agent pool
   - health        - Show agent health
   - logs          - Show agent logs
-  - wasm-status   - Check WASM runtime availability
+  - wasm-status   - Check agent sandbox status
   - wasm-create   - Create a WASM-sandboxed agent
   - wasm-prompt   - Send a prompt to a WASM agent
   - wasm-gallery  - List WASM agent gallery templates

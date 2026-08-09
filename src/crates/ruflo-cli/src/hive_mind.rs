@@ -213,7 +213,7 @@ fn init(root: &Path, command: &HiveMindCommand) -> u8 {
     println!();
     println!("Queen agent is ready to coordinate worker agents.");
     println!("  Use \"ruflo hive-mind spawn\" to add workers");
-    println!("  Use \"ruflo hive-mind spawn --claude\" to launch Claude Code (Node runtime)");
+    println!("  Use \"ruflo hive-mind spawn --claude\" to launch Claude Code (native subprocess)");
     0
 }
 

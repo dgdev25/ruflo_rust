@@ -9,7 +9,7 @@
 //! shells out to `ruflo hooks <event>`, the native binary records the event to
 //! `.claude-flow/hooks-events.jsonl` and returns — exactly the side-effect a
 //! hook produces. The SONA/EWC learning that consumes those events runs in the
-//! Node daemon, so the *learning* step degrades but the *recording* is real and
+//! native learned-routing, so the learning step runs natively but the *recording* is real and
 //! queryable (`metrics`, `list`, `model-stats`). `route` does real keyword
 //! routing (Q-learning deferred) and `statusline` renders from persisted state.
 
@@ -102,7 +102,7 @@ fn write_json_atomic(path: &Path, v: &Value) -> bool {
     ok
 }
 
-// Static hook catalog (matches the hooks the Node runtime registers).
+// Static hook catalog (matches the hooks the native runtime registers).
 fn hook_catalog() -> &'static [(&'static str, &'static str)] {
     &[
         ("pre-edit", "PreToolUse"),

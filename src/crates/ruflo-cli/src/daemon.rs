@@ -7,7 +7,7 @@
 //!
 //! The actual worker event-loop is Node-based (ADR-0005: no JS runtime in the
 //! native build), so `start` cannot fork that loop. What native CAN do — and
-//! does here — is manage the SAME state files the Node daemon uses, so:
+//! does here — is manage the SAME state files the daemon uses, so:
 //!   - `status` / `stop` reflect and control a Node-started daemon,
 //!   - `budget show|pause|resume` is fully functional (atomic ledger mutation
 //!     with the same file layout, limits, and circuit-breaker semantics),
@@ -16,7 +16,7 @@
 //!
 //! Budget state lives at `~/.claude-flow/ai-budget.json` (override
 //! `RUFLO_AI_BUDGET_DIR`), matching the TS service exactly so a native pause is
-//! honored by a Node daemon and vice versa.
+//! honored by any daemon instance.
 
 use std::fs;
 use std::io::Write;

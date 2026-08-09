@@ -6,7 +6,7 @@
 //!
 //! The TS source trains via RuVector WASM (MicroLoRA + Flash Attention) and a
 //! @ruvector/ruvllm native TrainingPipeline, backed by an ONNX model and an
-//! HNSW pattern index. ADR-0005 forbids a JS/ONNX/WASM runtime in the native
+//! HNSW pattern index. ADR-0005 originally forbade a JS runtime; native now uses ONNX (ort) + SONA in the
 //! build, so the WASM training leg cannot run here. Native manages the SAME
 //! persisted state the Node training loop writes (`.claude-flow/neural/`:
 //! `stats.json`, `patterns.json`, `models/`, router config + decisions log) so

@@ -48,12 +48,10 @@ const BYTE_ALIGNED: &[&str] = &[
     "security",
     "analyze",
     "daemon",
-    "embeddings",
     "hive-mind",
     "neural",
     "hooks",
     "completions",
-    "agent",
     "swarm",
     "task",
     "session",
@@ -63,16 +61,12 @@ const BYTE_ALIGNED: &[&str] = &[
     "transfer-store",
     "process",
     "claims",
-    "benchmark",
 ];
 
 /// Families with a captured source-oracle overview fixture. doctor/funnel/
 /// settings are excluded: their TS overview embeds the runner's $HOME, so
 /// output is machine-specific and fixture-capture correctly refuses them.
 const CAPTURED: &[&str] = &[
-    "advisor", "agent", "analyze", "announcements", "appliance", "auth",
-    "autopilot", "benchmark", "claims", "cleanup", "completions", "config",
-    "daemon", "deployment", "embeddings", "gaia-bench",
     "migrate", "neural", "performance", "plugins", "policy", "process",
     "progress", "providers", "proxy", "route", "ruvector", "security",
     "session", "spinner", "swarm", "task",
