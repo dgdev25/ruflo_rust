@@ -161,6 +161,7 @@ pub fn run(_root: &Path, command: EmbeddingsCommand) -> u8 {
         "" => overview(&command),
         "generate" => generate(&command),
         "search" => search(&command),
+        "ingest" => ingest(&command),
         "compare" => compare(&command),
         "collections" => collections(&command),
         "index" => index_cmd(&command),
@@ -176,7 +177,7 @@ pub fn run(_root: &Path, command: EmbeddingsCommand) -> u8 {
         "benchmark" => benchmark(&command),
         _ => {
             eprintln!(
-                "[ERROR] Unknown: {} (generate|search|compare|collections|index|init|providers|chunk|normalize|hyperbolic|neural|models|cache|warmup|benchmark)",
+                "[ERROR] Unknown: {} (generate|search|ingest|compare|collections|index|init|providers|chunk|normalize|hyperbolic|neural|models|cache|warmup|benchmark)",
                 command.operation
             );
             1
@@ -292,29 +293,150 @@ fn search(command: &EmbeddingsCommand) -> u8 {
         eprintln!("[ERROR] Query is required (-q)");
         return 1;
     };
-    let db_path = command.db_path.clone().unwrap_or_else(|| ".swarm/memory.db".into());
+    let db_path = command.db_path.clone().unwrap_or_else(|| ".swarm/memory.rvf".into());
     let limit = command.limit.unwrap_or(10);
-    let threshold = command.threshold.unwrap_or(0.5);
-    let _collection = command.collection.clone().unwrap_or_else(|| "default".into());
+    let threshold = command.threshold.unwrap_or(0.0);
+    let dim = command.dim.unwrap_or(crate::onnx_embeddings::ONNX_DIM) as u16;
 
-    println!("\nSemantic Search");
-    println!("{}", "\u{2500}".repeat(50));
-    println!("  Query: \"{query}\"");
-    println!("  Limit: {limit}, Threshold: {threshold}");
-
-    // The sql.js + HNSW index lives in the Node memory layer. Native can scan
-    // a JSONL fallback if present, but the real store is not wired here.
     let path = Path::new(&db_path);
     if !path.exists() {
-        eprintln!("[ERROR] Memory store not found: {db_path}");
-        eprintln!("       Run `npx ruflo memory store ...` to populate, or use a Node runtime.");
+        eprintln!("[ERROR] RVF store not found: {db_path}");
+        eprintln!("       Run `ruflo embeddings ingest --text \"...\" --db-path {db_path}` first.");
         return 1;
     }
-    eprintln!("[WARN] Native search cannot query the sql.js/HNSW store. Install a Node");
-    eprintln!("       runtime and run `npx ruflo embeddings search -q \"{query}\"`.");
-    // Fail closed: the search did not run, so exit nonzero — a CI gate must not
-    // treat "store present but unqueried" as a successful search.
-    1
+
+    let config = ruflo_storage::AgentDbFixtureConfig::new(dim);
+    let store = match ruflo_storage::RvfPersistencePort::open_agentdb(path, config) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("[ERROR] Failed to open RVF store: {e}");
+            return 1;
+        }
+    };
+
+    let (qvec, method) = crate::onnx_embeddings::embed(query, dim as usize);
+    let qf32: Vec<f32> = qvec.iter().map(|x| *x as f32).collect();
+    let matches = match store.search_agentdb(&qf32, limit) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("[ERROR] RVF search failed: {e}");
+            return 1;
+        }
+    };
+
+    // distance → similarity (cosine distance in [0,2] → similarity in [-1,1]).
+    let results: Vec<_> = matches.into_iter()
+        .map(|m| {
+            let sim = (1.0 - m.distance).clamp(-1.0, 1.0);
+            (m.id, m.distance, sim)
+        })
+        .filter(|(_, _, sim)| *sim >= threshold as f32)
+        .collect();
+
+    if command.json {
+        let out = serde_json::json!({
+            "query": query,
+            "backend": "ruvector-rvf-hnsw",
+            "embedding": method,
+            "results": results.iter().map(|(id, dist, sim)| serde_json::json!({
+                "id": id, "distance": dist, "similarity": sim,
+            })).collect::<Vec<_>>(),
+        });
+        println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
+        return 0;
+    }
+
+    println!("\nSemantic Search (RuVector HNSW)");
+    println!("{}", "\u{2500}".repeat(50));
+    println!("  Query:    \"{query}\"");
+    println!("  Backend:  ruvector-rvf (HNSW)");
+    println!("  Embed:    {method}");
+    println!("  Limit:    {limit}, Threshold: {threshold}");
+    if results.is_empty() {
+        println!("  No matches above threshold.");
+    } else {
+        for (id, dist, sim) in &results {
+            println!("  id={id:<6} dist={dist:.4} sim={sim:.4}");
+        }
+    }
+    0
+}
+
+/// Ingest text into the RVF HNSW store. Each call embeds the text and adds it
+/// as a vector with a monotonic id.
+fn ingest(command: &EmbeddingsCommand) -> u8 {
+    let Some(text) = &command.text else {
+        eprintln!("[ERROR] --text is required for ingest");
+        return 1;
+    };
+    let db_path = command.db_path.clone().unwrap_or_else(|| ".swarm/memory.rvf".into());
+    let dim = command.dim.unwrap_or(crate::onnx_embeddings::ONNX_DIM) as u16;
+    let path = Path::new(&db_path);
+    // Open existing or create.
+    let mut store = if path.exists() {
+        let config = ruflo_storage::AgentDbFixtureConfig::new(dim);
+        match ruflo_storage::RvfPersistencePort::open_agentdb(path, config) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[ERROR] Open failed, trying create: {e}");
+                let config2 = ruflo_storage::AgentDbFixtureConfig::new(dim);
+                match ruflo_storage::RvfPersistencePort::create_agentdb(path, config2) {
+                    Ok(s) => s,
+                    Err(e2) => {
+                        eprintln!("[ERROR] Failed to create RVF store: {e2}");
+                        return 1;
+                    }
+                }
+            }
+        }
+    } else {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let config = ruflo_storage::AgentDbFixtureConfig::new(dim);
+        match ruflo_storage::RvfPersistencePort::create_agentdb(path, config) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[ERROR] Failed to create RVF store: {e}");
+                return 1;
+            }
+        }
+    };
+
+    // Determine next id from current vector count.
+    let status = store.status();
+    let next_id = status.total_vectors + 1;
+    let (vec, method) = crate::onnx_embeddings::embed(text, dim as usize);
+    let record = ruflo_storage::AgentDbVectorRecord {
+        id: next_id,
+        vector: vec.iter().map(|x| *x as f32).collect(),
+    };
+    let added = match store.ingest_agentdb(&[record]) {
+        Ok(n) => n,
+        Err(e) => {
+            eprintln!("[ERROR] Ingest failed: {e}");
+            return 1;
+        }
+    };
+    let _ = store.close();
+
+    if command.json {
+        println!("{}", serde_json::json!({
+            "ingested": added,
+            "id": next_id,
+            "backend": "ruvector-rvf-hnsw",
+            "embedding": method,
+            "path": db_path,
+        }));
+    } else {
+        println!("\nIngest (RuVector HNSW)");
+        println!("{}", "\u{2500}".repeat(50));
+        println!("  Text:     \"{text}\"");
+        println!("  Id:       {next_id}");
+        println!("  Embed:    {method}");
+        println!("  Backend:  {db_path}");
+    }
+    0
 }
 
 // ---- compare ----------------------------------------------------------------
