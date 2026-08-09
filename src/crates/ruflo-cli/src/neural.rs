@@ -645,11 +645,58 @@ fn router_decisions(root: &Path, _command: &NeuralCommand) -> u8 {
 // ---- distill ----------------------------------------------------------------
 
 fn distill(command: &NeuralCommand) -> u8 {
-    let op = command.sub.clone().unwrap_or_else(|| "plan".into());
-    eprintln!("[WARN] Distillation ({op}) requires the @ruvector/ruvllm native TrainingPipeline");
-    eprintln!("       and ONNX runtime (Node). Native build cannot distill. Run:");
-    eprintln!("       npx ruflo neural distill {op}");
-    1
+    let op = command.sub.clone().unwrap_or_else(|| "run".into());
+    let dim = command.dim.min(MODEL_DIM);
+    let hidden = 64;
+    let max_epochs = command.epochs.max(1);
+    match op.as_str() {
+        "run" | "pipeline" => {
+            let result = crate::distillation::run(dim, hidden, max_epochs);
+            if result["status"].as_str() == Some("no_decisions") {
+                eprintln!("[NOTE] No router decisions to train on. Run tasks via `ruflo route` first.");
+            }
+            if command.json {
+                println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
+            } else {
+                println!("\nNative Distillation Pipeline (SONA + EWC++)");
+                println!("{}", "\u{2500}".repeat(50));
+                println!("  Status:     {}", result["status"].as_str().unwrap_or("?"));
+                println!("  Examples:   {}", result["examples"].as_u64().unwrap_or(0));
+                println!("  Classes:    {}", result["classes"].as_u64().unwrap_or(0));
+                if let Some(acc) = result["heldOutAccuracy"].as_f64() {
+                    println!("  Held-out:   {:.2}", acc);
+                }
+                println!("  Epochs:     {}", result["epochsRun"].as_u64().unwrap_or(0));
+                println!("  Backend:    native-sona-ewc++");
+            }
+            0
+        }
+        "oracle" => {
+            let (examples, classes) = crate::distillation::label_from_decisions();
+            let out = json!({"examples": examples.len(), "classes": classes, "classMap": classes});
+            if command.json {
+                println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
+            } else {
+                println!("Oracle: {} labeled examples, {} classes", examples.len(), classes.len());
+            }
+            0
+        }
+        "tune" => {
+            let (examples, classes) = crate::distillation::label_from_decisions();
+            let (params, acc) = crate::distillation::grid_search(&examples, &classes, dim, hidden);
+            let out = json!({"bestParams": params, "heldOutAccuracy": acc, "examples": examples.len()});
+            if command.json {
+                println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
+            } else {
+                println!("Tune: best params {} (held-out acc {:.2})", params, acc);
+            }
+            0
+        }
+        _ => {
+            eprintln!("[ERROR] Unknown distill op: {op} (run|oracle|tune)");
+            1
+        }
+    }
 }
 
 // ---- helpers ----------------------------------------------------------------

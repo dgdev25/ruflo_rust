@@ -17,6 +17,7 @@ mod compressor;
 mod config_file;
 mod daemon;
 mod deployment;
+mod distillation;
 mod eject;
 mod embeddings;
 mod funnel;
