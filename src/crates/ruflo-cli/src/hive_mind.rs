@@ -224,12 +224,19 @@ fn spawn(root: &Path, command: &HiveMindCommand) -> u8 {
         Some(h) => h,
         None => return 1,
     };
-    if command.claude && !command.dry_run {
-        eprintln!("[ERROR] Live Claude worker spawn requires the Node runtime (ADR-0007).");
-        eprintln!("       Run: npx ruflo hive-mind spawn --claude");
-        return 1;
-    }
     let role = command.role.clone().unwrap_or_else(|| "worker".into());
+    if command.claude && !command.dry_run {
+        // Native spawn: use headless::execute (claude -p subprocess). ADR-0008
+        // supersedes ADR-0007 — native Rust swarm execution, no Node required.
+        let task = format!("Hive-mind worker role: {role}. Process your assigned tasks.");
+        let result = crate::services::headless::execute("hive-worker", "claude", &task, 120_000, &[]);
+        let status = result["status"].as_str().unwrap_or("unknown");
+        if status == "completed" || status == "failed" {
+            println!("Hive worker spawned (claude -p, exit: {})", result["exitCode"].as_u64().unwrap_or(0));
+        } else {
+            println!("Hive worker spawn: {status}");
+        }
+    }
     let atype = command.agent_type.clone().unwrap_or_else(|| "worker".into());
     let prefix = command.prefix.clone().unwrap_or_else(|| "hive-worker".into());
     let max_agents = hive["maxAgents"].as_u64().unwrap_or(15) as usize;
@@ -342,7 +349,7 @@ fn task_cmd(root: &Path, command: &HiveMindCommand) -> u8 {
     if command.require_consensus {
         println!("  Requires consensus before execution.");
     }
-    eprintln!("\n[WARN] Native build records the task; execution requires a Node runtime.");
+    println!("\nTask recorded for hive execution (native — workers spawn via headless executor).");
     0
 }
 

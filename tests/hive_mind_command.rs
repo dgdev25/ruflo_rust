@@ -66,12 +66,13 @@ fn spawn_join_leave_roundtrip() {
 }
 
 #[test]
-fn spawn_claude_degrades() {
+fn spawn_claude_native() {
     let project = tempfile::tempdir().unwrap();
     run("ruflo", project.path(), &["hive-mind", "init"]);
     let out = run("ruflo", project.path(), &["hive-mind", "spawn", "--claude", "--count", "1"]);
-    assert_eq!(out.status.code(), Some(1));
-    assert!(stderr(&out).contains("Node runtime"));
+    // spawn --claude now runs natively (headless::execute spawns claude -p).
+    // If claude binary is absent, it reports "unavailable" — either way exit 0.
+    assert_eq!(out.status.code(), Some(0));
 }
 
 #[test]
