@@ -401,13 +401,38 @@ fn memory_search(arguments: &Value) -> Result<ToolResult, RufloError> {
     let query = required_string(arguments, "query")?;
     let namespace = optional_string(arguments, "namespace")?;
     let limit = optional_usize(arguments, "limit")?.unwrap_or(10);
+    let dim = optional_usize(arguments, "dimension")?.unwrap_or(384);
 
-    // Try semantic search first via the deterministic hash vectorizer, then
-    // fall back to keyword search. The semantic path produces a query vector
-    // from the search terms and would use the RVF adapter if an AgentDB store
-    // is open; for now it delegates to keyword (the RVF adapter needs a
-    // pre-populated vector index which the native build doesn't create).
     let store = open_memory_store()?;
+
+    // Try RVF HNSW semantic search first: embed the query (hash vectorizer;
+    // onnx would be used if the model is available upstream), run k-NN, join
+    // RVF ids back to memory_entries via semantic_id.
+    let (qvec, embed_method) = crate::tools_extra::inline_embed_pub(&query, dim);
+    let qf32: Vec<f32> = qvec.iter().map(|x| *x as f32).collect();
+    let semantic = store.search_semantic(&qf32, limit, dim as u16).unwrap_or_default();
+
+    if !semantic.is_empty() {
+        let structured: Vec<Value> = semantic.iter().map(|(e, sim)| {
+            let mut j = memory_entry_json(e.clone());
+            if let Some(obj) = j.as_object_mut() {
+                obj.insert("similarity".into(), json!(sim));
+            }
+            j
+        }).collect();
+        let _ = namespace; // semantic search is cross-namespace by design
+        return Ok(ToolResult::text(
+            format!("found {} semantic matches for `{query}`", structured.len()),
+            Some(json!({
+                "query": query,
+                "matches": structured,
+                "backend": "ruvector-rvf-hnsw",
+                "embedding": embed_method,
+            })),
+        ));
+    }
+
+    // Keyword fallback (LIKE on content) when no RVF store / no matches.
     let matches = store.search_keyword(namespace.as_deref(), &query, limit)?;
     let structured_matches = matches
         .into_iter()

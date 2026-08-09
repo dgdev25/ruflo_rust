@@ -244,6 +244,77 @@ impl SqliteMemoryStore {
         ).optional().map_err(map_sqlite("memory.retrieve_semantic"))
     }
 
+    /// Semantic k-NN search via the RVF HNSW store. The query vector is
+    /// produced by the caller (CLI/MCP embeds the query string); this method
+    /// opens the RVF store sibling to the SQLite db, runs k-NN, and joins the
+    /// returned RVF ids back to memory_entries via semantic_id.
+    ///
+    /// Returns `(entry, similarity)` pairs ordered by descending similarity.
+    /// Falls back to an empty result (not an error) when no RVF store exists
+    /// yet — the caller can retry with `search_keyword`.
+    pub fn search_semantic(
+        &self,
+        query_vec: &[f32],
+        limit: usize,
+        dimension: u16,
+    ) -> Result<Vec<(MemoryEntry, f32)>, RufloError> {
+        let rvf_path = self.database_path
+            .with_file_name("memory.rvf");
+        if !rvf_path.exists() {
+            return Ok(Vec::new());
+        }
+        let config = crate::rvf_adapter::AgentDbFixtureConfig::new(dimension);
+        let store = crate::rvf_adapter::RvfPersistencePort::open_agentdb(&rvf_path, config)?;
+        let matches = store.search_agentdb(query_vec, limit)?;
+        drop(store);
+        if matches.is_empty() {
+            return Ok(Vec::new());
+        }
+        // Join semantic_id → SQLite row, preserving similarity order.
+        let mut out = Vec::with_capacity(matches.len());
+        for m in matches {
+            if let Some(entry) = self.retrieve_semantic_id(m.id)? {
+                let similarity = (1.0 - m.distance).clamp(-1.0, 1.0);
+                out.push((entry, similarity));
+            }
+        }
+        Ok(out)
+    }
+
+    /// Ingest a vector into the RVF store and bind it to the given entry via
+    /// semantic_id. Called by the CLI/MCP layer after computing an embedding.
+    pub fn ingest_semantic(
+        &self,
+        namespace: &str,
+        key: &str,
+        vector: &[f32],
+        dimension: u16,
+    ) -> Result<u64, RufloError> {
+        let rvf_path = self.database_path.with_file_name("memory.rvf");
+        let config = crate::rvf_adapter::AgentDbFixtureConfig::new(dimension);
+        // Open or create the RVF store.
+        let mut store = if rvf_path.exists() {
+            crate::rvf_adapter::RvfPersistencePort::open_agentdb(&rvf_path, config)?
+        } else {
+            if let Some(parent) = rvf_path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            crate::rvf_adapter::RvfPersistencePort::create_agentdb(&rvf_path, config)?
+        };
+        // Next id = current vector count + 1.
+        let status = store.status();
+        let next_id = status.total_vectors + 1;
+        let record = crate::rvf_adapter::AgentDbVectorRecord {
+            id: next_id,
+            vector: vector.to_vec(),
+        };
+        store.ingest_agentdb(&[record])?;
+        let _ = store.close();
+        // Bind to the SQLite entry.
+        self.set_semantic_id(namespace, key, next_id)?;
+        Ok(next_id)
+    }
+
     /// Enumerate active memory entries for compatibility views such as
     /// `memory list` and Codex dual-mode status. This deliberately remains a
     /// SQLite projection; semantic ordering belongs to the RVF adapter wave.
@@ -527,5 +598,53 @@ mod tests {
         assert!(store.list(Some("test"), 10).unwrap().is_empty());
         assert_eq!(store.count_namespace("other").unwrap(), 1);
         assert!(store.purge_namespace(" ").is_err());
+    }
+}
+
+#[cfg(test)]
+mod semantic_tests {
+    use super::*;
+
+    fn tmp_store() -> SqliteMemoryStore {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_path_buf();
+        let db = root.join("memory.db");
+        // Leak the tempdir so the db + sibling .rvf survive the test.
+        std::mem::forget(dir);
+        SqliteMemoryStore::open(&root, &db).unwrap()
+    }
+
+    #[test]
+    fn ingest_then_semantic_search_returns_entry() {
+        let store = tmp_store();
+        let input = MemoryStoreInput {
+            key: "k1".into(),
+            namespace: "default".into(),
+            content: "the quick brown fox".into(),
+            memory_type: "semantic".into(),
+            tags_json: None,
+            provenance_type: "test".into(),
+            upsert: true,
+        };
+        let entry = store.store(&input).unwrap();
+        // Embed the content (simple deterministic vector).
+        let vec: Vec<f32> = (0..8).map(|i| i as f32 / 8.0).collect();
+        let sid = store.ingest_semantic(&entry.namespace, &entry.key, &vec, 8).unwrap();
+        assert!(sid >= 1);
+
+        // Query with the same vector → should find the entry.
+        let results = store.search_semantic(&vec, 5, 8).unwrap();
+        assert!(!results.is_empty(), "semantic search should return the ingested entry");
+        let (found, _sim) = &results[0];
+        assert_eq!(found.key, "k1");
+    }
+
+    #[test]
+    fn semantic_search_empty_without_rvf_store() {
+        let store = tmp_store();
+        let q = vec![0.1f32; 8];
+        // No ingest → no RVF store → empty (not error).
+        let results = store.search_semantic(&q, 5, 8).unwrap();
+        assert!(results.is_empty());
     }
 }
