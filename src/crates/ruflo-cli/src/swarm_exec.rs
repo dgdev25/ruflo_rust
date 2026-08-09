@@ -7,8 +7,10 @@
 //! the swarm state file and ruflo memory.
 
 use std::collections::HashMap;
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Output};
+use std::process::{Child, Command, ExitStatus};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -90,6 +92,64 @@ fn check_budget_paused(_cwd: &Path) -> Option<String> {
     }
 
     None
+}
+
+/// Resolve the budget ledger directory (mirrors daemon.rs::budget_dir so the
+/// native swarm writes the same file the daemon reads).
+fn budget_dir() -> PathBuf {
+    std::env::var("RUFLO_AI_BUDGET_DIR")
+        .map(PathBuf::from)
+        .or_else(|_| std::env::var("RUFLO_STATE_DIR").map(PathBuf::from))
+        .unwrap_or_else(|_| {
+            std::env::var("HOME")
+                .map(|h| PathBuf::from(h).join(".claude-flow"))
+                .unwrap_or_else(|_| PathBuf::from(".claude-flow"))
+        })
+}
+
+fn budget_ledger_path() -> PathBuf {
+    budget_dir().join("ai-budget.json")
+}
+
+/// Read the budget ledger. Missing/malformed → empty ledger (fail-safe so a
+/// corrupt file never blocks spawning).
+fn read_budget_ledger() -> Value {
+    let path = budget_ledger_path();
+    match std::fs::read_to_string(&path) {
+        Ok(s) if s.trim().is_empty() => json!({"version": 1, "launches": [], "active": []}),
+        Ok(s) => serde_json::from_str(&s).unwrap_or_else(|_| {
+            json!({"version": 1, "launches": [], "active": []})
+        }),
+        Err(_) => json!({"version": 1, "launches": [], "active": []}),
+    }
+}
+
+/// Atomic write (tmp + rename) matching daemon.rs::write_ledger.
+fn write_budget_ledger(v: &Value) -> bool {
+    let path = budget_ledger_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let tmp = path.with_extension("json.tmp");
+    let bytes = serde_json::to_vec_pretty(v).unwrap_or_default();
+    if std::fs::write(&tmp, &bytes).is_err() {
+        return false;
+    }
+    let ok = std::fs::rename(&tmp, &path).is_ok();
+    if !ok {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    ok
+}
+
+/// Get-or-create a JSON array field on the ledger, returning a mutable
+/// reference that callers can push into. Avoids the borrow-checker fight
+/// around `unwrap_or(&mut Vec::new())` temporaries.
+fn ensure_array_mut<'a>(v: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
+    if !v[key].is_array() {
+        v[key] = json!([]);
+    }
+    v.get_mut(key).and_then(|x| x.as_array_mut()).expect("array just ensured")
 }
 
 /// Per-worker role slices for hierarchical-mesh topology. Worker 0 = queen
@@ -251,6 +311,69 @@ pub fn run_swarm(
         };
     }
 
+    // ADR-324: enforce the policy runtime before any subprocess is spawned.
+    // If `swarm.spawn` is denied, record the decision and abort with the
+    // reason rather than launching workers.
+    {
+        let decision = crate::services::policy_runtime::evaluate("swarm.spawn", "native");
+        if decision["decision"].as_str() == Some("deny") {
+            let reason = format!(
+                "policy denied swarm.spawn (identity={})",
+                decision["identity"].as_str().unwrap_or("native")
+            );
+            return SwarmOutcome {
+                dry_run: false,
+                workers: 0,
+                results: vec![WorkerResult {
+                    worker_idx: 0,
+                    agent: agent.into(),
+                    stdout: String::new(),
+                    stderr: reason.clone(),
+                    exit_code: -1,
+                    timed_out: false,
+                }],
+                plan: vec![json!({"blocked": "policy_deny", "decision": decision})],
+            };
+        }
+    }
+
+    // Record launch reservations in the budget ledger so daemon.rs::status and
+    // check_budget_paused observe in-flight workers (concurrent-limit gate) and
+    // rate-limit counters stay accurate. Permits are removed once all workers
+    // finish; launches are retained (sliding-window counters).
+    let spawn_pid = std::process::id();
+    let reservation_at = now_ms();
+    let permits: Vec<String> = (0..n)
+        .map(|i| format!("swarm-{reservation_at}-{i}"))
+        .collect();
+    {
+        let mut ledger = read_budget_ledger();
+        {
+            let active = ensure_array_mut(&mut ledger, "active");
+            for permit in &permits {
+                active.push(json!({
+                    "permitId": permit,
+                    "at": reservation_at,
+                    "pid": spawn_pid,
+                    "workerType": agent,
+                }));
+            }
+        }
+        {
+            let launches = ensure_array_mut(&mut ledger, "launches");
+            for _ in 0..n {
+                launches.push(json!({
+                    "at": reservation_at,
+                    "pid": spawn_pid,
+                    "workerType": agent,
+                    "model": agent,
+                    "workspace": cwd.to_string_lossy(),
+                }));
+            }
+        }
+        write_budget_ledger(&ledger);
+    }
+
     // Spawn N workers in parallel (one thread each). Collect handles first,
     // then join — calling .join() inside .map() would block each spawn until
     // the previous worker finishes, defeating parallelism.
@@ -280,6 +403,20 @@ pub fn run_swarm(
             })
         })
         .collect();
+
+    // Release the active reservations now that every worker has finished. The
+    // launches array is left intact — daemon.rs prunes entries older than 24h.
+    {
+        let mut ledger = read_budget_ledger();
+        let active = ensure_array_mut(&mut ledger, "active");
+        active.retain(|a| {
+            a["permitId"]
+                .as_str()
+                .map(|p| !permits.iter().any(|permitted| permitted == p))
+                .unwrap_or(true)
+        });
+        write_budget_ledger(&ledger);
+    }
 
     let plan: Vec<Value> = (0..n)
         .map(|i| {
@@ -345,8 +482,8 @@ fn spawn_worker_with_idx(
         }
     }
     // Spawn the child and enforce a deadline (300s default) via a watchdog
-    // thread that kills the process group if it exceeds the timeout.
-    let child = match cmd.spawn() {
+    // thread that kills the process if it exceeds the timeout.
+    let mut child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => {
             return WorkerResult {
@@ -359,49 +496,119 @@ fn spawn_worker_with_idx(
         .ok().and_then(|v| v.parse::<u64>().ok())
         .unwrap_or(300_000);
     let deadline = now_ms() + timeout_ms;
-    #[cfg(unix)]
-    let child_pid = child.id();
-    // Watchdog: kill on timeout.
-    let watchdog = std::thread::spawn(move || {
-        while now_ms() < deadline {
-            std::thread::sleep(std::time::Duration::from_millis(1000));
+
+    // Drain stdout/stderr in background threads so a chatty child can't fill
+    // the OS pipe buffer (64 KB on Linux) and block forever while we poll.
+    let stdout_handle = child.stdout.take();
+    let stderr_handle = child.stderr.take();
+    let stdout_buf: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+    let stderr_buf: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+    let so_buf = stdout_buf.clone();
+    let stdout_drain = std::thread::spawn(move || {
+        if let Some(mut h) = stdout_handle {
+            let _ = h.read_to_end(&mut *so_buf.lock().unwrap());
         }
-        // Timeout reached — kill the process.
-        #[cfg(unix)]
-        {
-            // Direct libc kill(2) — minimal, no external crate.
-            let r = crate::daemon::libc_kill(child_pid, 9);
-            let _ = r;
-        }
-        #[cfg(not(unix))]
-        { let _ = child_pid; }
     });
-    let output = child.wait_with_output();
-    let timed_out = watchdog.join().is_ok() && now_ms() >= deadline;
-    match output {
-        Ok(o) => WorkerResult {
-            worker_idx: idx,
-            agent: agent.into(),
-            stdout: {
-                // Cap output to 1MB to prevent memory exhaustion.
-                let s = String::from_utf8_lossy(&o.stdout);
-                s.chars().take(1_000_000).collect()
+    let se_buf = stderr_buf.clone();
+    let stderr_drain = std::thread::spawn(move || {
+        if let Some(mut h) = stderr_handle {
+            let _ = h.read_to_end(&mut *se_buf.lock().unwrap());
+        }
+    });
+
+    // Share the owned Child handle between the polling main thread and the
+    // watchdog. Using Child::kill() on the owned handle (rather than a bare
+    // libc_kill(pid, 9)) is immune to PID recycling — the OS handle keeps
+    // referring to the original process even after it exits.
+    let child_shared: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(Some(child)));
+    let done = Arc::new(AtomicBool::new(false));
+
+    let wc = child_shared.clone();
+    let wd = done.clone();
+    let watchdog = std::thread::spawn(move || {
+        // Sleep in small slices so we observe `done` quickly once the worker
+        // exits — no point blocking for the full timeout after success.
+        while now_ms() < deadline {
+            if wd.load(Ordering::Relaxed) {
+                return; // worker finished, no kill needed
+            }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+        // Final check closes the race between deadline expiry and the main
+        // thread setting `done` after observing the exit.
+        if wd.load(Ordering::Relaxed) {
+            return;
+        }
+        // Timeout — take the owned handle and kill it (reaps the zombie via the
+        // follow-up wait). Safe: handle identity, not recycled PID.
+        if let Some(mut c) = wc.lock().unwrap().take() {
+            let _ = c.kill();
+            let _ = c.wait();
+        }
+    });
+
+    // Main thread: poll try_wait until the child exits or the watchdog reaps
+    // it on timeout. Holding the mutex only across try_wait keeps contention
+    // with the watchdog brief.
+    let mut timed_out = false;
+    let mut exit_status: Option<ExitStatus> = None;
+    loop {
+        let mut guard = child_shared.lock().unwrap();
+        match guard.as_mut() {
+            None => {
+                // Watchdog already took the child for kill.
+                timed_out = true;
+                drop(guard);
+                break;
+            }
+            Some(c) => match c.try_wait() {
+                Ok(Some(status)) => {
+                    exit_status = Some(status);
+                    drop(guard);
+                    break;
+                }
+                Ok(None) => {}
+                Err(_) => {
+                    drop(guard);
+                    break;
+                }
             },
-            stderr: {
-                let s = String::from_utf8_lossy(&o.stderr);
-                s.chars().take(100_000).collect()
-            },
-            exit_code: o.status.code().unwrap_or(-1),
-            timed_out,
-        },
-        Err(e) => WorkerResult {
-            worker_idx: idx,
-            agent: agent.into(),
-            stdout: String::new(),
-            stderr: format!("failed to spawn '{bin}': {e}"),
-            exit_code: -1,
-            timed_out: false,
-        },
+        }
+        drop(guard);
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
+    // Signal the watchdog to exit early (it may still be sleeping).
+    done.store(true, Ordering::Relaxed);
+    let _ = watchdog.join();
+    let _ = stdout_drain.join();
+    let _ = stderr_drain.join();
+
+    // If we still own the child (normal exit), reap it for a definitive exit
+    // code. If the watchdog took it (timeout), exit_code stays -1.
+    let mut exit_code = exit_status.and_then(|s| s.code()).unwrap_or(-1);
+    if let Some(mut c) = child_shared.lock().unwrap().take() {
+        if let Ok(status) = c.wait() {
+            exit_code = status.code().unwrap_or(exit_code);
+        }
+    }
+
+    let stdout_str: String = String::from_utf8_lossy(&stdout_buf.lock().unwrap())
+        .chars()
+        .take(1_000_000)
+        .collect();
+    let stderr_str: String = String::from_utf8_lossy(&stderr_buf.lock().unwrap())
+        .chars()
+        .take(100_000)
+        .collect();
+
+    WorkerResult {
+        worker_idx: idx,
+        agent: agent.into(),
+        stdout: stdout_str,
+        stderr: stderr_str,
+        exit_code: if timed_out { -1 } else { exit_code },
+        timed_out,
     }
 }
 
