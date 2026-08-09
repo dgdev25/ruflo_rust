@@ -13,6 +13,8 @@ use ruflo_storage::{
 };
 use ruflo_types::RufloError;
 
+pub mod hybrid;
+
 pub const DEFAULT_EMBEDDING_DIMENSIONS: usize = 384;
 
 pub trait EmbeddingProvider: Send + Sync {
@@ -96,6 +98,36 @@ impl<E: EmbeddingProvider> SemanticMemoryStore<E> {
             }
         }
         Ok(entries)
+    }
+
+    /// Source-compatible hybrid retrieval over durable metadata. This is the
+    /// Node V3 BM25 + dense-cosine + MMR policy; document vectors are
+    /// deterministically re-derived from the configured provider so the
+    /// method remains valid after reopening an RVF store.
+    pub fn search_hybrid(&self, query: &str, limit: usize) -> Result<Vec<MemoryEntry>, RufloError> {
+        let query_vector = self.embedder.embed(query)?;
+        self.validate_vector(&query_vector)?;
+        let entries = self.metadata.list(None, usize::MAX)?;
+        let documents = entries.iter().map(|entry| hybrid::tokenize(&entry.content)).collect::<Vec<_>>();
+        let stats = hybrid::build_corpus_stats(&documents);
+        let query_tokens = hybrid::tokenize(query);
+        let mut vectors = Vec::with_capacity(entries.len());
+        let mut cosine = Vec::with_capacity(entries.len());
+        let mut lexical = Vec::with_capacity(entries.len());
+        for (entry, document) in entries.iter().zip(&documents) {
+            let vector = self.embedder.embed(&entry.content)?;
+            self.validate_vector(&vector)?;
+            cosine.push(hybrid::cosine_similarity(&query_vector, &vector));
+            lexical.push(hybrid::bm25_score(&query_tokens, document, &stats));
+            vectors.push(vector);
+        }
+        let scores = hybrid::hybrid_scores(&cosine, &lexical, 0.6).ok_or_else(|| {
+            RufloError::invalid_input("memory.hybrid", "failed to align hybrid scores")
+        })?;
+        let candidates = entries.into_iter().zip(vectors).zip(scores).map(|((value, embedding), relevance)| {
+            hybrid::Ranked { value, embedding, relevance }
+        }).collect();
+        Ok(hybrid::mmr_rerank(candidates, limit, 0.5).into_iter().map(|candidate| candidate.value).collect())
     }
 
     pub fn retrieve(&self, namespace: &str, key: &str) -> Result<Option<MemoryEntry>, RufloError> {
@@ -237,5 +269,28 @@ mod tests {
             "coordination strategy"
         );
         assert_eq!(reopened.list(Some("patterns"), 10).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn hybrid_search_combines_lexical_and_dense_durable_records() {
+        let project = tempfile::tempdir().unwrap();
+        let rvf = project.path().join("memory.rvf");
+        let mut store = SemanticMemoryStore::create(project.path(), &rvf, TestEmbedder).unwrap();
+        for (key, content) in [
+            ("auth-exact", "auth token rotation guidance"),
+            ("other", "coordination strategy"),
+        ] {
+            store.store(&MemoryStoreInput {
+                key: key.into(),
+                namespace: "patterns".into(),
+                content: content.into(),
+                memory_type: "semantic".into(),
+                tags_json: None,
+                provenance_type: "tool_result".into(),
+                upsert: true,
+            }).unwrap();
+        }
+        let matches = store.search_hybrid("auth token", 1).unwrap();
+        assert_eq!(matches[0].key, "auth-exact");
     }
 }

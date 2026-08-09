@@ -73,6 +73,7 @@ serde_json = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
+rusqlite = { workspace = true }
 
 [[bin]]
 name = "fixture-capture"

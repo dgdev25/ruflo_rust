@@ -534,6 +534,7 @@ dependencies = [
  "ruflo-runtime",
  "ruflo-storage",
  "ruflo-types",
+ "rusqlite",
  "serde",
  "serde_json",
  "tempfile",

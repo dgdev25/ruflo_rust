@@ -5,6 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use ruflo_storage::{MemoryStoreInput, MigrationPlan, PersistencePort, SqliteMemoryStore};
 use ruflo_types::RufloError;
+use rusqlite::{params, Connection};
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 
@@ -129,6 +130,122 @@ fn populated_memory_entries_survive_atomic_migration_and_reopen() {
     assert_eq!(entry.content, "preserve populated Node-compatible memory entries");
     assert_eq!(entry.memory_type, "semantic");
     assert_eq!(entry.provenance_type, "user_claim");
+}
+
+#[test]
+fn populated_node_v3_memory_fields_survive_atomic_migration() {
+    // Source contract: v3/@claude-flow/cli/src/memory/memory-initializer.ts,
+    // MEMORY_SCHEMA_V3. sql.js serializes this standard SQLite schema, so this
+    // fixture exercises fields not written by the native store itself.
+    let project = TestProject::new("populated-node-v3");
+    let database = project.root().join(".swarm/memory.db");
+    fs::create_dir_all(database.parent().unwrap()).unwrap();
+    let connection = Connection::open(&database).unwrap();
+    connection
+        .execute_batch(
+            "CREATE TABLE memory_entries (
+                id TEXT PRIMARY KEY,
+                key TEXT NOT NULL,
+                namespace TEXT DEFAULT 'default',
+                content TEXT NOT NULL,
+                type TEXT DEFAULT 'semantic',
+                embedding TEXT,
+                embedding_model TEXT DEFAULT 'local',
+                embedding_dimensions INTEGER,
+                tags TEXT,
+                metadata TEXT,
+                owner_id TEXT,
+                provenance_type TEXT DEFAULT 'unknown',
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                expires_at INTEGER,
+                last_accessed_at INTEGER,
+                access_count INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'active',
+                UNIQUE(namespace, key)
+            );",
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO memory_entries (
+                id, key, namespace, content, type, embedding, embedding_model,
+                embedding_dimensions, tags, metadata, owner_id, provenance_type,
+                created_at, updated_at, expires_at, last_accessed_at, access_count, status
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+            params![
+                "node-v3-memory-1",
+                "release-parity",
+                "patterns",
+                "preserve a populated sql.js memory record",
+                "semantic",
+                "[0.25,-0.5,0.75]",
+                "Xenova/bge-base-en-v1.5",
+                768_i64,
+                r#"[\"release\",\"parity\"]"#,
+                r#"{\"source\":\"node-v3\",\"confidence\":0.9}"#,
+                "agent-42",
+                "agent_output",
+                1_700_000_000_000_i64,
+                1_700_000_001_000_i64,
+                1_800_000_000_000_i64,
+                1_700_000_002_000_i64,
+                7_i64,
+                "active",
+            ],
+        )
+        .unwrap();
+    drop(connection);
+
+    let port = PersistencePort::open(project.root(), &database).unwrap();
+    port.begin_migration()
+        .unwrap()
+        .commit(&MigrationPlan::new(
+            |bytes| Ok(bytes.to_vec()),
+            |bytes| {
+                if bytes.starts_with(b"SQLite format 3\0") {
+                    Ok(())
+                } else {
+                    Err(RufloError::MigrationFailed {
+                        message: "not a SQLite database".into(),
+                    })
+                }
+            },
+        ))
+        .unwrap();
+
+    let reopened = SqliteMemoryStore::open(project.root(), &database).unwrap();
+    let entry = reopened.retrieve("patterns", "release-parity").unwrap().unwrap();
+    assert_eq!(entry.id, "node-v3-memory-1");
+    assert_eq!(entry.provenance_type, "agent_output");
+    drop(reopened);
+
+    let connection = Connection::open(&database).unwrap();
+    let row = connection
+        .query_row(
+            "SELECT embedding, embedding_model, embedding_dimensions, tags, metadata, owner_id,
+                    expires_at, last_accessed_at, access_count, status
+             FROM memory_entries WHERE id = 'node-v3-memory-1'",
+            [],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?,
+                    row.get::<_, String>(3)?, row.get::<_, String>(4)?, row.get::<_, String>(5)?,
+                    row.get::<_, i64>(6)?, row.get::<_, i64>(7)?, row.get::<_, i64>(8)?, row.get::<_, String>(9)?,
+                ))
+            },
+        )
+        .unwrap();
+    assert_eq!(row.0, "[0.25,-0.5,0.75]");
+    assert_eq!(row.1, "Xenova/bge-base-en-v1.5");
+    assert_eq!(row.2, 768);
+    assert_eq!(row.3, r#"[\"release\",\"parity\"]"#);
+    assert_eq!(row.4, r#"{\"source\":\"node-v3\",\"confidence\":0.9}"#);
+    assert_eq!(row.5, "agent-42");
+    assert_eq!(row.6, 1_800_000_000_000);
+    assert_eq!(row.7, 1_700_000_002_000);
+    assert_eq!(row.8, 7);
+    assert_eq!(row.9, "active");
 }
 
 struct TestProject {
