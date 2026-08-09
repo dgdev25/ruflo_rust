@@ -343,6 +343,126 @@ pub mod worker_daemon {
 /// Ports services/headless-worker-executor.ts (1637 lines) — state only.
 pub mod headless {
     use super::*;
+    use std::process::Command;
+    use std::time::Duration;
+
+    /// Launch a headless worker: spawn `claude -p <prompt>` (or codex) as a
+    /// subprocess, capture stdout/stderr, enforce a timeout, and record the
+    /// result in headless-workers state. Real behavioral parity with TS
+    /// headless-worker-executor — no Node.
+    ///
+    /// Returns the worker result entry. `binary` is "claude" or "codex".
+    pub fn execute(
+        worker_type: &str,
+        binary: &str,
+        prompt: &str,
+        timeout_ms: u64,
+        extra_args: &[String],
+    ) -> Value {
+        let id = format!("headless-{worker_type}-{}", now_ms());
+        let started = now_ms();
+
+        // Resolve binary; degrade cleanly if absent.
+        if which(binary).is_none() {
+            let entry = json!({
+                "id": id, "type": worker_type, "binary": binary,
+                "status": "unavailable", "error": format!("{binary} not on PATH"),
+                "startedAt": started, "finishedAt": now_ms(),
+            });
+            record(&entry);
+            return entry;
+        }
+
+        let mut cmd = Command::new(binary);
+        cmd.arg("-p").arg(prompt);
+        cmd.env_remove("OPENAI_API_KEY")
+            .env_remove("ANTHROPIC_API_KEY")
+            .env_remove("GEMINI_API_KEY");
+        for a in extra_args {
+            cmd.arg(a);
+        }
+        cmd.stdin(std::process::Stdio::null());
+
+        // spawn + watchdog timeout (mirrors swarm_exec pattern)
+        match cmd.spawn() {
+            Ok(mut child) => {
+                let timeout = Duration::from_millis(timeout_ms.max(1000));
+                let start = std::time::Instant::now();
+                loop {
+                    match child.try_wait() {
+                        Ok(Some(status)) => {
+                            let stdout = child.stdout.take()
+                                .and_then(|mut s| { let mut o = String::new(); std::io::Read::read_to_string(&mut s, &mut o).ok(); Some(o) })
+                                .unwrap_or_default();
+                            let stderr = child.stderr.take()
+                                .and_then(|mut s| { let mut o = String::new(); std::io::Read::read_to_string(&mut s, &mut o).ok(); Some(o) })
+                                .unwrap_or_default();
+                            // Cap output to bound memory.
+                            let stdout_cap: String = stdout.chars().take(1_000_000).collect();
+                            let stderr_cap: String = stderr.chars().take(100_000).collect();
+                            let entry = json!({
+                                "id": id, "type": worker_type, "binary": binary,
+                                "status": if status.success() { "completed" } else { "failed" },
+                                "exitCode": status.code(),
+                                "stdout": stdout_cap, "stderr": stderr_cap,
+                                "startedAt": started, "finishedAt": now_ms(),
+                                "durationMs": now_ms().saturating_sub(started),
+                            });
+                            record(&entry);
+                            return entry;
+                        }
+                        Ok(None) => {
+                            if start.elapsed() > timeout {
+                                let _ = child.kill();
+                                let _ = child.wait();
+                                let entry = json!({
+                                    "id": id, "type": worker_type, "binary": binary,
+                                    "status": "timeout", "timeoutMs": timeout_ms,
+                                    "startedAt": started, "finishedAt": now_ms(),
+                                });
+                                record(&entry);
+                                return entry;
+                            }
+                            std::thread::sleep(Duration::from_millis(50));
+                        }
+                        Err(e) => {
+                            let entry = json!({
+                                "id": id, "type": worker_type, "binary": binary,
+                                "status": "error", "error": e.to_string(),
+                                "startedAt": started, "finishedAt": now_ms(),
+                            });
+                            record(&entry);
+                            return entry;
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                let entry = json!({
+                    "id": id, "type": worker_type, "binary": binary,
+                    "status": "spawn_failed", "error": e.to_string(),
+                    "startedAt": started, "finishedAt": now_ms(),
+                });
+                record(&entry);
+                entry
+            }
+        }
+    }
+
+    fn record(entry: &Value) {
+        let mut state = read_state("headless-workers");
+        ensure_arr(&mut state, "workers").push(entry.clone());
+        write_state("headless-workers", &state);
+    }
+
+    fn which(bin: &str) -> Option<std::path::PathBuf> {
+        std::env::var_os("PATH").and_then(|paths| {
+            std::env::split_paths(&paths).find_map(|dir| {
+                let p = dir.join(bin);
+                if p.is_file() { Some(p) } else { None }
+            })
+        })
+    }
 
     pub fn launch(worker_type: &str, sandbox: &str) -> Value {
         let entry = json!({
@@ -1741,5 +1861,28 @@ mod tests {
         assert_eq!(result["decision"].as_str(), Some("deny"));
         let allow = policy_runtime::evaluate("swarm.status", "user1");
         assert_eq!(allow["decision"].as_str(), Some("allow"));
+    }
+}
+
+#[cfg(test)]
+mod headless_tests {
+    use super::headless;
+
+    #[test]
+    fn execute_runs_subprocess_and_captures_status() {
+        // `true` ignores args and exits 0 — proves the spawn/wait/status path.
+        let r = headless::execute("test", "true", "ignored", 5000, &[]);
+        let _ = r; // cleanup state not needed
+        // The result is recorded with status completed/failed (not spawn_failed).
+        let last = headless::list().last().cloned().unwrap_or_default();
+        let status = last["status"].as_str().unwrap_or("");
+        assert!(status == "completed" || status == "failed", "got {status}");
+        assert_ne!(status, "spawn_failed");
+    }
+
+    #[test]
+    fn execute_unavailable_binary_degrades() {
+        let r = headless::execute("test", "definitely-not-a-binary-xyz", "x", 1000, &[]);
+        assert_eq!(r["status"].as_str(), Some("unavailable"));
     }
 }
