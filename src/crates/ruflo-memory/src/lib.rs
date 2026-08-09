@@ -108,26 +108,54 @@ impl<E: EmbeddingProvider> SemanticMemoryStore<E> {
         let query_vector = self.embedder.embed(query)?;
         self.validate_vector(&query_vector)?;
         let entries = self.metadata.list(None, usize::MAX)?;
-        let documents = entries.iter().map(|entry| hybrid::tokenize(&entry.content)).collect::<Vec<_>>();
-        let stats = hybrid::build_corpus_stats(&documents);
+        let subjects = entries
+            .iter()
+            .map(|entry| hybrid::tokenize(&entry.key))
+            .collect::<Vec<_>>();
+        let bodies = entries
+            .iter()
+            .map(|entry| hybrid::tokenize(&entry.content))
+            .collect::<Vec<_>>();
+        let subject_stats = hybrid::build_corpus_stats(&subjects);
+        let body_stats = hybrid::build_corpus_stats(&bodies);
         let query_tokens = hybrid::tokenize(query);
         let mut vectors = Vec::with_capacity(entries.len());
         let mut cosine = Vec::with_capacity(entries.len());
         let mut lexical = Vec::with_capacity(entries.len());
-        for (entry, document) in entries.iter().zip(&documents) {
+        for ((entry, subject), body) in entries.iter().zip(&subjects).zip(&bodies) {
             let vector = self.embedder.embed(&entry.content)?;
             self.validate_vector(&vector)?;
             cosine.push(hybrid::cosine_similarity(&query_vector, &vector));
-            lexical.push(hybrid::bm25_score(&query_tokens, document, &stats));
+            lexical.push(
+                hybrid::multi_field_bm25(
+                    &query_tokens,
+                    subject,
+                    body,
+                    &subject_stats,
+                    &body_stats,
+                    3.0,
+                    1.0,
+                ) * hybrid::type_penalty(Some(&entry.key), 0.5),
+            );
             vectors.push(vector);
         }
         let scores = hybrid::hybrid_scores(&cosine, &lexical, 0.6).ok_or_else(|| {
             RufloError::invalid_input("memory.hybrid", "failed to align hybrid scores")
         })?;
-        let candidates = entries.into_iter().zip(vectors).zip(scores).map(|((value, embedding), relevance)| {
-            hybrid::Ranked { value, embedding, relevance }
-        }).collect();
-        Ok(hybrid::mmr_rerank(candidates, limit, 0.5).into_iter().map(|candidate| candidate.value).collect())
+        let candidates = entries
+            .into_iter()
+            .zip(vectors)
+            .zip(scores)
+            .map(|((value, embedding), relevance)| hybrid::Ranked {
+                value,
+                embedding,
+                relevance,
+            })
+            .collect();
+        Ok(hybrid::mmr_rerank(candidates, limit, 0.5)
+            .into_iter()
+            .map(|candidate| candidate.value)
+            .collect())
     }
 
     pub fn retrieve(&self, namespace: &str, key: &str) -> Result<Option<MemoryEntry>, RufloError> {
@@ -280,15 +308,17 @@ mod tests {
             ("auth-exact", "auth token rotation guidance"),
             ("other", "coordination strategy"),
         ] {
-            store.store(&MemoryStoreInput {
-                key: key.into(),
-                namespace: "patterns".into(),
-                content: content.into(),
-                memory_type: "semantic".into(),
-                tags_json: None,
-                provenance_type: "tool_result".into(),
-                upsert: true,
-            }).unwrap();
+            store
+                .store(&MemoryStoreInput {
+                    key: key.into(),
+                    namespace: "patterns".into(),
+                    content: content.into(),
+                    memory_type: "semantic".into(),
+                    tags_json: None,
+                    provenance_type: "tool_result".into(),
+                    upsert: true,
+                })
+                .unwrap();
         }
         let matches = store.search_hybrid("auth token", 1).unwrap();
         assert_eq!(matches[0].key, "auth-exact");
