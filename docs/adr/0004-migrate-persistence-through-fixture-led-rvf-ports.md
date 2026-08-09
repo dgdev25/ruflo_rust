@@ -18,6 +18,7 @@ Preserve legacy persistence through a port with fixture-led migration to adapter
 - RVF becomes an interoperability boundary only where consumer evidence proves it.
 - Migration logic and fixtures add implementation work before default enablement.
 - Native Task 8 now provides project-root validation, project-scoped locking, owner-only backups, marker files, and rollback metadata for legacy persistence migration.
+- `ruflo memory migrate-node` requires an existing SQLite source, makes a SQLite backup, and rebuilds the native RVF index from durable entries. It intentionally does not deserialize a Node HNSW/RVF index, because matching vector bytes do not prove an interoperable index layout.
 
 ## Alternatives
 

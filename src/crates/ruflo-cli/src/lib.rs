@@ -817,51 +817,50 @@ Subcommands:
         },
         Ok(ParsedCommand::MemoryRebuildIndex { path }) => {
             match open_memory_store(path.as_deref()) {
-                Ok(store) => {
-                    // Determine the active backend (ONNX if model present, else hash).
-                    let backend = if onnx_embeddings::bge_model_available() {
-                        "bge-base-en-v1.5"
-                    } else if onnx_embeddings::model_available() {
-                        "onnx"
-                    } else {
-                        "hash"
-                    };
-                    let dim = if backend == "bge-base-en-v1.5" {
-                        onnx_embeddings::BGE_DIM
-                    } else {
-                        onnx_embeddings::ONNX_DIM
-                    };
-                    // Reset the old index (clears backend tag + stale RVF ids).
-                    if let Err(e) = store.reset_semantic_index() {
-                        return ruflo_error(e);
-                    }
-                    let entries = match store.entries_for_rebuild() {
-                        Ok(e) => e,
-                        Err(e) => return ruflo_error(e),
-                    };
-                    let mut ingested = 0u64;
-                    for (ns, key, content) in &entries {
-                        let vec = if backend == "bge-base-en-v1.5" {
-                            match onnx_embeddings::embed_bge_document(content) {
-                                Some(vector) => vector,
-                                None => {
-                                    eprintln!("[WARN] rebuild skip {ns}/{key}: BGE document embedding failed");
-                                    continue;
-                                }
-                            }
-                        } else {
-                            onnx_embeddings::embed(content, dim).0
-                        };
-                        let vf32: Vec<f32> = vec.iter().map(|x| *x as f32).collect();
-                        match store.ingest_semantic(ns, key, &vf32, dim as u16, backend) {
-                            Ok(_) => ingested += 1,
-                            Err(e) => eprintln!("[WARN] rebuild skip {ns}/{key}: {e}"),
-                        }
-                    }
-                    let _ = store.set_backend_tag(backend);
+                Ok(store) => match rebuild_memory_index(&store) {
+                    Ok(outcome) => {
                     println!(
-                        "Memory Index Rebuilt\nBackend: {backend}\nDimension: {dim}\nEntries re-embedded: {ingested}\nTotal: {}",
-                        entries.len()
+                        "Memory Index Rebuilt\nBackend: {}\nDimension: {}\nEntries re-embedded: {}\nTotal: {}",
+                        outcome.backend, outcome.dimension, outcome.ingested, outcome.total
+                    );
+                    ExitCode::SUCCESS
+                    }
+                    Err(error) => ruflo_error(error),
+                },
+                Err(error) => ruflo_error(error),
+            }
+        }
+        Ok(ParsedCommand::MemoryMigrateNode { path, dry_run }) => {
+            let source = match existing_memory_database(path.as_deref()) {
+                Ok(path) => path,
+                Err(error) => return ruflo_error(error),
+            };
+            let store = match open_memory_store(Some(source.to_string_lossy().as_ref())) {
+                Ok(store) => store,
+                Err(error) => return ruflo_error(error),
+            };
+            let stats = match store.stats() {
+                Ok(stats) => stats,
+                Err(error) => return ruflo_error(error),
+            };
+            if dry_run {
+                println!(
+                    "Node Memory Migration Plan\nSQLite metadata: {}\nActive entries: {}\nExisting vector bindings: {}\nNative RVF action: rebuild (no Node HNSW/RVF import)\nRun without --dry-run to create a SQLite backup and rebuild the native index.",
+                    source.display(), stats.total_entries, stats.entries_with_vectors
+                );
+                return ExitCode::SUCCESS;
+            }
+            let backup = match crate::services::backup::create(&source) {
+                Ok(path) => path,
+                Err(message) => {
+                    return ruflo_error(ruflo_types::RufloError::UpstreamAdapter { message });
+                }
+            };
+            match rebuild_memory_index(&store) {
+                Ok(outcome) => {
+                    println!(
+                        "Node Memory Migration Complete\nSQLite backup: {}\nNative RVF imported: no (rebuilt from preserved metadata)\nBackend: {}\nEntries re-embedded: {}\nTotal: {}",
+                        backup.display(), outcome.backend, outcome.ingested, outcome.total
                     );
                     ExitCode::SUCCESS
                 }
@@ -2062,6 +2061,82 @@ fn text_table(columns: &[(&str, usize, bool)], rows: &[Vec<String>]) -> String {
 fn ruflo_error(error: ruflo_types::RufloError) -> ExitCode {
     eprintln!("error: {error}");
     ExitCode::from(ERROR_EXIT)
+}
+
+struct MemoryRebuildOutcome {
+    backend: &'static str,
+    dimension: usize,
+    ingested: u64,
+    total: usize,
+}
+
+/// Rebuild the native index solely from durable SQLite entries. This is
+/// deliberately a re-embed operation: Node-side HNSW/RVF bytes are never
+/// interpreted as native index data.
+fn rebuild_memory_index(
+    store: &ruflo_storage::SqliteMemoryStore,
+) -> Result<MemoryRebuildOutcome, ruflo_types::RufloError> {
+    let backend = if onnx_embeddings::bge_model_available() {
+        "bge-base-en-v1.5"
+    } else if onnx_embeddings::model_available() {
+        "onnx"
+    } else {
+        "hash"
+    };
+    let dimension = if backend == "bge-base-en-v1.5" {
+        onnx_embeddings::BGE_DIM
+    } else {
+        onnx_embeddings::ONNX_DIM
+    };
+    store.reset_semantic_index()?;
+    let entries = store.entries_for_rebuild()?;
+    let mut ingested = 0u64;
+    for (namespace, key, content) in &entries {
+        let vector = if backend == "bge-base-en-v1.5" {
+            match onnx_embeddings::embed_bge_document(content) {
+                Some(vector) => vector,
+                None => {
+                    eprintln!("[WARN] rebuild skip {namespace}/{key}: BGE document embedding failed");
+                    continue;
+                }
+            }
+        } else {
+            onnx_embeddings::embed(content, dimension).0
+        };
+        let vector = vector.into_iter().map(|value| value as f32).collect::<Vec<_>>();
+        match store.ingest_semantic(namespace, key, &vector, dimension as u16, backend) {
+            Ok(_) => ingested += 1,
+            Err(error) => eprintln!("[WARN] rebuild skip {namespace}/{key}: {error}"),
+        }
+    }
+    store.set_backend_tag(backend)?;
+    Ok(MemoryRebuildOutcome {
+        backend,
+        dimension,
+        ingested,
+        total: entries.len(),
+    })
+}
+
+/// A migration must name an existing SQLite database. This avoids creating a
+/// new empty database when an operator mistypes the Node memory path.
+fn existing_memory_database(path: Option<&str>) -> Result<std::path::PathBuf, ruflo_types::RufloError> {
+    let root = current_directory();
+    let requested = path
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| root.join(".swarm/memory.db"));
+    let resolved = if requested.is_absolute() {
+        requested
+    } else {
+        root.join(requested)
+    };
+    if !resolved.is_file() {
+        return Err(ruflo_types::RufloError::invalid_input(
+            "memory.migrate_node.source",
+            format!("existing Node SQLite memory database not found: {}", resolved.display()),
+        ));
+    }
+    Ok(resolved)
 }
 
 fn open_memory_store(

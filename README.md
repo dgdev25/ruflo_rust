@@ -139,6 +139,7 @@ The CLI includes native command families and deterministic unsupported-command e
 |---------|-------------|
 | `memory store/retrieve/search` | Durable memory operations; semantic search uses BGE/RVF only after an explicit compatible index rebuild |
 | `memory rebuild-index` | Re-embeds active entries into the native RVF index |
+| `memory migrate-node` | Validates an existing Node-compatible SQLite store, creates a backup, and rebuilds a native RVF index without importing Node vector bytes |
 | `mcp start` | Stdio MCP server for the typed tools listed above |
 | `embeddings ingest/search` | Native RVF-backed vector ingestion and search |
 | `auth` | Session-only token handling; no project-local credential persistence |

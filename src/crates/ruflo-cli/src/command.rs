@@ -105,6 +105,10 @@ pub enum ParsedCommand {
     MemoryRebuildIndex {
         path: Option<String>,
     },
+    MemoryMigrateNode {
+        path: Option<String>,
+        dry_run: bool,
+    },
     MemoryBackup {
         path: Option<String>,
     },
@@ -1515,6 +1519,15 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             path: option_value(&args, "--path", "--path"),
         });
     }
+    if normalized.len() >= 2
+        && normalized[0] == "memory"
+        && matches!(normalized[1], "migrate-node" | "reindex-node")
+    {
+        return Ok(ParsedCommand::MemoryMigrateNode {
+            path: option_value(&args, "--path", "--path"),
+            dry_run: args.iter().any(|argument| argument == "--dry-run"),
+        });
+    }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "backup" {
         return Ok(ParsedCommand::MemoryBackup {
             path: option_value(&args, "--path", "--path"),
@@ -2488,6 +2501,10 @@ mod tests {
         assert!(matches!(
             parse(argv(&["memory", "stats"])),
             Ok(ParsedCommand::MemoryStats { .. })
+        ));
+        assert!(matches!(
+            parse(argv(&["memory", "migrate-node", "--path", ".swarm/memory.db", "--dry-run"])),
+            Ok(ParsedCommand::MemoryMigrateNode { path: Some(path), dry_run: true }) if path == ".swarm/memory.db"
         ));
         assert!(matches!(
             parse(argv(&["memory", "purge", "-n", "plans", "--dry-run"])),
