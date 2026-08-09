@@ -7,6 +7,11 @@ matching Ruflo N-API `.node` addon. The tag workflow verifies those filenames
 before publishing. This is automation, not retroactive evidence: a target is
 only release-verified after a successful tagged workflow run for that target.
 
+GitHub artifact provenance is generated only for public repositories. GitHub
+does not support persisting artifact attestations for user-owned private
+repositories; private runs still upload the archive, SHA-256 checksums, and
+SPDX SBOM, but must not be described as signed or attested releases.
+
 ## Supported release matrix
 
 | OS | Architecture | Rust target | Required host evidence |

@@ -97,6 +97,11 @@ jobs:
           artifact-name: ruflo-${{ matrix.target }}-sbom
           upload-artifact: false
       - name: Attest release archive provenance
+        # GitHub does not persist artifact attestations for user-owned private
+        # repositories.  Keep private release builds usable (archives, checksums
+        # and SBOMs are still uploaded), and only claim provenance where the
+        # platform actually supports storing it.
+        if: github.event.repository.visibility == 'public'
         uses: actions/attest@v4
         with:
           subject-path: ruflo-${{ matrix.target }}.${{ matrix.archive }}
