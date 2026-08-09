@@ -24,6 +24,8 @@ sha2 = { workspace = true }
 regex = { workspace = true }
 once_cell = { workspace = true }
 dialoguer = { workspace = true }
+ort = { workspace = true }
+tokenizers = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

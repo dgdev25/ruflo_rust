@@ -74,18 +74,29 @@
 **Estimated effort:** ~250 LOC algorithm porting
 **Review focus:** Graph construction correctness, algorithm invariants
 
-## TASK 5: SONA/EWC learning loop (P1)
-**Replaces:** Node SONA instant adaptation + EWC++ consolidation
-**Rust approach:** Pure Rust incremental learning (no WASM needed)
+## TASK 5: SONA/EWC learning loop — FULL neural adaptation (P1)
+**Replaces:** Node SONA instant adaptation + EWC++ consolidation (WASM SIMD)
+**Rust approach:** Pure Rust neural network (identical math, no WASM/runtime)
 **What to build:**
-- Read JSONL event stream from hooks-events.jsonl
-- Pattern extraction: task → agent → outcome frequency table
-- EWC-style elastic weight consolidation: track which patterns are "important" (high success rate), protect them from forgetting
-- Update routing weights in `learned_routing` service based on outcome feedback
-- Feed into `hooks route` — use learned weights instead of keyword-only matching
-**Files:** `src/crates/ruflo-cli/src/hooks.rs`, `src/crates/ruflo-cli/src/services.rs` (learned_routing)
-**Estimated effort:** ~350 LOC learning loop + weight update + routing integration
-**Review focus:** Learning convergence, weight bounds, no infinite growth
+- Weight matrix (task_features × agents): Vec<f64>, initialized small random
+- Forward pass: dot product + softmax → agent selection probabilities
+- Backward pass: gradient descent on outcome feedback
+  - `gradient = (predicted - actual) · features`
+  - `weights -= learning_rate · gradient`
+- EWC++ (Elastic Weight Consolidation):
+  - Fisher information: `Fisher += gradient²` accumulated over time
+  - Loss penalty: `λ · Fisher · (Δweight)²` added to gradient
+  - Prevents forgetting important patterns when learning new ones
+- Pattern store: JSON-serialized weight matrix + Fisher matrix → `.claude-flow/sona-state.json`
+- Integration:
+  - `hooks route`: use SONA forward pass instead of keyword-only matching
+  - `hooks post-task`: record outcome → trigger backward pass + EWC update
+  - `neural train`: warm-start SONA from explicit training data
+- This is NOT simplified statistics — it's the same neural gradient descent + EWC
+  that SONA runs in WASM. Rust auto-vectorization replaces WASM SIMD.
+**Files:** `src/crates/ruflo-cli/src/sona.rs` (new), `src/crates/ruflo-cli/src/hooks.rs`
+**Estimated effort:** ~400 LOC (matrix ops + forward/backward + EWC + persistence + integration)
+**Review focus:** Learning convergence, Fisher matrix stability, weight bounds, no NaN
 
 ## TASK 6: Bandit model router (P1)
 **Replaces:** Node enhanced-model-router.ts (multi-armed bandit + A/B testing)
