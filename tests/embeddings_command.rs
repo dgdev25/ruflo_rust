@@ -95,7 +95,7 @@ fn search_degrades_without_store() {
     let project = tempfile::tempdir().unwrap();
     let out = run("ruflo", project.path(), &["embeddings", "search", "-q", "x"]);
     assert_eq!(out.status.code(), Some(1));
-    assert!(stderr(&out).contains("Memory store not found") || stderr(&out).contains("Node"));
+    assert!(stderr(&out).contains("RVF store not found") || stderr(&out).contains("Memory store not found") || stderr(&out).contains("Node"));
 }
 
 #[test]

@@ -41,6 +41,342 @@
             "type": "object",
             "additionalProperties": false
           }
+        },
+        {
+          "name": "agent_execute",
+          "description": "Execute a task on a spawned agent.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "agent_list",
+          "description": "List all active agents.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "agent_status",
+          "description": "Show detailed agent status.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "agent_terminate",
+          "description": "Terminate a running agent.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "swarm_init",
+          "description": "Initialize a new swarm.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "swarm_status",
+          "description": "Show swarm status.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "swarm_shutdown",
+          "description": "Stop swarm execution.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "swarm_coordinate",
+          "description": "V3 multi-agent coordination.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "task_create",
+          "description": "Create a new task.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "task_list",
+          "description": "List all tasks.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "task_status",
+          "description": "Get task details.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "task_cancel",
+          "description": "Cancel a running task.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "task_assign",
+          "description": "Assign task to agent(s).",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "security_scan",
+          "description": "Run a security scan.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "security_defend",
+          "description": "AI manipulation defense scan.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "embeddings_generate",
+          "description": "Generate an embedding.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "embeddings_search",
+          "description": "Semantic similarity search.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "embeddings_compare",
+          "description": "Compare two texts.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "neural_train",
+          "description": "Train neural patterns.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "neural_status",
+          "description": "Neural network status.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "hive_mind_init",
+          "description": "Initialize a hive mind.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "hive_mind_status",
+          "description": "Show hive status.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "hive_mind_spawn",
+          "description": "Spawn hive workers.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "hive_mind_shutdown",
+          "description": "Shutdown the hive.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "session_save",
+          "description": "Save current session.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "session_list",
+          "description": "List all sessions.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "session_restore",
+          "description": "Restore a saved session.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "claims_check",
+          "description": "Check if a claim is granted.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "claims_list",
+          "description": "List all claims.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "sona_train",
+          "description": "Train the SONA MLP on router decisions (backprop + EWC++).",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "sona_predict",
+          "description": "Predict a class for an embedding via the trained SONA net.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "sona_status",
+          "description": "Report SONA weights + Fisher consolidation state.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "route_task",
+          "description": "Route a task via Thompson-sampling bandit.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "route_feedback",
+          "description": "Record success/failure to update a route posterior.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "route_stats",
+          "description": "Show per-agent assignment + success stats.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "ipfs_publish",
+          "description": "Publish a file to the local pattern registry (native CID).",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "ipfs_download",
+          "description": "Download a CID from the IPFS gateway.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "ipfs_search",
+          "description": "Search the local pattern registry.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "ipfs_list",
+          "description": "List patterns in the local registry.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "embeddings_ingest",
+          "description": "Embed text (hash vectorizer, ONNX when available upstream).",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "auth_status",
+          "description": "Show auth profile status.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "auth_login_token",
+          "description": "Store a pre-obtained auth token (--token-stdin).",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
         }
       ]
     }
@@ -51,11 +387,11 @@
   "provenance": {
     "kind": "reduced-schema",
     "source": "manual compatibility fixture",
-    "reduction": "minimal synthetic tools/list fixture for schema and replay tests only; not a captured source contract",
+    "reduction": "minimal synthetic tools/list fixture for schema and replay tests only; regenerated after T9 added 16 native-capability tools",
     "redactions": []
   },
   "recording": {
-    "recorded_at": "2026-08-07T00:00:00Z",
+    "recorded_at": "2026-08-09T00:00:00Z",
     "recorded_by": "manual curation",
     "harness": "fixture-schema"
   }

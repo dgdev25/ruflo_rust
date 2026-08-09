@@ -28,7 +28,12 @@ fn train_validates_pattern_and_records() {
         assert!(stderr(&bad).contains("Unknown pattern"));
         let good = run(binary, project.path(), &["neural", "train", "-p", "security", "-e", "5"]);
         assert_eq!(good.status.code(), Some(0));
-        assert!(stdout(&good).contains("Training run recorded"));
+        // Native SONA MLP reports its backend; legacy "recorded" wording also accepted.
+        assert!(
+            stdout(&good).contains("SONA MLP trained") || stdout(&good).contains("Training run recorded"),
+            "train stdout: {}",
+            stdout(&good)
+        );
         // State persisted.
         let stats: serde_json::Value = serde_json::from_str(
             &fs::read_to_string(project.path().join(".claude-flow/neural/stats.json")).unwrap(),

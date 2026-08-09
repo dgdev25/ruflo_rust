@@ -71,19 +71,16 @@ RuFlo Pattern Store
 Decentralized pattern marketplace via IPFS
 
 Subcommands:
-  - list      - List patterns from local registry
+  - list      - List patterns from registry
   - search    - Search patterns
-  - download  - Download a pattern by CID (via gateway)
-  - publish   - Publish a pattern (compute CID, add to registry)
+  - download  - Download a pattern
+  - publish   - Publish a pattern
   - info      - Show pattern details
 
-Environment:
-  RUFLO_IPFS_GATEWAY  IPFS HTTP gateway (default: https://ipfs.io/ipfs)
-
 Example:
-  ruflo transfer-store publish -f pattern.json -n my-pattern
-  ruflo transfer-store list --featured
-  ruflo transfer-store download --cid <cid>
+  claude-flow hooks transfer store list --featured
+  claude-flow hooks transfer store search -q "routing"
+  claude-flow hooks transfer store download -n seraphine-genesis
 "####);
             0
         }
