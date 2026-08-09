@@ -33,6 +33,7 @@ ruvector.db
 .codex/
 .ruvnet-brain/
 .agentic-qe/
+packages/ruflo-native/*.node
 .claude/
 agentdb.rvf*
 ruvector.db

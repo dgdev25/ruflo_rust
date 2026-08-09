@@ -1,0 +1,16 @@
+[package]
+name = "ruflo-napi"
+version = "3.34.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "napi-rs bindings for the process-independent Ruflo core."
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = { workspace = true }
+napi-derive = { workspace = true }
+ruflo-core = { path = "../ruflo-core" }
