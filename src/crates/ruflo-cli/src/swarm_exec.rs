@@ -93,6 +93,11 @@ fn sanitized_env(keep_env: bool) -> Vec<(String, String)> {
                 || ku.ends_with("_PASSWORD")
                 || ku.ends_with("_CREDENTIAL")
                 || ku.contains("APIKEY")
+                || ku.contains("AUTH")
+                || ku.contains("JWT")
+                || ku.contains("BEARER")
+                || ku.contains("COOKIE")
+                || ku.contains("SESSION")
                 || ku == "TOKEN"
                 || ku == "SECRET";
             !suspicious
@@ -192,26 +197,28 @@ pub fn run_swarm(
         };
     }
 
-    // Spawn N workers in parallel (one thread each).
-    let results: Vec<WorkerResult> = (0..n)
+    // Spawn N workers in parallel (one thread each). Collect handles first,
+    // then join — calling .join() inside .map() would block each spawn until
+    // the previous worker finishes, defeating parallelism.
+    let handles: Vec<_> = (0..n)
         .map(|i| {
             let prompt = worker_prompt(objective, i, n, roles[i]);
             let agent_for_thread = agent.to_string();
-            let agent_for_fallback = agent.to_string();
             let cwd_owned = cwd.to_path_buf();
             std::thread::spawn(move || {
-                spawn_worker_with_idx(
-                    i,
-                    &agent_for_thread,
-                    &prompt,
-                    &cwd_owned,
-                    keep_env,
-                )
+                spawn_worker_with_idx(i, &agent_for_thread, &prompt, &cwd_owned, keep_env)
             })
-            .join()
-            .unwrap_or_else(|_| WorkerResult {
+        })
+        .collect();
+
+    let agent_owned = agent.to_string();
+    let results: Vec<WorkerResult> = handles
+        .into_iter()
+        .enumerate()
+        .map(|(i, h)| {
+            h.join().unwrap_or_else(|_| WorkerResult {
                 worker_idx: i,
-                agent: agent_for_fallback,
+                agent: agent_owned.clone(),
                 stdout: String::new(),
                 stderr: "worker thread panicked".into(),
                 exit_code: -1,
@@ -271,6 +278,11 @@ fn spawn_worker_with_idx(
                 || ku.ends_with("_PASSWORD")
                 || ku.ends_with("_CREDENTIAL")
                 || ku.contains("APIKEY")
+                || ku.contains("AUTH")
+                || ku.contains("JWT")
+                || ku.contains("BEARER")
+                || ku.contains("COOKIE")
+                || ku.contains("SESSION")
                 || ku == "TOKEN"
                 || ku == "SECRET";
             if suspicious {

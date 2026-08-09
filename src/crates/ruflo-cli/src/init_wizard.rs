@@ -124,14 +124,12 @@ fn generate_settings() -> Value {
 }
 
 fn generate_mcp_config(root: &Path) -> Value {
-    let exe = std::env::current_exe()
-        .ok()
-        .map(|p| p.display().to_string())
-        .unwrap_or_else(|| "ruflo".into());
+    // Use "ruflo" (assumed on PATH) instead of an absolute exe path that
+    // breaks if the binary is moved. Fix for codesec finding: brittle path.
     json!({
         "mcpServers": {
             "ruflo": {
-                "command": exe,
+                "command": "ruflo",
                 "args": ["mcp", "start"],
                 "cwd": root.display().to_string()
             }

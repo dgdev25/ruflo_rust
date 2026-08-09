@@ -27,9 +27,12 @@ fn write_state(name: &str, v: &Value) -> Result<(), RufloError> {
     if let Some(dir) = path.parent() {
         let _ = fs::create_dir_all(dir);
     }
+    let tmp = path.with_extension("json.tmp");
     let bytes = serde_json::to_vec_pretty(v).unwrap_or_default();
-    fs::write(&path, &bytes)
-        .map_err(|e| RufloError::UpstreamAdapter { message: format!("write {name}: {e}") })
+    fs::write(&tmp, &bytes)
+        .map_err(|e| RufloError::UpstreamAdapter { message: format!("write {name}: {e}") })?;
+    fs::rename(&tmp, &path)
+        .map_err(|e| RufloError::UpstreamAdapter { message: format!("rename {name}: {e}") })
 }
 
 fn now_ms() -> u64 {
