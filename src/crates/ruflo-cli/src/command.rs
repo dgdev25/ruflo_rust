@@ -98,6 +98,9 @@ pub enum ParsedCommand {
     MemoryStats {
         path: Option<String>,
     },
+    MemoryRebuildIndex {
+        path: Option<String>,
+    },
     MemoryPurge {
         namespace: String,
         dry_run: bool,
@@ -1442,6 +1445,13 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
     }
     if normalized.len() >= 2 && normalized[0] == "memory" && normalized[1] == "stats" {
         return Ok(ParsedCommand::MemoryStats {
+            path: option_value(&args, "--path", "--path"),
+        });
+    }
+    if normalized.len() >= 2 && normalized[0] == "memory"
+        && (normalized[1] == "rebuild-index" || normalized[1] == "rebuild")
+    {
+        return Ok(ParsedCommand::MemoryRebuildIndex {
             path: option_value(&args, "--path", "--path"),
         });
     }

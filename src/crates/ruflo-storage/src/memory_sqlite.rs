@@ -244,6 +244,28 @@ impl SqliteMemoryStore {
         ).optional().map_err(map_sqlite("memory.retrieve_semantic"))
     }
 
+    /// Path to the sidecar that records which embedding backend built the
+    /// RVF index ("hash" or "onnx"). Prevents cross-backend vector mismatch —
+    /// a hash-built index is incompatible with ONNX query vectors.
+    fn backend_tag_path(&self) -> PathBuf {
+        self.database_path.with_file_name("memory.rvf.backend")
+    }
+
+    /// Read the recorded backend tag, if any.
+    pub fn backend_tag(&self) -> Option<String> {
+        fs::read_to_string(self.backend_tag_path())
+            .ok()
+            .map(|s| s.trim().to_string())
+    }
+
+    /// Record the backend that built/extended the index.
+    pub fn set_backend_tag(&self, backend: &str) -> Result<(), RufloError> {
+        let path = self.backend_tag_path();
+        fs::write(&path, backend).map_err(|e| {
+            RufloError::invalid_input("memory.backend_tag", format!("write: {e}"))
+        })
+    }
+
     /// Semantic k-NN search via the RVF HNSW store. The query vector is
     /// produced by the caller (CLI/MCP embeds the query string); this method
     /// opens the RVF store sibling to the SQLite db, runs k-NN, and joins the
@@ -252,16 +274,32 @@ impl SqliteMemoryStore {
     /// Returns `(entry, similarity)` pairs ordered by descending similarity.
     /// Falls back to an empty result (not an error) when no RVF store exists
     /// yet — the caller can retry with `search_keyword`.
+    ///
+    /// `query_backend` must match the tag recorded when the index was built;
+    /// a mismatch returns an error so the caller can trigger a rebuild rather
+    /// than silently returning wrong results.
     pub fn search_semantic(
         &self,
         query_vec: &[f32],
         limit: usize,
         dimension: u16,
+        query_backend: &str,
     ) -> Result<Vec<(MemoryEntry, f32)>, RufloError> {
         let rvf_path = self.database_path
             .with_file_name("memory.rvf");
         if !rvf_path.exists() {
             return Ok(Vec::new());
+        }
+        // Refuse mixed-backend search: hash vectors ≠ ONNX vectors.
+        if let Some(tag) = self.backend_tag() {
+            if tag != query_backend {
+                return Err(RufloError::invalid_input(
+                    "memory.backend_mismatch",
+                    format!(
+                        "index built with '{tag}' backend but query uses '{query_backend}'; run `memory rebuild-index` to re-embed with the active backend"
+                    ),
+                ));
+            }
         }
         let config = crate::rvf_adapter::AgentDbFixtureConfig::new(dimension);
         let store = crate::rvf_adapter::RvfPersistencePort::open_agentdb(&rvf_path, config)?;
@@ -283,13 +321,27 @@ impl SqliteMemoryStore {
 
     /// Ingest a vector into the RVF store and bind it to the given entry via
     /// semantic_id. Called by the CLI/MCP layer after computing an embedding.
+    /// Records `backend` as the index's backend tag (refuses to ingest if the
+    /// existing index was built with a different backend).
     pub fn ingest_semantic(
         &self,
         namespace: &str,
         key: &str,
         vector: &[f32],
         dimension: u16,
+        backend: &str,
     ) -> Result<u64, RufloError> {
+        // Enforce single-backend consistency.
+        if let Some(tag) = self.backend_tag() {
+            if tag != backend {
+                return Err(RufloError::invalid_input(
+                    "memory.backend_mismatch",
+                    format!(
+                        "index built with '{tag}' but ingest uses '{backend}'; run `memory rebuild-index`"
+                    ),
+                ));
+            }
+        }
         let rvf_path = self.database_path.with_file_name("memory.rvf");
         let config = crate::rvf_adapter::AgentDbFixtureConfig::new(dimension);
         // Open or create the RVF store.
@@ -310,9 +362,42 @@ impl SqliteMemoryStore {
         };
         store.ingest_agentdb(&[record])?;
         let _ = store.close();
+        self.set_backend_tag(backend)?;
         // Bind to the SQLite entry.
         self.set_semantic_id(namespace, key, next_id)?;
         Ok(next_id)
+    }
+
+    /// Wipe the RVF store + backend tag so the next ingest/rebuild starts
+    /// fresh with a single backend. Called by `memory rebuild-index` before
+    /// re-embedding all entries.
+    pub fn reset_semantic_index(&self) -> Result<(), RufloError> {
+        let rvf_path = self.database_path.with_file_name("memory.rvf");
+        let _ = fs::remove_file(&rvf_path);
+        let _ = fs::remove_file(self.backend_tag_path());
+        // Clear semantic_id bindings so stale RVF ids don't dangle.
+        self.connection
+            .execute("UPDATE memory_entries SET semantic_id = NULL", [])
+            .map_err(map_sqlite("memory.reset_semantic"))?;
+        Ok(())
+    }
+
+    /// Enumerate every active entry's (namespace, key, content) for a full
+    /// rebuild. The caller embeds each and calls ingest_semantic.
+    pub fn entries_for_rebuild(&self) -> Result<Vec<(String, String, String)>, RufloError> {
+        let mut stmt = self.connection
+            .prepare("SELECT namespace, key, content FROM memory_entries WHERE status = 'active'")
+            .map_err(map_sqlite("memory.rebuild_list"))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+            })
+            .map_err(map_sqlite("memory.rebuild_list"))?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(map_sqlite("memory.rebuild_list"))?);
+        }
+        Ok(out)
     }
 
     /// Enumerate active memory entries for compatibility views such as
@@ -629,11 +714,11 @@ mod semantic_tests {
         let entry = store.store(&input).unwrap();
         // Embed the content (simple deterministic vector).
         let vec: Vec<f32> = (0..8).map(|i| i as f32 / 8.0).collect();
-        let sid = store.ingest_semantic(&entry.namespace, &entry.key, &vec, 8).unwrap();
+        let sid = store.ingest_semantic(&entry.namespace, &entry.key, &vec, 8, "hash").unwrap();
         assert!(sid >= 1);
 
         // Query with the same vector → should find the entry.
-        let results = store.search_semantic(&vec, 5, 8).unwrap();
+        let results = store.search_semantic(&vec, 5, 8, "hash").unwrap();
         assert!(!results.is_empty(), "semantic search should return the ingested entry");
         let (found, _sim) = &results[0];
         assert_eq!(found.key, "k1");
@@ -644,7 +729,55 @@ mod semantic_tests {
         let store = tmp_store();
         let q = vec![0.1f32; 8];
         // No ingest → no RVF store → empty (not error).
-        let results = store.search_semantic(&q, 5, 8).unwrap();
+        let results = store.search_semantic(&q, 5, 8, "hash").unwrap();
         assert!(results.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod backend_tag_tests {
+    use super::*;
+
+    #[test]
+    fn mismatched_backend_refuses_search() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_path_buf();
+        let db = root.join("memory.db");
+        std::mem::forget(dir);
+        let store = SqliteMemoryStore::open(&root, &db).unwrap();
+        let input = MemoryStoreInput {
+            key: "k".into(), namespace: "default".into(),
+            content: "hello".into(), memory_type: "semantic".into(),
+            tags_json: None, provenance_type: "test".into(), upsert: true,
+        };
+        let e = store.store(&input).unwrap();
+        let v = vec![0.5f32; 8];
+        store.ingest_semantic(&e.namespace, &e.key, &v, 8, "hash").unwrap();
+        // Querying with a different backend → error.
+        let err = store.search_semantic(&v, 5, 8, "onnx").unwrap_err();
+        assert!(err.to_string().contains("backend_mismatch") || err.to_string().contains("rebuild"));
+    }
+
+    #[test]
+    fn reset_then_rebuild_clears_tag() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_path_buf();
+        let db = root.join("memory.db");
+        std::mem::forget(dir);
+        let store = SqliteMemoryStore::open(&root, &db).unwrap();
+        let input = MemoryStoreInput {
+            key: "k".into(), namespace: "default".into(),
+            content: "hello".into(), memory_type: "semantic".into(),
+            tags_json: None, provenance_type: "test".into(), upsert: true,
+        };
+        let e = store.store(&input).unwrap();
+        let v = vec![0.5f32; 8];
+        store.ingest_semantic(&e.namespace, &e.key, &v, 8, "hash").unwrap();
+        assert_eq!(store.backend_tag(), Some("hash".into()));
+        store.reset_semantic_index().unwrap();
+        assert_eq!(store.backend_tag(), None);
+        // After reset, ingest with a new backend works.
+        store.ingest_semantic(&e.namespace, &e.key, &v, 8, "onnx").unwrap();
+        assert_eq!(store.backend_tag(), Some("onnx".into()));
     }
 }

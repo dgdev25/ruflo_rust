@@ -775,6 +775,39 @@ Subcommands:
             }
             Err(error) => ruflo_error(error),
         },
+        Ok(ParsedCommand::MemoryRebuildIndex { path }) => {
+            match open_memory_store(path.as_deref()) {
+                Ok(store) => {
+                    // Determine the active backend (ONNX if model present, else hash).
+                    let backend = if onnx_embeddings::model_available() { "onnx" } else { "hash" };
+                    let dim = onnx_embeddings::ONNX_DIM;
+                    // Reset the old index (clears backend tag + stale RVF ids).
+                    if let Err(e) = store.reset_semantic_index() {
+                        return ruflo_error(e);
+                    }
+                    let entries = match store.entries_for_rebuild() {
+                        Ok(e) => e,
+                        Err(e) => return ruflo_error(e),
+                    };
+                    let mut ingested = 0u64;
+                    for (ns, key, content) in &entries {
+                        let (vec, _) = onnx_embeddings::embed(content, dim);
+                        let vf32: Vec<f32> = vec.iter().map(|x| *x as f32).collect();
+                        match store.ingest_semantic(ns, key, &vf32, dim as u16, backend) {
+                            Ok(_) => ingested += 1,
+                            Err(e) => eprintln!("[WARN] rebuild skip {ns}/{key}: {e}"),
+                        }
+                    }
+                    let _ = store.set_backend_tag(backend);
+                    println!(
+                        "Memory Index Rebuilt\nBackend: {backend}\nDimension: {dim}\nEntries re-embedded: {ingested}\nTotal: {}",
+                        entries.len()
+                    );
+                    ExitCode::SUCCESS
+                }
+                Err(error) => ruflo_error(error),
+            }
+        }
         Ok(ParsedCommand::MemoryPurge {
             namespace,
             dry_run,

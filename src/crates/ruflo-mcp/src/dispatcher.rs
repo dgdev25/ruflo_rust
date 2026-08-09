@@ -410,7 +410,7 @@ fn memory_search(arguments: &Value) -> Result<ToolResult, RufloError> {
     // RVF ids back to memory_entries via semantic_id.
     let (qvec, embed_method) = crate::tools_extra::inline_embed_pub(&query, dim);
     let qf32: Vec<f32> = qvec.iter().map(|x| *x as f32).collect();
-    let semantic = store.search_semantic(&qf32, limit, dim as u16).unwrap_or_default();
+    let semantic = store.search_semantic(&qf32, limit, dim as u16, embed_method).unwrap_or_default();
 
     if !semantic.is_empty() {
         let structured: Vec<Value> = semantic.iter().map(|(e, sim)| {
