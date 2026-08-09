@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use ruflo_storage::{MigrationPlan, PersistencePort};
+use ruflo_storage::{MemoryStoreInput, MigrationPlan, PersistencePort, SqliteMemoryStore};
 use ruflo_types::RufloError;
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
@@ -100,6 +100,35 @@ fn open_rejects_paths_outside_the_project_root() {
         error,
         RufloError::InvalidInput { code, .. } if code == "storage.project_root.escape"
     ));
+}
+
+#[test]
+fn populated_memory_entries_survive_atomic_migration_and_reopen() {
+    let project = TestProject::new("populated-node-compatible");
+    let database = project.root().join(".swarm/memory.db");
+    let store = SqliteMemoryStore::open(project.root(), &database).unwrap();
+    store.store(&MemoryStoreInput {
+        key: "migration-contract".into(),
+        namespace: "patterns".into(),
+        content: "preserve populated Node-compatible memory entries".into(),
+        memory_type: "semantic".into(),
+        tags_json: Some(r#"["parity","migration"]"#.into()),
+        provenance_type: "user_claim".into(),
+        upsert: true,
+    }).unwrap();
+    drop(store);
+
+    let port = PersistencePort::open(project.root(), &database).unwrap();
+    port.begin_migration().unwrap().commit(&MigrationPlan::new(
+        |bytes| Ok(bytes.to_vec()),
+        |bytes| if bytes.starts_with(b"SQLite format 3\0") { Ok(()) } else { Err(RufloError::MigrationFailed { message: "not a SQLite database".into() }) },
+    )).unwrap();
+
+    let reopened = SqliteMemoryStore::open(project.root(), &database).unwrap();
+    let entry = reopened.retrieve("patterns", "migration-contract").unwrap().unwrap();
+    assert_eq!(entry.content, "preserve populated Node-compatible memory entries");
+    assert_eq!(entry.memory_type, "semantic");
+    assert_eq!(entry.provenance_type, "user_claim");
 }
 
 struct TestProject {
