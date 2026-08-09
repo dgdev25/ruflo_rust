@@ -5,8 +5,30 @@
 use serde_json::{json, Value};
 
 pub const ONNX_DIM: usize = 384;
+/// Dimension used by the BGE-base semantic index.  The no-ONNX build cannot
+/// produce these embeddings, but exposes the same API so callers can select a
+/// safe fallback at runtime.
+pub const BGE_DIM: usize = 768;
 
-pub fn model_available() -> bool { false }
+pub fn model_available() -> bool {
+    false
+}
+
+/// BGE requires the optional ONNX runtime, which is deliberately omitted from
+/// the Windows GNU cross-build.
+pub fn bge_model_available() -> bool {
+    false
+}
+
+/// No-ONNX builds must never silently create a hash vector tagged as BGE.
+pub fn embed_bge_document(_text: &str) -> Option<Vec<f64>> {
+    None
+}
+
+/// No-ONNX builds must never silently query a BGE index with a hash vector.
+pub fn embed_bge_query(_text: &str) -> Option<Vec<f64>> {
+    None
+}
 
 pub fn embed(text: &str, dim: usize) -> (Vec<f64>, &'static str) {
     (hash_embed(text, dim), "hash")
@@ -17,7 +39,9 @@ fn hash_embed(text: &str, dim: usize) -> Vec<f64> {
     let lower = text.to_lowercase();
     for token in lower.split(|c: char| c.is_whitespace() || c == '_') {
         let token = token.trim_matches(|c: char| !c.is_alphanumeric());
-        if token.is_empty() { continue; }
+        if token.is_empty() {
+            continue;
+        }
         let grams: Vec<String> = if token.chars().count() <= 3 {
             vec![token.to_string()]
         } else {
@@ -27,14 +51,24 @@ fn hash_embed(text: &str, dim: usize) -> Vec<f64> {
         };
         for gram in grams.iter().chain(std::iter::once(&token.to_string())) {
             let mut h: u64 = 0xcbf29ce484222325;
-            for b in gram.as_bytes() { h ^= *b as u64; h = h.wrapping_mul(0x100000001b3); }
+            for b in gram.as_bytes() {
+                h ^= *b as u64;
+                h = h.wrapping_mul(0x100000001b3);
+            }
             let mut h2: u64 = 0xcbf29ce484222325;
-            for b in format!("salt{gram}").as_bytes() { h2 ^= *b as u64; h2 = h2.wrapping_mul(0x100000001b3); }
+            for b in format!("salt{gram}").as_bytes() {
+                h2 ^= *b as u64;
+                h2 = h2.wrapping_mul(0x100000001b3);
+            }
             let idx = h as usize % dim;
             v[idx] += if h2 & 1 == 0 { 1.0 } else { -1.0 };
         }
     }
     let norm = v.iter().map(|x| x * x).sum::<f64>().sqrt();
-    if norm > 0.0 { for x in v.iter_mut() { *x /= norm; } }
+    if norm > 0.0 {
+        for x in v.iter_mut() {
+            *x /= norm;
+        }
+    }
     v
 }
