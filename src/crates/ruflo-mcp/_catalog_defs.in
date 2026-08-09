@@ -1,4 +1,8 @@
 vec![
+        ("budget_status", "Global AI budget status."),
+        ("budget_check", "Check if a spawn is within budget."),
+        ("budget_record", "Book spend after a worker completes."),
+        ("budget_reset", "Reset the budget circuit breaker."),
         ("agent_health", "agent health."),
         ("agent_logs", "agent logs."),
         ("agent_pool", "agent pool."),

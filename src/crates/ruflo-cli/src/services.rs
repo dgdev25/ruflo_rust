@@ -1177,6 +1177,141 @@ pub mod policy_runtime {
     }
 }
 
+/// Global AI budget — machine-wide token/cost circuit breaker.
+/// Ports services/global-ai-budget.ts. Enforces concurrent/hourly/daily
+/// caps across ALL worker spawns. check() is called before every swarm.spawn
+/// / headless.execute; it returns Err when the budget is exhausted (circuit
+/// open). record() books spend after a worker completes.
+pub mod global_budget {
+    use super::*;
+
+    /// Per-model cost rates (USD per 1M tokens, blended in/out).
+    fn rate_per_mtok(model: &str) -> f64 {
+        match model {
+            "haiku" => 1.25,
+            "sonnet" => 9.0,
+            "opus" => 45.0,
+            "gpt-4o" | "gpt4o" => 10.0,
+            "gemini-pro" | "gemini" => 3.5,
+            _ => 5.0,
+        }
+    }
+
+    /// Default limits (overridable via state). Concurrent=8, hourly=$5, daily=$50.
+    fn defaults() -> Value {
+        json!({
+            "maxConcurrent": 8,
+            "hourlyBudgetUsd": 5.0,
+            "dailyBudgetUsd": 50.0,
+            "concurrent": 0,
+            "hourSpentUsd": 0.0,
+            "daySpentUsd": 0.0,
+            "hourStart": now_ms(),
+            "dayStart": now_ms(),
+            "circuitOpen": false,
+        })
+    }
+
+    fn load() -> Value {
+        let mut s = read_state("global-budget");
+        if s.is_null() || s.as_object().map(|o| o.is_empty()).unwrap_or(true) {
+            s = defaults();
+            write_state("global-budget", &s);
+        }
+        s
+    }
+
+    fn rollover(s: &mut Value) {
+        let now = now_ms();
+        let hour_ms = 3_600_000u64;
+        let day_ms = 86_400_000u64;
+        if now.saturating_sub(s["hourStart"].as_u64().unwrap_or(now)) > hour_ms {
+            s["hourSpentUsd"] = json!(0.0);
+            s["hourStart"] = json!(now);
+        }
+        if now.saturating_sub(s["dayStart"].as_u64().unwrap_or(now)) > day_ms {
+            s["daySpentUsd"] = json!(0.0);
+            s["dayStart"] = json!(now);
+        }
+    }
+
+    /// Check whether a spawn is allowed. Returns Ok(cost-so-far) or Err(reason).
+    /// Does NOT book spend — call record() after the worker finishes.
+    pub fn check() -> Result<Value, String> {
+        let _g = match LockGuard::acquire("global-budget") {
+            Some(g) => g,
+            None => return Err("global-budget lock contention".into()),
+        };
+        let mut s = load();
+        rollover(&mut s);
+        let concurrent = s["concurrent"].as_u64().unwrap_or(0);
+        let max_concurrent = s["maxConcurrent"].as_u64().unwrap_or(8);
+        if s["circuitOpen"].as_bool() == Some(true) {
+            return Err("circuit open (budget breaker tripped)".into());
+        }
+        if concurrent >= max_concurrent {
+            return Err(format!(
+                "concurrent cap reached ({concurrent}/{max_concurrent})"
+            ));
+        }
+        let hour = s["hourSpentUsd"].as_f64().unwrap_or(0.0);
+        let hour_max = s["hourlyBudgetUsd"].as_f64().unwrap_or(5.0);
+        if hour >= hour_max {
+            s["circuitOpen"] = json!(true);
+            write_state("global-budget", &s);
+            return Err(format!("hourly budget exhausted (${hour:.2}/${hour_max:.2})"));
+        }
+        let day = s["daySpentUsd"].as_f64().unwrap_or(0.0);
+        let day_max = s["dailyBudgetUsd"].as_f64().unwrap_or(50.0);
+        if day >= day_max {
+            s["circuitOpen"] = json!(true);
+            write_state("global-budget", &s);
+            return Err(format!("daily budget exhausted (${day:.2}/${day_max:.2})"));
+        }
+        // Reserve a concurrent slot.
+        s["concurrent"] = json!(concurrent + 1);
+        write_state("global-budget", &s);
+        Ok(json!({"concurrent": concurrent + 1, "hourSpentUsd": hour, "daySpentUsd": day}))
+    }
+
+    /// Book actual spend after a worker completes. Releases the concurrent slot.
+    pub fn record(model: &str, tokens: u64, success: bool) -> Value {
+        let _g = LockGuard::acquire("global-budget");
+        let mut s = load();
+        rollover(&mut s);
+        let cost = (tokens as f64 / 1_000_000.0) * rate_per_mtok(model);
+        let hour = s["hourSpentUsd"].as_f64().unwrap_or(0.0) + cost;
+        let day = s["daySpentUsd"].as_f64().unwrap_or(0.0) + cost;
+        s["hourSpentUsd"] = json!(hour);
+        s["daySpentUsd"] = json!(day);
+        // Release the concurrent slot.
+        let c = s["concurrent"].as_u64().unwrap_or(0).saturating_sub(1);
+        s["concurrent"] = json!(c);
+        // Trip the breaker on hard failure.
+        if !success {
+            s["circuitOpen"] = json!(true);
+        }
+        write_state("global-budget", &s);
+        json!({"costUsd": cost, "hourSpentUsd": hour, "daySpentUsd": day,
+               "concurrent": c, "model": model, "tokens": tokens})
+    }
+
+    pub fn status() -> Value {
+        let mut s = load();
+        rollover(&mut s);
+        write_state("global-budget", &s);
+        s
+    }
+
+    pub fn reset_breaker() -> bool {
+        let _g = LockGuard::acquire("global-budget");
+        let mut s = load();
+        s["circuitOpen"] = json!(false);
+        write_state("global-budget", &s);
+        true
+    }
+}
+
 // ============================================================================ //
 // HARNESS/METAHARNESS (state management — execution deferred to LLM runtime)
 // ============================================================================ //
@@ -1884,5 +2019,42 @@ mod headless_tests {
     fn execute_unavailable_binary_degrades() {
         let r = headless::execute("test", "definitely-not-a-binary-xyz", "x", 1000, &[]);
         assert_eq!(r["status"].as_str(), Some("unavailable"));
+    }
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use super::global_budget;
+    use std::sync::Mutex;
+    static BUDGET_LOCK: Mutex<()> = Mutex::new(());
+
+    fn fresh_state() {
+        // Wipe the persisted budget state so each test starts from defaults.
+        let _ = std::fs::remove_file(state_path("global-budget"));
+    }
+
+    #[test]
+    fn check_then_record_releases_slot() {
+        let _g = BUDGET_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        fresh_state();
+        let check = global_budget::check().expect("budget should allow within caps");
+        let after_check = check["concurrent"].as_u64().unwrap_or(0);
+        assert!(after_check >= 1);
+        let rec = global_budget::record("sonnet", 50000, true);
+        let after_record = rec["concurrent"].as_u64().unwrap_or(after_check);
+        assert!(after_record < after_check, "record should release a slot: {after_record} >= {after_check}");
+        assert!(rec["costUsd"].as_f64().unwrap_or(0.0) > 0.0);
+    }
+
+    #[test]
+    fn record_failure_trips_breaker() {
+        let _g = BUDGET_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        fresh_state();
+        let _ = global_budget::check();
+        let _ = global_budget::record("haiku", 100, false);
+        let st = global_budget::status();
+        assert_eq!(st["circuitOpen"].as_bool(), Some(true));
+        let res = global_budget::check();
+        assert!(res.is_err());
     }
 }

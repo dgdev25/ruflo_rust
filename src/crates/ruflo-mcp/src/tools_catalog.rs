@@ -38,6 +38,8 @@ pub fn handle(name: &str, args: &Value) -> Result<ToolResult, RufloError> {
         // analyze_diff → git diff
         "analyze_diff" | "analyze_diff-classify" | "analyze_diff-reviewers"
         | "analyze_diff-risk" | "analyze_diff-stats" | "analyze_file-risk" => return analyze(name, args),
+        // global AI budget
+        "budget_status" | "budget_check" | "budget_record" | "budget_reset" => return budget(name, args),
         // wasm → assess
         t if t.starts_with("wasm_") => return runtime_na(name, "WASM agent sandbox"),
         // browser → needs chromium
@@ -292,4 +294,44 @@ fn analyze(name: &str, _args: &Value) -> Result<ToolResult, RufloError> {
 fn runtime_na(name: &str, reason: &str) -> Result<ToolResult, RufloError> {
     Ok(ToolResult::text(format!("{name}: unavailable ({reason})"),
         Some(json!({"tool": name, "available": false, "reason": reason}))))
+}
+
+// ---- global AI budget (reads the services::global_budget state file) ----
+
+fn budget(name: &str, args: &Value) -> Result<ToolResult, RufloError> {
+    // The canonical implementation lives in services::global_budget (ruflo-cli);
+    // ruflo-mcp can't reach it (cycle), so we read the same state file it writes:
+    // .claude-flow/services/global-budget.json.
+    let file = "services/global-budget.json";
+    match name {
+        "budget_status" => {
+            let st = crate::tools_extra::read_state_pub(file);
+            Ok(ToolResult::text("budget status", Some(json!({"status": st}))))
+        }
+        "budget_check" => {
+            let st = crate::tools_extra::read_state_pub(file);
+            let concurrent = st["concurrent"].as_u64().unwrap_or(0);
+            let max = st["maxConcurrent"].as_u64().unwrap_or(8);
+            let open = st["circuitOpen"].as_bool().unwrap_or(false);
+            let allowed = !open && concurrent < max;
+            Ok(ToolResult::text(if allowed { "allowed" } else { "denied" },
+                Some(json!({"allowed": allowed, "circuitOpen": open, "concurrent": concurrent, "maxConcurrent": max}))))
+        }
+        "budget_record" => {
+            let model = args.get("model").and_then(Value::as_str).unwrap_or("sonnet");
+            let tokens = args.get("tokens").and_then(Value::as_u64).unwrap_or(0);
+            let success = args.get("success").and_then(Value::as_bool).unwrap_or(true);
+            let rate = match model { "haiku"=>1.25,"opus"=>45.0,"gpt-4o"=>10.0,"gemini"=>3.5,_=>9.0 };
+            let cost = (tokens as f64 / 1_000_000.0) * rate;
+            Ok(ToolResult::text(format!("recorded ${cost:.4}"),
+                Some(json!({"model": model, "tokens": tokens, "costUsd": cost, "success": success}))))
+        }
+        "budget_reset" => {
+            let mut st = crate::tools_extra::read_state_pub(file);
+            st["circuitOpen"] = json!(false);
+            crate::tools_extra::write_state_pub(file, &st)?;
+            Ok(ToolResult::text("breaker reset", Some(json!({"reset": true}))))
+        }
+        _ => state_crud(name, args),
+    }
 }

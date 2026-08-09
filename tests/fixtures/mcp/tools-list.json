@@ -523,6 +523,38 @@
           }
         },
         {
+          "name": "budget_status",
+          "description": "Global AI budget status.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "budget_check",
+          "description": "Check if a spawn is within budget.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "budget_record",
+          "description": "Book spend after a worker completes.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "budget_reset",
+          "description": "Reset the budget circuit breaker.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
           "name": "agent_health",
           "description": "agent health.",
           "inputSchema": {
@@ -2763,7 +2795,7 @@
   "provenance": {
     "kind": "reduced-schema",
     "source": "manual compatibility fixture",
-    "reduction": "minimal synthetic tools/list fixture; regenerated after full TS MCP parity (343 tools, 0 missing)",
+    "reduction": "minimal synthetic tools/list fixture; regenerated after budget tools added",
     "redactions": []
   },
   "recording": {
