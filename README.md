@@ -215,7 +215,7 @@ MIT OR Apache-2.0
 
 <div align="center">
 
-**Built with ❤️ on the shoulders of giants rUv and the ecosystem he has developed**
+**Built with ❤️, standing on the shoulders of rUv and the ecosystem he has built**
 
 [Original TypeScript project](https://github.com/ruvnet/ruflo) · [RuvNet](https://ruv.io)
 
