@@ -77,11 +77,16 @@ fn export_import_roundtrip() {
 }
 
 #[test]
-fn predict_degrades() {
+fn predict_embeds_natively() {
     let project = tempfile::tempdir().unwrap();
     let out = run("ruflo", project.path(), &["neural", "predict", "-i", "x"]);
-    assert_eq!(out.status.code(), Some(1));
-    assert!(stderr(&out).contains("Node") || stderr(&out).contains("WASM"));
+    // predict now embeds natively (exit 0) — no Node/WASM degrade.
+    assert_eq!(out.status.code(), Some(0));
+    let s = stdout(&out);
+    assert!(
+        s.contains("embedded") || s.contains("SONA") || s.contains("class"),
+        "predict should embed natively, got: {s}"
+    );
 }
 
 #[test]

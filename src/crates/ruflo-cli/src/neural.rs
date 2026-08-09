@@ -804,11 +804,11 @@ mod tests {
     }
 
     #[test]
-    fn predict_degrades_without_input_or_runtime() {
+    fn predict_embeds_natively() {
         let root = tmp();
-        assert_eq!(run(&root, base("predict")), 1); // missing input
+        assert_eq!(run(&root, base("predict")), 1); // missing input → error
         let mut p = base("predict");
         p.input = Some("x".into());
-        assert_eq!(run(&root, p), 1); // runtime unavailable
+        assert_eq!(run(&root, p), 0); // now embeds natively (exit 0)
     }
 }

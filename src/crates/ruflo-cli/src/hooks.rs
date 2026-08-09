@@ -757,7 +757,8 @@ mod tests {
         assert_eq!(run(&root, w), 1);
         let mut ok = base("worker-dispatch");
         ok.task = Some("audit".into());
-        assert_eq!(run(&root, ok), 1); // degrades (no daemon) but exit 1
+        // Now records natively (exit 0), not degrades.
+        assert_eq!(run(&root, ok), 0);
     }
 
     #[test]
