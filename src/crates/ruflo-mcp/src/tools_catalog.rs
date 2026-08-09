@@ -497,13 +497,16 @@ fn browser_handler(name: &str, args: &Value) -> Result<ToolResult, RufloError> {
         "browser_open" => {
             let url = args.get("url").and_then(Value::as_str).unwrap_or("about:blank");
             if let Some(ref b) = browser {
-                // Launch headless browser to the URL (real navigation).
-                let _ = std::process::Command::new(b)
+                // #13: use .output() to avoid leaking unwaited Child (zombie + pipe deadlock)
+                let dom = std::process::Command::new(b)
                     .args(["--headless", "--dump-dom", url])
                     .stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null())
-                    .spawn();
+                    .output();
+                let dom_text = dom.ok()
+                    .map(|o| String::from_utf8_lossy(&o.stdout).chars().take(2000).collect::<String>())
+                    .unwrap_or_default();
                 Ok(ToolResult::text(format!("opened {url} via {b}"),
-                    Some(json!({"url": url, "browser": b, "headless": true}))))
+                    Some(json!({"url": url, "browser": b, "headless": true, "dom": dom_text}))))
             } else {
                 runtime_na(name, "no chromium/chrome binary on PATH")
             }

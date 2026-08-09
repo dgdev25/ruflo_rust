@@ -420,11 +420,16 @@ pub fn run_swarm(
     // APSC (Adaptive Pheromone Swarm Coordinator) updates per-agent EMA
     // fitness + keep/suspend eligibility. Ports services/pheromone-adaptive.ts.
     for r in &results {
+        // #5: Skip pheromone feedback for skipped workers (exit -2) — don't
+        // punish agents that were already below threshold (death spiral fix).
+        if r.exit_code == -2 {
+            continue;
+        }
         let success = r.exit_code == 0 && !r.timed_out;
-        // Latency is unknown without timing each worker; use a neutral 1.0
-        // (within typical budget). The pheromone layer normalizes anyway.
+        // #15: Use the agent name (not ephemeral worker-N index) as the stable id.
+        let agent_id = format!("{}-worker", r.agent);
         let _ = crate::services::pheromone::record(
-            &format!("worker-{}", r.worker_idx),
+            &agent_id,
             "worker",
             if success { 1.0 } else { 0.0 },
             1.0,

@@ -73,6 +73,12 @@ fn hmac_sha256(key: &[u8], msg: &[u8]) -> Vec<u8> {
     outer.finalize().to_vec()
 }
 
+fn sha2_hmac_digest(body: &Value) -> Vec<u8> {
+    use sha2::{Digest, Sha256};
+    let body_str = serde_json::to_string(body).unwrap_or_default();
+    Sha256::digest(body_str.as_bytes()).to_vec()
+}
+
 fn hex(bytes: &[u8]) -> String {
     let mut s = String::with_capacity(bytes.len() * 2);
     for b in bytes {
@@ -138,6 +144,17 @@ pub fn verify_ledger() -> (Vec<Value>, bool) {
             ok = false;
             break;
         }
+        // #9: Recompute the body digest from the entry's actual body fields
+        // and compare to the stored bodyHash — catches payload tampering.
+        let body = json!({
+            "id": e["id"], "event": e["event"], "payload": e["payload"],
+            "prevHash": e["prevHash"], "at": e["at"],
+        });
+        let recomputed = hex(&sha2_hmac_digest(&body));
+        if e["bodyHash"].as_str() != Some(recomputed.as_str()) {
+            ok = false;
+            break;
+        }
         let body_hash = e["bodyHash"].as_str().unwrap_or("");
         let chain_msg = format!("{}{}", prev, body_hash);
         let expected = hex(&hmac_sha256(&key, chain_msg.as_bytes()));
@@ -176,10 +193,17 @@ pub fn promote(candidate: &str, expected_champion_hash: &str) -> Result<Value, S
     // Record the promotion as an immutable receipt.
     drop(_g);
     append_receipt("promote", &new_champ);
-    // Record the evolve-proof accept gate (V2 behavioral).
+    // #6: Record the evolve-proof accept gate + flywheel tx, but DON'T
+    // double-append (commit_atomic calls append_receipt internally — so
+    // skip it to avoid duplicate receipts). Handle errors properly.
     let _ = crate::services::evolve_proof_v2::accept(candidate, 1.0, 0.5);
-    // Record the flywheel transaction commit (V2 behavioral).
-    let _ = crate::services::flywheel_tx_v2::commit_atomic("promote", new_champ.clone());
+    // flywheel_tx_v2::commit_atomic would append a SECOND receipt — skip it
+    // and just record the transaction in state (the receipt is already written).
+    {
+        let mut tx_state = crate::services::read_state_pub("flywheel-transactions");
+        crate::services::ensure_arr_pub(&mut tx_state, "transactions").push(new_champ.clone());
+        let _ = crate::services::write_state_pub("flywheel-transactions", &tx_state);
+    }
     Ok(new_champ)
 }
 

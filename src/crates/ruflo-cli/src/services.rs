@@ -188,11 +188,16 @@ where
 }
 
 fn ensure_arr<'a>(v: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
-    if v[key].is_null() {
-        v[key] = json!([]);
+    if !v[key].is_array() {
+        v[key] = json!([]);  // reset non-array/non-null to empty array (#8: was .expect)
     }
-    v[key].as_array_mut().expect("array")
+    v[key].as_array_mut().expect("array just ensured")
 }
+
+// Pub wrappers for cross-module access (flywheel_ledger.rs)
+pub fn read_state_pub(name: &str) -> Value { read_state(name) }
+pub fn write_state_pub(name: &str, v: &Value) -> bool { write_state(name, v) }
+pub fn ensure_arr_pub<'a>(v: &'a mut Value, key: &str) -> &'a mut Vec<Value> { ensure_arr(v, key) }
 
 // ============================================================================ //
 // WORKER MANAGEMENT
@@ -448,14 +453,24 @@ pub mod headless {
         }
 
         let mut cmd = Command::new(binary);
-        cmd.arg("-p").arg(prompt);
+        // Use the correct invocation per binary (#11: codex needs different args).
+        match binary {
+            "codex" => {
+                cmd.args(["exec", "--skip-git-repo-check", prompt]);
+            }
+            _ => {
+                cmd.arg("-p").arg(prompt);
+            }
+        }
         cmd.env_remove("OPENAI_API_KEY")
             .env_remove("ANTHROPIC_API_KEY")
             .env_remove("GEMINI_API_KEY");
         for a in extra_args {
             cmd.arg(a);
         }
-        cmd.stdin(std::process::Stdio::null());
+        cmd.stdin(std::process::Stdio::null())
+           .stdout(std::process::Stdio::piped())  // #1: pipe stdout for capture
+           .stderr(std::process::Stdio::piped());  // #1: pipe stderr for capture
 
         // spawn + watchdog timeout (mirrors swarm_exec pattern)
         match cmd.spawn() {
@@ -721,8 +736,8 @@ pub mod pheromone {
         if state["version"].is_null() {
             state = json!({"version": "ruflo.apsc-state/v1", "threshold": 0.4, "agents": {}});
         }
-        if state["agents"].is_null() { state["agents"] = json!({}); }
-        let agents = state["agents"].as_object_mut().unwrap();
+        if !state["agents"].is_object() { state["agents"] = json!({}); }
+        let agents = state["agents"].as_object_mut().expect("agents ensured as object");
         agents.insert(
             agent_id.into(),
             json!({
@@ -2711,7 +2726,7 @@ pub mod swarm_branches_v2 {
         let parent_path = std::path::PathBuf::from(parent);
         let branch_dir = root().join(".claude-flow/branches");
         let _ = fs::create_dir_all(&branch_dir);
-        let branch_path = branch_dir.join(format!("{name}.rvf"));
+        let safe_name: String = name.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' }).collect(); let branch_path = branch_dir.join(format!("{safe_name}.rvf"));
         if parent_path.exists() {
             fs::copy(&parent_path, &branch_path).map_err(|e| e.to_string())?;
         } else {
@@ -2738,7 +2753,7 @@ pub mod swarm_branches_v2 {
     /// Merge a branch back into parent by overwriting the parent RVF store.
     pub fn merge_branch(name: &str, parent: &str) -> Result<Value, String> {
         let branch_dir = root().join(".claude-flow/branches");
-        let branch_path = branch_dir.join(format!("{name}.rvf"));
+        let safe_name: String = name.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' }).collect(); let branch_path = branch_dir.join(format!("{safe_name}.rvf"));
         if !branch_path.exists() {
             return Err(format!("branch '{name}' not found"));
         }
@@ -2755,7 +2770,7 @@ pub mod swarm_branches_v2 {
     /// Query vectors in a branch (opens the branch RVF store for k-NN).
     pub fn query_branch(name: &str, query_vec: &[f32], limit: usize) -> Result<Value, String> {
         let branch_dir = root().join(".claude-flow/branches");
-        let branch_path = branch_dir.join(format!("{name}.rvf"));
+        let safe_name: String = name.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' }).collect(); let branch_path = branch_dir.join(format!("{safe_name}.rvf"));
         if !branch_path.exists() {
             return Err(format!("branch '{name}' not found"));
         }
@@ -2778,7 +2793,9 @@ pub mod checkpoint_v2 {
     pub fn checkpoint(store_path: &str, label: &str) -> Result<Value, String> {
         let ckpt_dir = root().join(".claude-flow/checkpoints");
         let _ = fs::create_dir_all(&ckpt_dir);
-        let ckpt_path = ckpt_dir.join(format!("{label}-{}.rvf", now_ms()));
+        // #2: sanitize label — reject path separators + ..
+        let safe_label: String = label.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' }).collect();
+        let ckpt_path = ckpt_dir.join(format!("{safe_label}-{}.rvf", now_ms()));
         let src = std::path::Path::new(store_path);
         if src.exists() {
             fs::copy(src, &ckpt_path).map_err(|e| e.to_string())?;

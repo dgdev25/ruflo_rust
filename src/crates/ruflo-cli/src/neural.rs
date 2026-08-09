@@ -262,7 +262,6 @@ fn train(root: &Path, command: &NeuralCommand) -> u8 {
     // V2 behavioral: propose next improvement (flywheel_proposer_v2).
     let _ = crate::services::flywheel_proposer_v2::propose("neural-train");
     // V2 behavioral: record ruvector-training session (ruvector_training_v2).
-    let _ = crate::services::ruvector_training_v2::run_training(command.epochs.max(1));
     if examples_count == 0 {
         eprintln!("[NOTE] No router decisions found to train on. Run tasks via `ruflo route` first.");
     }

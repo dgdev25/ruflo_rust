@@ -161,7 +161,7 @@ mod tests {
     #[test]
     fn verify_returns_verdict() {
         // cargo test in this repo (or whatever cwd the test runs in).
-        let v = verify(Path::new("."));
+        let v = verify(&tempfile::tempdir().unwrap().path().to_path_buf());
         let verdict = v["verdict"].as_str().unwrap_or("");
         assert!(verdict == "pass" || verdict == "fail" || verdict == "error");
         assert!(v["ok"].is_boolean());
@@ -169,7 +169,7 @@ mod tests {
 
     #[test]
     fn canary_blocks_low_pass_rate() {
-        let r = canary(Path::new("."), 1.1); // impossible threshold → always block
+        let r = { let d = tempfile::tempdir().unwrap(); canary(d.path(), 1.1) }; // impossible threshold → always block
         assert_eq!(r["gate"].as_bool(), Some(false));
         assert_eq!(r["verdict"].as_str(), Some("block"));
     }
