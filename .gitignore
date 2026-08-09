@@ -24,3 +24,26 @@ target/
 *.rvf.lock
 *.rvf.idmap.json
 ruvector.db
+
+# Runtime artifacts — never commit
+.claude-flow/
+.swarm/
+.cargo-cache/
+.build/
+.codex/
+.ruvnet-brain/
+.claude/
+agentdb.rvf*
+ruvector.db
+*.rvf
+*.db
+*.lock
+*.pid
+*.jsonl
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
