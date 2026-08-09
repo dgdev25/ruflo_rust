@@ -560,42 +560,277 @@ pub mod learned_routing {
 // INFRASTRUCTURE
 // ============================================================================ //
 
-/// Daemon autostart — systemd/launchd/crontab config generation.
+/// Daemon autostart — systemd/launchd/crontab config generation AND install.
 /// Ports services/daemon-autostart.ts (143 lines).
+///
+/// Each installer generates the platform-specific config text, persists it to
+/// the autostart state file, AND actually runs the install command
+/// (`crontab -`, `systemctl --user`, `launchctl load`). Failures bubble up as
+/// `Err(String)`. `uninstall()` reverses the install based on the stored
+/// `method` field.
 pub mod autostart {
     use super::*;
+    use std::io::Write;
+    use std::process::{Command, Stdio};
 
-    pub fn install_cron() -> String {
-        let cron = "@reboot $(which ruflo) daemon start --background\n";
-        write_state("autostart", &json!({"method": "cron", "config": cron, "installedAt": now_ms()}));
-        cron.into()
+    const CRON_LINE: &str = "@reboot $(which ruflo) daemon start --background\n";
+    const SYSTEMD_UNIT_NAME: &str = "ruflo-daemon.service";
+    const LAUNCHD_LABEL: &str = "io.ruflo.daemon";
+    const LAUNCHD_PLIST_NAME: &str = "io.ruflo.daemon.plist";
+
+    /// Resolve the absolute path to the `ruflo` binary via `which ruflo`.
+    /// Falls back to the bare word `ruflo` if the lookup fails.
+    fn ruflo_path() -> String {
+        Command::new("which")
+            .arg("ruflo")
+            .output()
+            .ok()
+            .and_then(|o| {
+                if o.status.success() {
+                    Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+                } else {
+                    None
+                }
+            })
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "ruflo".to_string())
     }
 
-    pub fn install_systemd() -> String {
-        let unit = "[Unit]\nDescription=Ruflo Daemon\nAfter=network.target\n\n[Service]\nExecStart=$(which ruflo) daemon start --foreground\nRestart=always\n\n[Install]\nWantedBy=default.target\n";
-        write_state("autostart", &json!({"method": "systemd", "config": unit, "installedAt": now_ms()}));
-        unit.into()
+    fn build_systemd_unit(ruflo: &str) -> String {
+        format!(
+            "[Unit]\n\
+             Description=Ruflo Daemon\n\
+             After=network.target\n\n\
+             [Service]\n\
+             ExecStart={ruflo} daemon start --foreground\n\
+             Restart=always\n\n\
+             [Install]\n\
+             WantedBy=default.target\n"
+        )
     }
 
-    pub fn install_launchd() -> String {
-        let plist = r#"<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1.0"><dict>
-  <key>Label</key><string>io.ruflo.daemon</string>
-  <key>ProgramArguments</key><array><string>ruflo</string><string>daemon</string><string>start</string><string>--foreground</string></array>
-  <key>RunAtLoad</key><true/>
-</dict></plist>"#;
-        write_state("autostart", &json!({"method": "launchd", "config": plist, "installedAt": now_ms()}));
-        plist.into()
+    fn build_launchd_plist(ruflo: &str) -> String {
+        format!(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+             <plist version=\"1.0\"><dict>\n\
+             \x20 <key>Label</key><string>{label}</string>\n\
+             \x20 <key>ProgramArguments</key><array>\n\
+             \x20   <string>{ruflo}</string><string>daemon</string>\n\
+             \x20   <string>start</string><string>--foreground</string>\n\
+             \x20 </array>\n\
+             \x20 <key>RunAtLoad</key><true/>\n\
+             </dict></plist>\n",
+            label = LAUNCHD_LABEL,
+            ruflo = ruflo
+        )
     }
 
-    pub fn uninstall() -> bool {
+    /// Install via crontab: pipe `{existing}\n{cron_line}` to `crontab -`.
+    /// Idempotent — skips if the line is already present.
+    pub fn install_cron() -> Result<String, String> {
+        // Read existing crontab (may be empty or unset).
+        let existing = match Command::new("crontab").arg("-l").output() {
+            Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+            _ => String::new(),
+        };
+        let merged = if existing.contains(CRON_LINE.trim()) {
+            existing
+        } else {
+            format!("{existing}{CRON_LINE}")
+        };
+        let mut child = Command::new("crontab")
+            .arg("-")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("crontab spawn failed: {e}"))?;
+        {
+            let stdin = child
+                .stdin
+                .as_mut()
+                .ok_or_else(|| "crontab stdin unavailable".to_string())?;
+            stdin
+                .write_all(merged.as_bytes())
+                .map_err(|e| format!("crontab write failed: {e}"))?;
+        }
+        let output = child
+            .wait_with_output()
+            .map_err(|e| format!("crontab wait failed: {e}"))?;
+        if !output.status.success() {
+            return Err(format!(
+                "crontab install failed: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            ));
+        }
+        write_state(
+            "autostart",
+            &json!({
+                "method": "cron",
+                "config": CRON_LINE,
+                "installedAt": now_ms()
+            }),
+        );
+        Ok(CRON_LINE.into())
+    }
+
+    /// Install via systemd user unit: write
+    /// `~/.config/systemd/user/ruflo-daemon.service`, then
+    /// `systemctl --user daemon-reload && systemctl --user enable ruflo-daemon`.
+    pub fn install_systemd() -> Result<String, String> {
+        let ruflo = ruflo_path();
+        let unit = build_systemd_unit(&ruflo);
+        let home = std::env::var("HOME").map_err(|_| "HOME not set".to_string())?;
+        let dir = PathBuf::from(&home).join(".config/systemd/user");
+        fs::create_dir_all(&dir).map_err(|e| format!("mkdir systemd user dir: {e}"))?;
+        let unit_path = dir.join(SYSTEMD_UNIT_NAME);
+        fs::write(&unit_path, &unit).map_err(|e| format!("write unit file: {e}"))?;
+        let reload = Command::new("systemctl")
+            .args(["--user", "daemon-reload"])
+            .status()
+            .map_err(|e| format!("systemctl --user daemon-reload spawn: {e}"))?;
+        if !reload.success() {
+            return Err("systemctl --user daemon-reload failed".to_string());
+        }
+        let enable = Command::new("systemctl")
+            .args(["--user", "enable", "ruflo-daemon"])
+            .status()
+            .map_err(|e| format!("systemctl --user enable spawn: {e}"))?;
+        if !enable.success() {
+            return Err("systemctl --user enable ruflo-daemon failed".to_string());
+        }
+        write_state(
+            "autostart",
+            &json!({
+                "method": "systemd",
+                "config": unit,
+                "path": unit_path.display().to_string(),
+                "unitName": SYSTEMD_UNIT_NAME,
+                "installedAt": now_ms()
+            }),
+        );
+        Ok(unit)
+    }
+
+    /// Install via launchd (macOS only): write
+    /// `~/Library/LaunchAgents/io.ruflo.daemon.plist`, then
+    /// `launchctl load`. On non-macOS targets, returns Err.
+    #[cfg(target_os = "macos")]
+    pub fn install_launchd() -> Result<String, String> {
+        let ruflo = ruflo_path();
+        let plist = build_launchd_plist(&ruflo);
+        let home = std::env::var("HOME").map_err(|_| "HOME not set".to_string())?;
+        let dir = PathBuf::from(&home).join("Library/LaunchAgents");
+        fs::create_dir_all(&dir).map_err(|e| format!("mkdir LaunchAgents dir: {e}"))?;
+        let plist_path = dir.join(LAUNCHD_PLIST_NAME);
+        fs::write(&plist_path, &plist).map_err(|e| format!("write plist: {e}"))?;
+        let load = Command::new("launchctl")
+            .arg("load")
+            .arg(&plist_path)
+            .status()
+            .map_err(|e| format!("launchctl load spawn: {e}"))?;
+        if !load.success() {
+            return Err("launchctl load failed".to_string());
+        }
+        write_state(
+            "autostart",
+            &json!({
+                "method": "launchd",
+                "config": plist,
+                "path": plist_path.display().to_string(),
+                "label": LAUNCHD_LABEL,
+                "installedAt": now_ms()
+            }),
+        );
+        Ok(plist)
+    }
+
+    /// launchd install is macOS-only. On other platforms the build is still
+    /// valid; we surface an explicit runtime error here.
+    #[cfg(not(target_os = "macos"))]
+    pub fn install_launchd() -> Result<String, String> {
+        Err("launchd install is only supported on macOS".to_string())
+    }
+
+    /// Reverse the appropriate install based on the stored `method`. Clears
+    /// the autostart state file on success.
+    pub fn uninstall() -> Result<(), String> {
+        let state = read_state("autostart");
+        let method = state["method"].as_str().unwrap_or("");
+        match method {
+            "cron" => {
+                // Remove the ruflo line from existing crontab, write back.
+                let existing = match Command::new("crontab").arg("-l").output() {
+                    Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+                    _ => String::new(),
+                };
+                let kept: String = existing
+                    .lines()
+                    .filter(|l| !l.contains("ruflo daemon start --background"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                let mut child = Command::new("crontab")
+                    .arg("-")
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .map_err(|e| format!("crontab spawn failed: {e}"))?;
+                {
+                    let stdin = child
+                        .stdin
+                        .as_mut()
+                        .ok_or_else(|| "crontab stdin unavailable".to_string())?;
+                    let mut to_write = kept;
+                    if !to_write.is_empty() {
+                        to_write.push('\n');
+                    }
+                    stdin
+                        .write_all(to_write.as_bytes())
+                        .map_err(|e| format!("crontab write failed: {e}"))?;
+                }
+                let _ = child.wait();
+            }
+            "systemd" => {
+                let unit_name = state["unitName"]
+                    .as_str()
+                    .unwrap_or(SYSTEMD_UNIT_NAME);
+                let _ = Command::new("systemctl")
+                    .args(["--user", "disable", unit_name])
+                    .status();
+                let _ = Command::new("systemctl")
+                    .args(["--user", "stop", unit_name])
+                    .status();
+                if let Some(path_str) = state["path"].as_str() {
+                    let _ = fs::remove_file(path_str);
+                }
+                let _ = Command::new("systemctl")
+                    .args(["--user", "daemon-reload"])
+                    .status();
+            }
+            "launchd" => {
+                uninstall_launchd(&state)?;
+            }
+            _ => {}
+        }
         let path = state_path("autostart");
         if path.exists() {
             let _ = fs::remove_file(&path);
-            true
-        } else {
-            false
         }
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    fn uninstall_launchd(state: &Value) -> Result<(), String> {
+        let path_str = state["path"].as_str().ok_or("missing plist path in state")?;
+        let _ = Command::new("launchctl").arg("unload").arg(path_str).status();
+        let _ = fs::remove_file(path_str);
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn uninstall_launchd(_state: &Value) -> Result<(), String> {
+        Err("launchd uninstall is only supported on macOS".to_string())
     }
 }
 
@@ -1069,6 +1304,255 @@ pub mod registry {
     }
 }
 
+/// Claim service — agent issue-claim lifecycle.
+/// Ports services/claim-service.ts. Manages the full claim state machine:
+/// `active` → `released` / `handoff_pending` → `active` (accept) /
+/// `stealable` → `stolen`.
+///
+/// State file: `.claude-flow/services/claim-service.json`, stored as a JSON
+/// array of `{issueId, claimant: {id, type}, status, history: [...]}`.
+/// Each mutation acquires the per-state-file lock so concurrent claimants
+/// can't double-claim an issue.
+pub mod claim_service {
+    use super::*;
+
+    /// State file name — `.claude-flow/services/claim-service.json`.
+    const STATE_NAME: &str = "claim-service";
+
+    /// Ensure state is a JSON array; return a mutable reference to it.
+    /// `read_state` returns `json!({})` for a missing file, so we normalize
+    /// any non-array state to an empty array on first contact.
+    fn claims_array_mut(state: &mut Value) -> Result<&mut Vec<Value>, String> {
+        if !state.is_array() {
+            *state = json!([]);
+        }
+        state
+            .as_array_mut()
+            .ok_or_else(|| "claim-service state corrupted (not an array)".to_string())
+    }
+
+    fn push_history(entry: &mut Value, event: Value) {
+        if entry["history"].is_null() {
+            entry["history"] = json!([]);
+        }
+        if let Some(hist) = entry["history"].as_array_mut() {
+            hist.push(event);
+        }
+    }
+
+    /// Claim an issue for `claimant_agent_id`. Fails if the issue is already
+    /// actively claimed or has a pending handoff.
+    pub fn claim(
+        issue_id: &str,
+        claimant_agent_id: &str,
+        claimant_agent_type: &str,
+    ) -> Result<Value, String> {
+        let _guard = LockGuard::acquire(STATE_NAME)
+            .ok_or_else(|| "claim-service lock contention".to_string())?;
+        let mut state = read_state(STATE_NAME);
+        let arr = claims_array_mut(&mut state)?;
+        if let Some(existing) = arr.iter().find(|c| c["issueId"].as_str() == Some(issue_id)) {
+            let status = existing["status"].as_str().unwrap_or("");
+            if status == "active" || status == "handoff_pending" {
+                return Err(format!(
+                    "issue `{issue_id}` already claimed (status: {status})"
+                ));
+            }
+        }
+        let entry = json!({
+            "issueId": issue_id,
+            "claimant": {"id": claimant_agent_id, "type": claimant_agent_type},
+            "status": "active",
+            "history": [
+                {"event": "claimed", "at": now_ms(), "by": claimant_agent_id, "type": claimant_agent_type}
+            ],
+        });
+        // Drop any prior (released/stolen) entry for this issue before appending.
+        arr.retain(|c| c["issueId"].as_str() != Some(issue_id));
+        arr.push(entry.clone());
+        if !write_state(STATE_NAME, &state) {
+            return Err("failed to write claim-service state".to_string());
+        }
+        Ok(entry)
+    }
+
+    /// Release a claim. Only the current claimant may release.
+    pub fn release(issue_id: &str, claimant_agent_id: &str) -> Result<(), String> {
+        let _guard = LockGuard::acquire(STATE_NAME)
+            .ok_or_else(|| "claim-service lock contention".to_string())?;
+        let mut state = read_state(STATE_NAME);
+        let arr = claims_array_mut(&mut state)?;
+        let entry = arr
+            .iter_mut()
+            .find(|c| c["issueId"].as_str() == Some(issue_id))
+            .ok_or_else(|| format!("issue `{issue_id}` not found"))?;
+        if entry["claimant"]["id"].as_str() != Some(claimant_agent_id) {
+            return Err(format!(
+                "issue `{issue_id}` not claimed by `{claimant_agent_id}`"
+            ));
+        }
+        entry["status"] = json!("released");
+        push_history(
+            entry,
+            json!({"event": "released", "at": now_ms(), "by": claimant_agent_id}),
+        );
+        if !write_state(STATE_NAME, &state) {
+            return Err("failed to write claim-service state".to_string());
+        }
+        Ok(())
+    }
+
+    /// Request handoff of an issue from one agent to another. Sets status
+    /// `handoff_pending`; the target must call `accept_handoff` to complete.
+    pub fn handoff(
+        issue_id: &str,
+        from_agent: &str,
+        to_agent: &str,
+        reason: &str,
+    ) -> Result<(), String> {
+        let _guard = LockGuard::acquire(STATE_NAME)
+            .ok_or_else(|| "claim-service lock contention".to_string())?;
+        let mut state = read_state(STATE_NAME);
+        let arr = claims_array_mut(&mut state)?;
+        let entry = arr
+            .iter_mut()
+            .find(|c| c["issueId"].as_str() == Some(issue_id))
+            .ok_or_else(|| format!("issue `{issue_id}` not found"))?;
+        if entry["claimant"]["id"].as_str() != Some(from_agent) {
+            return Err(format!(
+                "issue `{issue_id}` not claimed by `{from_agent}`"
+            ));
+        }
+        entry["status"] = json!("handoff_pending");
+        entry["pendingHandoffTo"] = json!(to_agent);
+        push_history(
+            entry,
+            json!({
+                "event": "handoff_requested",
+                "at": now_ms(),
+                "from": from_agent,
+                "to": to_agent,
+                "reason": reason,
+            }),
+        );
+        if !write_state(STATE_NAME, &state) {
+            return Err("failed to write claim-service state".to_string());
+        }
+        Ok(())
+    }
+
+    /// Accept a pending handoff. Only the agent the issue was handed off to
+    /// may accept. On success the claimant becomes the new agent and status
+    /// returns to `active`.
+    pub fn accept_handoff(issue_id: &str, agent_id: &str) -> Result<(), String> {
+        let _guard = LockGuard::acquire(STATE_NAME)
+            .ok_or_else(|| "claim-service lock contention".to_string())?;
+        let mut state = read_state(STATE_NAME);
+        let arr = claims_array_mut(&mut state)?;
+        let entry = arr
+            .iter_mut()
+            .find(|c| c["issueId"].as_str() == Some(issue_id))
+            .ok_or_else(|| format!("issue `{issue_id}` not found"))?;
+        if entry["status"].as_str() != Some("handoff_pending") {
+            return Err(format!("issue `{issue_id}` is not pending handoff"));
+        }
+        if entry["pendingHandoffTo"].as_str() != Some(agent_id) {
+            return Err(format!(
+                "issue `{issue_id}` handoff is not intended for `{agent_id}`"
+            ));
+        }
+        let old_claimant = entry["claimant"]["id"].as_str().unwrap_or("").to_string();
+        let old_type = entry["claimant"]["type"].clone();
+        entry["claimant"] = json!({"id": agent_id, "type": old_type});
+        entry["status"] = json!("active");
+        if let Some(obj) = entry.as_object_mut() {
+            obj.remove("pendingHandoffTo");
+        }
+        push_history(
+            entry,
+            json!({
+                "event": "handoff_accepted",
+                "at": now_ms(),
+                "from": old_claimant,
+                "to": agent_id,
+            }),
+        );
+        if !write_state(STATE_NAME, &state) {
+            return Err("failed to write claim-service state".to_string());
+        }
+        Ok(())
+    }
+
+    /// Mark an actively-claimed issue as available for theft by another agent
+    /// (e.g. the claimant is overloaded or stale). Status becomes `stealable`.
+    pub fn mark_stealable(issue_id: &str, reason: &str) -> Result<(), String> {
+        let _guard = LockGuard::acquire(STATE_NAME)
+            .ok_or_else(|| "claim-service lock contention".to_string())?;
+        let mut state = read_state(STATE_NAME);
+        let arr = claims_array_mut(&mut state)?;
+        let entry = arr
+            .iter_mut()
+            .find(|c| c["issueId"].as_str() == Some(issue_id))
+            .ok_or_else(|| format!("issue `{issue_id}` not found"))?;
+        entry["status"] = json!("stealable");
+        push_history(
+            entry,
+            json!({"event": "marked_stealable", "at": now_ms(), "reason": reason}),
+        );
+        if !write_state(STATE_NAME, &state) {
+            return Err("failed to write claim-service state".to_string());
+        }
+        Ok(())
+    }
+
+    /// Steal a stealable issue. The claimant becomes `stealer_agent_id` and
+    /// status becomes `stolen` (terminal — must be re-claimed after release).
+    pub fn steal(
+        issue_id: &str,
+        stealer_agent_id: &str,
+        stealer_agent_type: &str,
+    ) -> Result<(), String> {
+        let _guard = LockGuard::acquire(STATE_NAME)
+            .ok_or_else(|| "claim-service lock contention".to_string())?;
+        let mut state = read_state(STATE_NAME);
+        let arr = claims_array_mut(&mut state)?;
+        let entry = arr
+            .iter_mut()
+            .find(|c| c["issueId"].as_str() == Some(issue_id))
+            .ok_or_else(|| format!("issue `{issue_id}` not found"))?;
+        if entry["status"].as_str() != Some("stealable") {
+            return Err(format!(
+                "issue `{issue_id}` is not stealable (status: {})",
+                entry["status"].as_str().unwrap_or("?")
+            ));
+        }
+        let old_claimant = entry["claimant"]["id"].as_str().unwrap_or("").to_string();
+        entry["claimant"] = json!({"id": stealer_agent_id, "type": stealer_agent_type});
+        entry["status"] = json!("stolen");
+        push_history(
+            entry,
+            json!({
+                "event": "stolen",
+                "at": now_ms(),
+                "from": old_claimant,
+                "by": stealer_agent_id,
+            }),
+        );
+        if !write_state(STATE_NAME, &state) {
+            return Err("failed to write claim-service state".to_string());
+        }
+        Ok(())
+    }
+
+    /// Load the full claim status list — every claim (active or otherwise).
+    pub fn load_status() -> Vec<Value> {
+        read_state(STATE_NAME)
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1158,15 +1642,94 @@ mod tests {
     }
 
     #[test]
-    fn autostart_generates_configs() {
+    fn autostart_install_cron_attempts_command() {
         let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _d = tmp();
-        let cron = autostart::install_cron();
-        assert!(cron.contains("@reboot"));
-        let systemd = autostart::install_systemd();
-        assert!(systemd.contains("[Unit]"));
-        let launchd = autostart::install_launchd();
-        assert!(launchd.contains("<plist"));
+        // install_cron must at least generate the cron line and attempt
+        // `crontab -`. Success vs. failure depends on whether crontab is
+        // available in the test env; both outcomes are acceptable.
+        match autostart::install_cron() {
+            Ok(cron) => assert!(
+                cron.contains("@reboot"),
+                "generated cron line must contain @reboot"
+            ),
+            Err(_) => { /* crontab unavailable in test env — acceptable */ }
+        }
+    }
+
+    #[test]
+    fn autostart_uninstall_clears_state() {
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _d = tmp();
+        // Simulate a prior install by writing state directly.
+        write_state(
+            "autostart",
+            &json!({"method": "cron", "config": "@reboot ruflo", "installedAt": now_ms()}),
+        );
+        assert!(state_path("autostart").exists());
+        let _ = autostart::uninstall();
+        assert!(
+            !state_path("autostart").exists(),
+            "uninstall must clear the autostart state file"
+        );
+    }
+
+    #[test]
+    fn claim_service_claim_release_reclaim() {
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _d = tmp();
+        let entry = claim_service::claim("issue-1", "agent-1", "coder").unwrap();
+        assert_eq!(entry["status"].as_str(), Some("active"));
+        assert_eq!(entry["claimant"]["id"].as_str(), Some("agent-1"));
+        // Second claim by a different agent while active fails.
+        assert!(claim_service::claim("issue-1", "agent-2", "coder").is_err());
+        // Re-claim by the same agent also fails (already active).
+        assert!(claim_service::claim("issue-1", "agent-1", "coder").is_err());
+        claim_service::release("issue-1", "agent-1").unwrap();
+        // After release a different agent may claim it.
+        let again = claim_service::claim("issue-1", "agent-2", "coder").unwrap();
+        assert_eq!(again["claimant"]["id"].as_str(), Some("agent-2"));
+        let status = claim_service::load_status();
+        assert_eq!(status.len(), 1, "exactly one claim entry after re-claim");
+    }
+
+    #[test]
+    fn claim_service_handoff_flow() {
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _d = tmp();
+        claim_service::claim("issue-2", "alice", "coder").unwrap();
+        claim_service::handoff("issue-2", "alice", "bob", "load balancing").unwrap();
+        // Wrong target can't accept.
+        assert!(claim_service::accept_handoff("issue-2", "eve").is_err());
+        // Correct target accepts and becomes new claimant.
+        claim_service::accept_handoff("issue-2", "bob").unwrap();
+        let status = claim_service::load_status();
+        let entry = &status[0];
+        assert_eq!(entry["status"].as_str(), Some("active"));
+        assert_eq!(entry["claimant"]["id"].as_str(), Some("bob"));
+        // pendingHandoffTo should be cleared after acceptance.
+        assert!(entry.get("pendingHandoffTo").is_none() || entry["pendingHandoffTo"].is_null());
+        // Releasing by the previous owner fails.
+        assert!(claim_service::release("issue-2", "alice").is_err());
+    }
+
+    #[test]
+    fn claim_service_steal_flow() {
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _d = tmp();
+        claim_service::claim("issue-3", "alice", "coder").unwrap();
+        // Can't steal while still active.
+        assert!(claim_service::steal("issue-3", "bob", "coder").is_err());
+        claim_service::mark_stealable("issue-3", "claimant stale").unwrap();
+        // Now stealable.
+        claim_service::steal("issue-3", "bob", "coder").unwrap();
+        let status = claim_service::load_status();
+        let entry = &status[0];
+        assert_eq!(entry["status"].as_str(), Some("stolen"));
+        assert_eq!(entry["claimant"]["id"].as_str(), Some("bob"));
+        // History records the steal event.
+        let hist = entry["history"].as_array().unwrap();
+        assert!(hist.iter().any(|h| h["event"].as_str() == Some("stolen")));
     }
 
     #[test]
