@@ -3,6 +3,7 @@
 mod analyze;
 mod announcements;
 mod ast;
+mod agentic_bridge;
 mod appliance;
 mod appliance_advanced;
 mod auth;
