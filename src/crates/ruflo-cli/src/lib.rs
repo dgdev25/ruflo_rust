@@ -7,6 +7,7 @@ mod appliance_advanced;
 mod auth;
 mod autopilot;
 mod benchmark;
+mod benchmarks;
 mod claims;
 mod cleanup;
 mod command;
