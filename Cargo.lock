@@ -1494,6 +1494,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "hmac",
+ "regex",
  "ruflo-config",
  "ruflo-storage",
  "ruflo-types",

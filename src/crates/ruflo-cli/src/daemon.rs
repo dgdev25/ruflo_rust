@@ -20,8 +20,6 @@
 
 use std::fs;
 use std::io::Write;
-#[cfg(unix)]
-use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -29,6 +27,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 // elsewhere. Keeps the documented Windows target compiling.
 #[cfg(unix)]
 fn open_create_new_private(path: &Path) -> std::io::Result<std::fs::File> {
+    use std::os::unix::fs::OpenOptionsExt;
     std::fs::OpenOptions::new()
         .create_new(true)
         .write(true)
@@ -44,6 +43,7 @@ fn open_create_new_private(path: &Path) -> std::io::Result<std::fs::File> {
 }
 #[cfg(unix)]
 fn open_append_private(path: &Path) -> std::io::Result<std::fs::File> {
+    use std::os::unix::fs::OpenOptionsExt;
     std::fs::OpenOptions::new()
         .create(true)
         .append(true)

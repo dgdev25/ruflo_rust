@@ -27,9 +27,13 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y mingw-w64
       - name: Cross-check pure-Rust crates (no C deps)
         run: cargo check --target x86_64-pc-windows-gnu -p ruflo-config -p ruflo-types
-      - name: Cross-build full CLI
-        run: cargo build --target x86_64-pc-windows-gnu -p ruflo-cli
+      - name: Cross-build ruflo.exe
+        # onnx (ort) ships no prebuilt binaries for windows-gnu; the `onnx`
+        # feature is opt-in, so cross-builds disable it and fall back to the
+        # hash vectorizer. Native host builds keep onnx on by default.
+        run: cargo build --target x86_64-pc-windows-gnu -p ruflo --no-default-features
       - name: Verify .exe produced
         run: |
           test -f target/x86_64-pc-windows-gnu/debug/ruflo.exe || \
             ls target/x86_64-pc-windows-gnu/debug/*.exe
+          file target/x86_64-pc-windows-gnu/debug/ruflo.exe

@@ -32,7 +32,12 @@ mod issues;
 mod lifecycle;
 mod metaharness;
 mod neural;
+#[cfg(feature = "onnx")]
 mod onnx_embeddings;
+#[cfg(not(feature = "onnx"))]
+mod onnx_embed_stub;
+#[cfg(not(feature = "onnx"))]
+use onnx_embed_stub as onnx_embeddings;
 mod output;
 mod performance;
 mod plugins;

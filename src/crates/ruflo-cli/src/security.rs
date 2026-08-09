@@ -192,7 +192,6 @@ fn is_scan_type(v: &str) -> bool {
 /// redirect the scan report at an arbitrary file by pre-creating one.
 fn write_report_atomic(path: &Path, bytes: &[u8]) -> bool {
     use std::io::ErrorKind;
-    use std::os::unix::fs::OpenOptionsExt;
     let Some(dir) = path.parent() else {
         return false;
     };
@@ -202,11 +201,24 @@ fn write_report_atomic(path: &Path, bytes: &[u8]) -> bool {
     ));
     // create_new => O_CREAT|O_EXCL: fails if the path already exists (symlink
     // or otherwise), defeating pre-placement.
-    let created = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(&tmp);
+    let created = {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .open(&tmp)
+        }
+        #[cfg(not(unix))]
+        {
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&tmp)
+        }
+    };
     let mut file = match created {
         Ok(f) => f,
         Err(_) => return false,

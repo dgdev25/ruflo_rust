@@ -11,11 +11,16 @@ description = "Shared native CLI dispatcher for the Ruflo and claude-flow wrappe
 path = "src/lib.rs"
 
 [features]
-default = ["ast"]
+default = ["ast", "onnx"]
 # Real AST analysis via tree-sitter (rust + typescript grammars). On by default
 # so `analyze ast` uses a real parser, not the regex fallback. The grammars
 # compile C and add ~30s to a clean build.
 ast = ["dep:tree-sitter", "dep:tree-sitter-rust", "dep:tree-sitter-typescript"]
+# ONNX MiniLM embeddings via ort (real neural inference). On by default for the
+# native host. Disabled for Windows GNU cross-compile because ort ships no
+# prebuilt binaries for that target (build with --no-default-features there,
+# or the windows-cross.yml CI path).
+onnx = ["dep:ort", "dep:tokenizers"]
 
 [dependencies]
 ruflo-config = { path = "../ruflo-config" }
@@ -32,8 +37,8 @@ regex = { workspace = true }
 once_cell = { workspace = true }
 petgraph = { workspace = true }
 dialoguer = { workspace = true }
-ort = { workspace = true }
-tokenizers = { workspace = true }
+ort = { workspace = true, optional = true }
+tokenizers = { workspace = true, optional = true }
 tree-sitter = { version = "0.25", optional = true }
 tree-sitter-rust = { version = "0.23", optional = true }
 tree-sitter-typescript = { version = "0.23", optional = true }

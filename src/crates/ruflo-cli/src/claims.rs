@@ -946,8 +946,22 @@ mod tests {
 
     static TEST_LOCK: Mutex<()> = Mutex::new(());
 
-    fn lock() -> std::sync::MutexGuard<'static, ()> {
-        TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    /// Hold BOTH the process-wide env lock (serializes HOME/RUFLO_STATE_DIR
+    /// mutation across all modules) and the claims-local lock for the test body.
+    /// Returning two guards isn't possible from one MutexGuard, so we stash the
+    /// env guard on the heap for the guard's lifetime via a wrapper struct.
+    struct EnvGuard {
+        _env: std::sync::MutexGuard<'static, ()>,
+        _local: std::sync::MutexGuard<'static, ()>,
+    }
+
+    fn lock() -> EnvGuard {
+        let env = crate::funnel::TEST_STATE_LOCK.lock();
+        // Leak the env guard into a 'static by transmute-of-lifetime is UB; the
+        // sound approach is to keep it owned in EnvGuard. Re-acquire under the
+        // same scope.
+        let local = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        EnvGuard { _env: env.unwrap_or_else(|e| e.into_inner()), _local: local }
     }
 
     #[test]

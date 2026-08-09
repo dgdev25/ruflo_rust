@@ -10,5 +10,10 @@ publish = false
 name = "ruflo"
 path = "src/main.rs"
 
+[features]
+default = ["ast", "onnx"]
+ast = ["ruflo-cli/ast"]
+onnx = ["ruflo-cli/onnx"]
+
 [dependencies]
-ruflo-cli = { path = "../../crates/ruflo-cli" }
+ruflo-cli = { path = "../../crates/ruflo-cli", default-features = false }
