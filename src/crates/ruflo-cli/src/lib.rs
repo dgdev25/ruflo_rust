@@ -37,6 +37,7 @@ mod providers;
 mod proxy;
 mod route;
 mod security;
+mod services;
 mod settings;
 mod swarm_exec;
 mod spinner;
