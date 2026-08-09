@@ -154,11 +154,13 @@ fn save_claims(root: &Path, data: &mut Value) -> bool {
     let Ok(bytes) = serde_json::to_vec_pretty(data) else {
         return false;
     };
-    // create_new prevents a pre-planted symlink from redirecting the write.
+    // create(true).truncate(true) with stale-tmp recovery: if a previous crash
+    // left an orphan .tmp, overwrite it instead of failing permanently.
     use std::io::Write;
     let mut file = match fs::OpenOptions::new()
         .write(true)
-        .create_new(true)
+        .create(true)
+        .truncate(true)
         .open(&tmp)
     {
         Ok(f) => f,

@@ -88,17 +88,32 @@ fn canonicalize_file(path: &Path) -> Result<PathBuf, RufloError> {
 }
 
 fn acquire_project_lock(lock_path: &Path) -> Result<(), RufloError> {
-    let file = open_lock_file(lock_path).map_err(|error| {
-        if error.kind() == std::io::ErrorKind::AlreadyExists {
-            RufloError::LockConflict
-        } else {
-            RufloError::MigrationFailed {
-                message: format!("storage.lock.acquire: {error}"),
-            }
+    // Stale-lock recovery: if the lock file is older than 30s, take it over.
+    match open_lock_file(lock_path) {
+        Ok(file) => {
+            drop(file);
+            set_owner_only_permissions(lock_path)
         }
-    })?;
-    drop(file);
-    set_owner_only_permissions(lock_path)
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            // Check if stale — older than 30s belongs to a crashed process.
+            if let Ok(meta) = std::fs::metadata(lock_path) {
+                if let Ok(mtime) = meta.modified() {
+                    let age = std::time::SystemTime::now()
+                        .duration_since(mtime)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+                    if age > 30 {
+                        let _ = std::fs::remove_file(lock_path);
+                        return acquire_project_lock(lock_path);
+                    }
+                }
+            }
+            Err(RufloError::LockConflict)
+        }
+        Err(error) => Err(RufloError::MigrationFailed {
+            message: format!("storage.lock.acquire: {error}"),
+        }),
+    }
 }
 
 #[cfg(unix)]
