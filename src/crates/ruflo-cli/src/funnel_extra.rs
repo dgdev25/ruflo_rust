@@ -250,18 +250,21 @@ pub mod power_saver {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-    static LOCK: Mutex<()> = Mutex::new(());
+    // Reuse the process-wide env lock from funnel so RUFLO_STATE_DIR mutation
+    // is serialized across both modules (and any other test touching the env).
+    use crate::funnel::TEST_STATE_LOCK as LOCK;
 
     #[test]
     fn payout_record_total() {
         let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
+        // SAFETY: LOCK serializes all RUFLO_STATE_DIR access process-wide.
         std::env::set_var("RUFLO_STATE_DIR", dir.path());
         payout::record(10.0, "USD", "tip");
         payout::record(5.0, "USD", "bonus");
         assert!((payout::total() - 15.0).abs() < 0.01);
         assert_eq!(payout::history().len(), 2);
+        // SAFETY: see above.
         std::env::remove_var("RUFLO_STATE_DIR");
     }
 
@@ -269,12 +272,14 @@ mod tests {
     fn events_enqueue_drain() {
         let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
+        // SAFETY: LOCK serializes all RUFLO_STATE_DIR access process-wide.
         std::env::set_var("RUFLO_STATE_DIR", dir.path());
         events::enqueue("click", "statusline", json!({"x": 1}));
         assert_eq!(events::pending_count(), 1);
         let drained = events::drain();
         assert_eq!(drained.len(), 1);
         assert_eq!(events::pending_count(), 0);
+        // SAFETY: see above.
         std::env::remove_var("RUFLO_STATE_DIR");
     }
 
@@ -282,10 +287,12 @@ mod tests {
     fn promo_dismiss() {
         let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
+        // SAFETY: LOCK serializes all RUFLO_STATE_DIR access process-wide.
         std::env::set_var("RUFLO_STATE_DIR", dir.path());
         assert!(!promo::is_dismissed("campaign1"));
         promo::record_dismissal("campaign1");
         assert!(promo::is_dismissed("campaign1"));
+        // SAFETY: see above.
         std::env::remove_var("RUFLO_STATE_DIR");
     }
 
@@ -304,12 +311,14 @@ mod tests {
     fn rotation_cycles() {
         let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
+        // SAFETY: LOCK serializes all RUFLO_STATE_DIR access process-wide.
         std::env::set_var("RUFLO_STATE_DIR", dir.path());
         let items = vec!["a".into(), "b".into(), "c".into()];
         assert_eq!(rotation::next_item("pool1", &items).unwrap(), "a");
         assert_eq!(rotation::next_item("pool1", &items).unwrap(), "b");
         assert_eq!(rotation::next_item("pool1", &items).unwrap(), "c");
         assert_eq!(rotation::next_item("pool1", &items).unwrap(), "a"); // wraps
+        // SAFETY: see above.
         std::env::remove_var("RUFLO_STATE_DIR");
     }
 }

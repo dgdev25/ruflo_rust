@@ -17,6 +17,16 @@ use serde_json::{json, Value};
 const CONSENT_POLICY_VERSION: u64 = 1;
 const ADVISOR_REFRESH_TTL_MS: u128 = 24 * 60 * 60 * 1000;
 
+/// Process-wide lock for tests that mutate the `RUFLO_STATE_DIR` env var.
+///
+/// `set_var`/`remove_var` race with any concurrent reader of the env (other
+/// test threads, or any production code path that resolves the state dir).
+/// Rust 1.97 marks env mutation `unsafe` for this reason. Every test that
+/// touches `RUFLO_STATE_DIR` — in this module AND in `funnel_extra` — must hold
+/// this single lock so no two threads ever mutate/read the env concurrently.
+#[cfg(test)]
+pub(crate) static TEST_STATE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AdvisorCommand {
     Status,
@@ -956,13 +966,15 @@ fn iso_from_millis(millis: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    static STATE_LOCK: Mutex<()> = Mutex::new(());
 
     fn isolated_state(test_name: &str) -> (tempfile::TempDir, std::sync::MutexGuard<'static, ()>) {
-        let guard = STATE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        // The process-wide env lock serializes RUFLO_STATE_DIR mutation across
+        // funnel + funnel_extra tests. Returned guard holds it for the test body.
+        let guard = TEST_STATE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
+        // SAFETY: TEST_STATE_LOCK is held for this test's duration (the guard is
+        // returned and lives until the test ends); no other thread touches
+        // RUFLO_STATE_DIR concurrently.
         std::env::set_var("RUFLO_STATE_DIR", dir.path());
         let _ = test_name;
         (dir, guard)
