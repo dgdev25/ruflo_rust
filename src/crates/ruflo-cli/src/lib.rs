@@ -23,6 +23,7 @@ mod gaia_bench;
 mod guidance;
 mod hooks;
 mod hive_mind;
+mod init_wizard;
 mod issues;
 mod lifecycle;
 mod metaharness;
@@ -1050,14 +1051,21 @@ Subcommands:
             print!("{HELP}");
             ExitCode::SUCCESS
         }
-        Ok(ParsedCommand::Init) => match lifecycle::initialize(&current_directory()) {
-            Ok(()) => {
-                println!("RuFlo V3 initialized successfully!");
-                ExitCode::SUCCESS
-            }
-            Err(error) => {
-                eprintln!("error: failed to initialize RuFlo: {error}");
-                ExitCode::from(ERROR_EXIT)
+        Ok(ParsedCommand::Init) => {
+            let root = current_directory();
+            match lifecycle::initialize(&root) {
+                Ok(()) => {
+                    let created = init_wizard::run_full_init(&root);
+                    println!("RuFlo V3 initialized successfully!");
+                    for f in &created {
+                        println!("  created: {f}");
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(error) => {
+                    eprintln!("error: failed to initialize RuFlo: {error}");
+                    ExitCode::from(ERROR_EXIT)
+                }
             }
         },
         Ok(ParsedCommand::Status) => {
