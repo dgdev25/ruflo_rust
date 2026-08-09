@@ -814,6 +814,27 @@ Subcommands:
                 Err(error) => ruflo_error(error),
             }
         }
+        Ok(ParsedCommand::MemoryBackup { path }) => {
+            match open_memory_store(path.as_deref()) {
+                Ok(store) => {
+                    let db = store.database_path().to_path_buf();
+                    match crate::services::backup::create(&db) {
+                        Ok(p) => {
+                            println!("Memory backup created: {}", p.display());
+                            ExitCode::SUCCESS
+                        }
+                        Err(e) => ruflo_error(ruflo_types::RufloError::UpstreamAdapter { message: e }),
+                    }
+                }
+                Err(e) => ruflo_error(e),
+            }
+        }
+        Ok(ParsedCommand::MemoryDistill { path: _ }) => {
+            // Run the distillation pipeline (label → tune → fit) on router decisions.
+            let result = crate::distillation::run(384, 64, 20);
+            println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
+            ExitCode::SUCCESS
+        }
         Ok(ParsedCommand::MemoryPurge {
             namespace,
             dry_run,

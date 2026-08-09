@@ -101,11 +101,17 @@ fn router_decide_degrades() {
 }
 
 #[test]
-fn distill_degrades() {
+fn distill_runs_natively() {
     let project = tempfile::tempdir().unwrap();
-    let out = run("ruflo", project.path(), &["neural", "distill", "plan"]);
-    assert_eq!(out.status.code(), Some(1));
-    assert!(stderr(&out).contains("ruvllm") || stderr(&out).contains("Node"));
+    // distill now runs the real native SONA pipeline (no Node/ruvllm). With no
+    // router decisions it reports no_decisions and exits 0.
+    let out = run("ruflo", project.path(), &["neural", "distill", "run"]);
+    assert_eq!(out.status.code(), Some(0));
+    let s = stdout(&out);
+    assert!(
+        s.contains("native-sona-ewc++") || s.contains("no_decisions") || s.contains("Status"),
+        "distill stdout: {s}"
+    );
 }
 
 #[test]
