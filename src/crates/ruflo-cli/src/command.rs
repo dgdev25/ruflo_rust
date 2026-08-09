@@ -2163,7 +2163,7 @@ mod tests {
         ));
         assert!(matches!(
             parse(argv(&["swarm", "start", "-o", "Build API", "-s", "testing"])),
-            Ok(ParsedCommand::SwarmStart { objective, strategy }) if objective == "Build API" && strategy == "testing"
+            Ok(ParsedCommand::SwarmStart { objective, strategy, .. }) if objective == "Build API" && strategy == "testing"
         ));
         assert!(matches!(
             parse(argv(&["swarm", "stop", "swarm-1"])),
