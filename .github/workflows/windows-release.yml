@@ -1,0 +1,66 @@
+name: windows-release
+
+# ADR-0010 / T11-followup: produce a Windows release of ruflo.exe WITH the
+# ONNX Runtime DLL bundled so the `onnx` feature works on Windows.
+#
+# ort ships no prebuilt binaries for x86_64-pc-windows-gnu, so we build with
+# the `onnx-dynamic` feature (ort load-dynamic — loads onnxruntime.dll at
+# runtime instead of linking) and fetch the official Microsoft ONNX Runtime
+# win-x64 release zip, placing the DLL next to ruflo.exe. The resulting
+# artifact is a self-contained folder: ruflo.exe + onnxruntime.dll + the
+# MiniLM model (downloaded on first run).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  windows-gnu-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+      - name: Install mingw-w64
+        run: sudo apt-get update && sudo apt-get install -y mingw-w64
+
+      # Build with onnx-dynamic (load-dynamic) so the Windows binary loads
+      # onnxruntime.dll at runtime rather than needing ort's prebuilt link.
+      - name: Cross-build ruflo.exe (onnx-dynamic)
+        run: cargo build --release --target x86_64-pc-windows-gnu -p ruflo --no-default-features --features onnx-dynamic
+
+      - name: Fetch ONNX Runtime win-x64 DLL
+        run: |
+          set -e
+          ORT_VERSION=1.20.1
+          curl -sL -o ort.zip "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-win-x64-${ORT_VERSION}.zip"
+          unzip -j ort.zip "*/lib/onnxruntime.dll" -d stage/
+
+      - name: Stage release folder
+        run: |
+          mkdir -p stage
+          cp target/x86_64-pc-windows-gnu/release/ruflo.exe stage/
+          # MiniLM model is downloaded on first run via `ruflo embeddings init --download`;
+          # document it in a README in the folder.
+          cat > stage/README.txt <<'EOF'
+          ruflo (Windows, native, zero-Node)
+          =================================
+          ruflo.exe  — the CLI (real ONNX MiniLM embeddings via onnxruntime.dll)
+          onnxruntime.dll — ONNX Runtime (loaded at runtime; do not remove)
+
+          First run: ruflo embeddings init --download
+            (fetches all-MiniLM-L6-v2 — ~45MB — into %USERPROFILE%\.cache\ruflo\models)
+          EOF
+
+      - name: Verify DLL + exe present
+        run: |
+          file stage/ruflo.exe
+          test -f stage/onnxruntime.dll
+          ls -la stage/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ruflo-windows-x64-onnx
+          path: stage/

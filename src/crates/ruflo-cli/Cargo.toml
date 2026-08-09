@@ -21,6 +21,11 @@ ast = ["dep:tree-sitter", "dep:tree-sitter-rust", "dep:tree-sitter-typescript", 
 # prebuilt binaries for that target (build with --no-default-features there,
 # or the windows-cross.yml CI path).
 onnx = ["dep:ort", "dep:tokenizers"]
+# ONNX via ort load-dynamic — loads onnxruntime.dll/.so at runtime instead of
+# linking at build. Use this for Windows releases: build with
+# --features onnx-dynamic --no-default-features and ship the ONNX Runtime DLL
+# alongside ruflo.exe (the windows-release workflow does this).
+onnx-dynamic = ["dep:ort", "dep:tokenizers", "ort/load-dynamic"]
 # Localhost HTTP registry server (axum + tokio). Off by default; enable with
 # --features registry-http to run `ruflo registry serve`.
 registry-http = ["dep:axum", "dep:tokio"]
