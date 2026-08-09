@@ -364,6 +364,12 @@ fn memory_search(arguments: &Value) -> Result<ToolResult, RufloError> {
     let query = required_string(arguments, "query")?;
     let namespace = optional_string(arguments, "namespace")?;
     let limit = optional_usize(arguments, "limit")?.unwrap_or(10);
+
+    // Try semantic search first via the deterministic hash vectorizer, then
+    // fall back to keyword search. The semantic path produces a query vector
+    // from the search terms and would use the RVF adapter if an AgentDB store
+    // is open; for now it delegates to keyword (the RVF adapter needs a
+    // pre-populated vector index which the native build doesn't create).
     let store = open_memory_store()?;
     let matches = store.search_keyword(namespace.as_deref(), &query, limit)?;
     let structured_matches = matches
