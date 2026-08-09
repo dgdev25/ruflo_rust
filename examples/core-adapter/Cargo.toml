@@ -1,0 +1,12 @@
+[package]
+name = "ruflo-core-adapter-example"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Keep this consumer independent from the parent workspace so the command in
+# this directory also works after copying the example into another repository.
+[workspace]
+
+[dependencies]
+ruflo-core = { path = "../../src/crates/ruflo-core" }

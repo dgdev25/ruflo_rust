@@ -37,6 +37,9 @@ The crates are designed as implementation building blocks, not as a finished end
 
 These crates are currently `publish = false`. Reuse them from this workspace or a fork/local path dependency; do not assume a stable crates.io API or published npm distribution.
 
+The [core-adapter example](examples/core-adapter/README.md) is a standalone,
+compilable path-dependency consumer of `ruflo-core`.
+
 When creating another Rust version of Ruflo, start by depending on or adapting the smallest relevant crate, then add your own command surface and tests. Preserve the capability manifest discipline: only advertise a command, MCP tool, or migration path after its consumer contract is verified.
 
 ## Benchmark status
@@ -147,7 +150,20 @@ The CLI includes native command families and deterministic unsupported-command e
 
 See the [parity checklist](docs/plans/parity-remediation-checklist.md) and [audit](docs/audits/audit-2026-08-09-3.md) for contract-level evidence and remaining gaps.
 
-## Windows
+## Platform support
+
+The release workflow prepares archives for Linux (x86_64/aarch64), macOS
+(x86_64/aarch64), and Windows (x86_64 MSVC). They are release candidates until
+a successful tagged run supplies the evidence described in [platform
+support](docs/release/platform-support.md).
+
+On Linux or macOS, build the host-native CLI with:
+
+```bash
+cargo build --release --locked
+```
+
+The Windows cross-compile check uses the GNU target without ONNX:
 
 Windows GNU cross-compilation is checked without ONNX:
 
