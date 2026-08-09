@@ -160,7 +160,11 @@ fn run_op(root: &Path, op: &str, command: &PolicyCommand) -> Result<Value, Strin
                 ("allowed", "no deny rule matched")
             };
 
-            // Write receipt
+            // Write HMAC-signed receipt (policy_runtime_v2 behavioral).
+            let identity_str = identity.to_string();
+            let signed = crate::services::policy_runtime_v2::evaluate_signed(
+                action_type, &identity_str,
+            );
             let receipt = json!({
                 "identity": identity,
                 "action": action,
@@ -168,6 +172,8 @@ fn run_op(root: &Path, op: &str, command: &PolicyCommand) -> Result<Value, Strin
                 "reason": reason,
                 "mode": mode,
                 "environment": environment,
+                "signature": signed["signature"],
+                "signedAt": signed["signedAt"],
             });
             if let Some(arr) = state["receipts"].as_array() {
                 // append receipt to ledger (copy-on-write)

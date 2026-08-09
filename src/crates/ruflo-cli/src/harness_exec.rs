@@ -24,6 +24,11 @@ fn now_ms() -> u64 {
 
 /// Run `cargo test` in `repo` and parse the result into a verdict.
 pub fn verify(repo: &Path) -> Value {
+    // Checkpoint before verify (enables rollback on regression).
+    let _ = crate::services::checkpoint_v2::checkpoint(
+        repo.join(".claude-flow/state.rvf").to_str().unwrap_or(""),
+        "pre-verify",
+    );
     let out = Command::new("cargo")
         .args(["test", "--quiet", "--no-fail-fast"])
         .current_dir(repo)
@@ -93,6 +98,14 @@ pub fn run_loop(repo: &Path, max_iters: usize) -> Value {
         let _ = crate::services::headless::execute(
             "harness-fix", "claude", &prompt, 120_000, &[],
         );
+        // Judge the fix attempt (fable_v2 behavioral).
+        let judge = crate::services::fable_v2::judge(
+            &v["stderr"].as_str().unwrap_or("no output"),
+            "tests pass after fix",
+        );
+        iters.last_mut().and_then(|i| i.as_object_mut().map(|o| {
+            o.insert("judge".into(), judge["verdict"].clone());
+        }));
     }
     let result = json!({
         "verdict": final_verdict,

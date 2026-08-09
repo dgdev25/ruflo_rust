@@ -608,8 +608,9 @@ fn trigger(root: &Path, command: &DaemonCommand) -> u8 {
         }
     }
     println!("Trigger recorded for worker '{worker}'.");
-    eprintln!("[INFO] Trigger recorded. Workers execute via swarm_exec (native, ADR-0008).");
-    let _ = root;
+    // Execute the worker tick natively (worker_daemon_v2 behavioral).
+    let tick = crate::services::worker_daemon_v2::tick(worker);
+    println!("Worker tick: {}", tick["status"].as_str().unwrap_or("done"));
     0
 }
 
