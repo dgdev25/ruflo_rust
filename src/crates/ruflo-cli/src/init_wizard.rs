@@ -32,7 +32,28 @@ pub fn run_full_init(root: &Path) -> Vec<String> {
         let _ = fs::create_dir_all(root.join(dir));
     }
 
-    // 1. .claude-flow/config.yaml
+    // 0a. Populate .claude/agents/ with core agent definitions (#19)
+    let agents_dir = root.join(".claude/agents");
+    if agents_dir.exists() && agents_dir.read_dir().map(|mut d| d.next().is_none()).unwrap_or(true) {
+        for (name, desc) in &[
+            ("coder", "Implementation specialist — writes code, fixes bugs"),
+            ("reviewer", "Code review — correctness, security, edge cases"),
+            ("tester", "Test architect — writes + validates tests"),
+            ("planner", "Strategic planner — breaks down work into steps"),
+            ("researcher", "Read-only investigator — locates code, gathers context"),
+            ("system-architect", "System design — interfaces, module structure"),
+            ("security-architect", "Security analysis — threats, vulns, hardening"),
+            ("performance-engineer", "Performance — profiling, optimization, benchmarks"),
+            ("debugger", "Root-cause analysis — traces errors, finds fixes"),
+            ("documenter", "Documentation — README, inline docs, changelogs"),
+        ] {
+            let agent_file = agents_dir.join(format!("{name}.md"));
+            let _ = fs::write(&agent_file, format!(
+                "---\nname: {name}\ndescription: {desc}\ntools: [Read, Edit, Write, Grep, Glob, Bash]\n---\n\nYou are a {name}. {desc}.\n"
+            ));
+        }
+        created.push(".claude/agents/ (10 core agents)".into());
+    }
     let cfg_path = root.join(".claude-flow/config.yaml");
     if !cfg_path.exists() {
         let _ = fs::write(&cfg_path, CONFIG_YAML);
