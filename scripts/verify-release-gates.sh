@@ -24,7 +24,9 @@ for t in \
   issues_command settings_command spinner_command version_command \
   funnel_command transport_command \
   security_command analyze_command daemon_command embeddings_command \
-  hive_mind_command neural_command hooks_command; do
+  hive_mind_command neural_command hooks_command \
+  lifecycle_command daemon_stop_test policy_cli_test swarm_env_test \
+  additional_commands_test; do
   if [[ -f "tests/$t.rs" ]]; then
     cargo test --test "$t"
   fi

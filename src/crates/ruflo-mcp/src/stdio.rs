@@ -37,6 +37,24 @@ where
         }
 
         let frame = line.trim_end_matches(&['\r', '\n'][..]).to_string();
+        // Enforce a max request body size (10MB) to prevent memory exhaustion
+        // from a malicious or buggy stdin client. Matches the HTTP transport's
+        // HttpLimits::default() body cap.
+        const MAX_REQUEST_BYTES: usize = 10 * 1024 * 1024;
+        if frame.len() > MAX_REQUEST_BYTES {
+            let response = json!({
+                "jsonrpc": "2.0",
+                "id": Value::Null,
+                "error": {
+                    "code": -32600,
+                    "message": "Request too large",
+                    "data": { "maxBytes": MAX_REQUEST_BYTES, "receivedBytes": frame.len() }
+                }
+            });
+            serde_json::to_writer(&mut output, &response).map_err(io_error)?;
+            output.write_all(b"\n").map_err(io_error)?;
+            continue;
+        }
         let request_context = RequestContext::local(frame.len());
         let request_value = match serde_json::from_str::<Value>(&frame) {
             Ok(request) => request,
