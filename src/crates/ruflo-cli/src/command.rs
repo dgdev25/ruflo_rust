@@ -267,6 +267,9 @@ pub enum ParsedCommand {
         reset_state: bool,
     },
     McpStart,
+    McpOp { op: String },
+    WasmOp { op: String },
+    RuvectorOp { op: String },
     NativeOverview {
         name: String,
     },
@@ -1923,6 +1926,36 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
         ["agent", "list"] | ["agent", "ls"] => Ok(ParsedCommand::AgentList),
         ["task", "list"] | ["task", "ls"] => Ok(ParsedCommand::TaskList),
         ["mcp", "start"] => Ok(ParsedCommand::McpStart),
+        ["mcp", "stop"] | ["mcp", "status"] | ["mcp", "health"] | ["mcp", "restart"]
+        | ["mcp", "tools"] | ["mcp", "toggle"] | ["mcp", "logs"] => {
+            Ok(ParsedCommand::McpOp { op: normalized[1].to_string() })
+        }
+        // agent wasm* subcommands (#7)
+        ["agent", "wasm-status"] | ["agent", "wasm", "status"] => {
+            Ok(ParsedCommand::WasmOp { op: "status".into() })
+        }
+        ["agent", "wasm-create"] | ["agent", "wasm", "create"] => {
+            Ok(ParsedCommand::WasmOp { op: "create".into() })
+        }
+        ["agent", "wasm-prompt"] | ["agent", "wasm", "prompt"] => {
+            Ok(ParsedCommand::WasmOp { op: "prompt".into() })
+        }
+        ["agent", "wasm-gallery"] | ["agent", "wasm", "gallery"] => {
+            Ok(ParsedCommand::WasmOp { op: "gallery".into() })
+        }
+        // ruvector subcommands (#8)
+        ["ruvector", "status"] | ["rv", "status"] => {
+            Ok(ParsedCommand::RuvectorOp { op: "status".into() })
+        }
+        ["ruvector", "init"] | ["rv", "init"] => {
+            Ok(ParsedCommand::RuvectorOp { op: "init".into() })
+        }
+        ["ruvector", "benchmark"] | ["rv", "benchmark"] => {
+            Ok(ParsedCommand::RuvectorOp { op: "benchmark".into() })
+        }
+        ["ruvector", "optimize"] | ["rv", "optimize"] => {
+            Ok(ParsedCommand::RuvectorOp { op: "optimize".into() })
+        }
         // Families with native overview surface (full V3 parity pending)
         _ if matches!(
             normalized.first().copied(),
