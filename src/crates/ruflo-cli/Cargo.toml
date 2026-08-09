@@ -35,6 +35,7 @@ axum = { workspace = true, optional = true }
 ruflo-config = { path = "../ruflo-config" }
 ruflo-codex-cli = { path = "../ruflo-codex-cli" }
 ruflo-mcp = { path = "../ruflo-mcp" }
+ruflo-memory = { path = "../ruflo-memory" }
 ruflo-runtime = { path = "../ruflo-runtime" }
 ruflo-storage = { path = "../ruflo-storage" }
 ruflo-types = { path = "../ruflo-types" }

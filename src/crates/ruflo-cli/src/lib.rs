@@ -735,14 +735,14 @@ Subcommands:
                     )
                 })?;
                 let vector = vector.into_iter().map(|value| value as f32).collect::<Vec<_>>();
-                let entries = store
+                let candidates = store
                     .search_semantic(&vector, limit.saturating_mul(4), crate::onnx_embeddings::BGE_DIM as u16, "bge-base-en-v1.5")?
                     .into_iter()
-                    .map(|(entry, _score)| entry)
-                    .filter(|entry| namespace.as_deref().is_none_or(|expected| entry.namespace == expected))
-                    .take(limit)
+                    .filter(|(entry, _)| namespace.as_deref().is_none_or(|expected| entry.namespace == expected))
                     .collect::<Vec<_>>();
-                Ok((entries, "BGE semantic search"))
+                let corpus = store.list(namespace.as_deref(), usize::MAX)?;
+                let entries = rerank_bge_hybrid(&query, candidates, &corpus, limit)?;
+                Ok((entries, "BGE hybrid semantic search"))
             } else {
                 store
                     .search_keyword(namespace.as_deref(), &query, limit)
@@ -2064,6 +2064,65 @@ fn open_memory_store(
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| root.join(".swarm/memory.db"));
     ruflo_storage::SqliteMemoryStore::open(root, path)
+}
+
+/// Apply the Node V3 hybrid policy after RVF has selected its durable dense
+/// candidates. BGE recreates candidate vectors for MMR; SQLite supplies the
+/// visible corpus for the two independently weighted BM25 fields.
+fn rerank_bge_hybrid(
+    query: &str,
+    candidates: Vec<(ruflo_storage::MemoryEntry, f32)>,
+    corpus: &[ruflo_storage::MemoryEntry],
+    limit: usize,
+) -> Result<Vec<ruflo_storage::MemoryEntry>, ruflo_types::RufloError> {
+    use ruflo_memory::hybrid;
+
+    if candidates.is_empty() || limit == 0 {
+        return Ok(Vec::new());
+    }
+    let query_tokens = hybrid::tokenize(query);
+    let subjects = corpus.iter().map(|entry| hybrid::tokenize(&entry.key)).collect::<Vec<_>>();
+    let bodies = corpus.iter().map(|entry| hybrid::tokenize(&entry.content)).collect::<Vec<_>>();
+    let subject_stats = hybrid::build_corpus_stats(&subjects);
+    let body_stats = hybrid::build_corpus_stats(&bodies);
+    let mut dense = Vec::with_capacity(candidates.len());
+    let mut lexical = Vec::with_capacity(candidates.len());
+    let mut ranked = Vec::with_capacity(candidates.len());
+    for (entry, similarity) in candidates {
+        let embedding = crate::onnx_embeddings::embed_bge_document(&entry.content).ok_or_else(|| {
+            ruflo_types::RufloError::invalid_input(
+                "memory.bge",
+                "BGE model assets became unavailable during hybrid reranking",
+            )
+        })?;
+        dense.push(f64::from(similarity));
+        lexical.push(hybrid::multi_field_bm25(
+            &query_tokens,
+            &hybrid::tokenize(&entry.key),
+            &hybrid::tokenize(&entry.content),
+            &subject_stats,
+            &body_stats,
+            3.0,
+            1.0,
+        ));
+        ranked.push((entry, embedding.into_iter().map(|value| value as f32).collect::<Vec<_>>()));
+    }
+    let relevance = hybrid::hybrid_scores(&dense, &lexical, 0.6).ok_or_else(|| {
+        ruflo_types::RufloError::invalid_input("memory.hybrid", "failed to align hybrid scores")
+    })?;
+    let ranked = ranked
+        .into_iter()
+        .zip(relevance)
+        .map(|((entry, embedding), relevance)| hybrid::Ranked {
+            relevance: relevance * hybrid::type_penalty(Some(&entry.key), 0.5),
+            value: entry,
+            embedding,
+        })
+        .collect();
+    Ok(hybrid::mmr_rerank(ranked, limit, 0.5)
+        .into_iter()
+        .map(|candidate| candidate.value)
+        .collect())
 }
 
 fn directory_has_entries(path: &std::path::Path) -> bool {
