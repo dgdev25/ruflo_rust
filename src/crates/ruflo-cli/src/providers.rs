@@ -264,6 +264,8 @@ fn request(url: String, headers: Vec<(&'static str, String)>) -> Connectivity {
         Ok(response) if response.status().is_success() => Connectivity::Connected,
         Ok(response) if matches!(response.status().as_u16(), 401 | 403) => Connectivity::Authentication(response.status().as_u16()),
         Ok(response) => Connectivity::Unexpected(response.status().as_u16()),
+        Err(ureq::Error::StatusCode(status)) if matches!(status, 401 | 403) => Connectivity::Authentication(status),
+        Err(ureq::Error::StatusCode(status)) => Connectivity::Unexpected(status),
         Err(error) if error.to_string().to_ascii_lowercase().contains("timeout") => Connectivity::Timeout,
         Err(_) => Connectivity::Failed,
     }
@@ -360,4 +362,31 @@ fn usage(root: &Path, command: &ProvidersCommand) -> u8 {
         }
     }
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::thread;
+
+    fn server(status: u16) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0; 1024];
+            let _ = stream.read(&mut request);
+            write!(stream, "HTTP/1.1 {status} Test\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+        });
+        format!("http://{address}/models")
+    }
+
+    #[test]
+    fn provider_connectivity_classifies_local_http_responses() {
+        assert_eq!(connectivity("openai", Some("token"), Some(&server(200))), Connectivity::Connected);
+        assert_eq!(connectivity("openai", Some("token"), Some(&server(401))), Connectivity::Authentication(401));
+        assert_eq!(connectivity("openai", Some("token"), Some(&server(429))), Connectivity::Unexpected(429));
+    }
 }
