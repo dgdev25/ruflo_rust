@@ -126,6 +126,17 @@ pub fn definitions() -> Vec<(&'static str, &'static str)> {
         ("benchmark_hash", "Time a hash-vectorizer embedding (latency probe)."),
         ("providers_list", "List configured LLM providers."),
         ("random_uuid", "Generate a v4 UUID (RFC 4122)."),
+        // Batch 3 — more real native logic
+        ("hash_sha256", "SHA-256 hex digest of input text."),
+        ("hmac_sha256", "HMAC-SHA256 of a message under a key (hex)."),
+        ("base64_encode", "Base64-encode input bytes."),
+        ("base64_decode", "Base64-decode a string to UTF-8."),
+        ("daemon_status", "Read daemon state (pid, ttl, budget)."),
+        ("swarm_health", "Aggregate swarm worker health from state."),
+        ("graph_scc", "Find strongly-connected components (cycles) in an edge list."),
+        ("json_validate", "Validate a JSON string, reporting the parse error."),
+        ("text_similarity", "Cosine similarity between two embedded strings."),
+        ("version_info", "Native build version + zero-node flag."),
     ]
 }
 
@@ -573,6 +584,77 @@ pub fn handle(name: &str, args: &Value) -> Result<ToolResult, RufloError> {
         "random_uuid" => {
             Ok(ToolResult::text("uuid", Some(json!({"uuid": uuid_v4()}))))
         }
+        // ---- Batch 3 ----
+        "hash_sha256" => {
+            use sha2::{Digest, Sha256};
+            let input = req_str(args, "input")?;
+            let digest = Sha256::digest(input.as_bytes());
+            Ok(ToolResult::text("sha256", Some(json!({"digest": hex_lower(&digest)}))))
+        }
+        "hmac_sha256" => {
+            let key = req_str(args, "key")?;
+            let msg = req_str(args, "message")?;
+            let mac = hmac_sha256_compute(key.as_bytes(), msg.as_bytes());
+            Ok(ToolResult::text("hmac", Some(json!({"mac": hex_lower(&mac)}))))
+        }
+        "base64_encode" => {
+            let input = req_str(args, "input")?;
+            Ok(ToolResult::text("b64", Some(json!({"encoded": b64_encode(input.as_bytes())}))))
+        }
+        "base64_decode" => {
+            let input = req_str(args, "input")?;
+            match b64_decode(&input) {
+                Ok(bytes) => match String::from_utf8(bytes) {
+                    Ok(s) => Ok(ToolResult::text("decoded", Some(json!({"decoded": s})))),
+                    Err(_) => Err(RufloError::invalid_input("b64.utf8", "decoded bytes not UTF-8")),
+                },
+                Err(e) => Err(RufloError::invalid_input("b64.decode", e)),
+            }
+        }
+        "daemon_status" => {
+            let st = read_state("daemon-state.json");
+            let pid = st["pid"].as_u64();
+            let ttl = st["ttlMs"].as_u64();
+            Ok(ToolResult::text(format!("pid={:?}", pid),
+                Some(json!({"state": st, "pid": pid, "ttlMs": ttl}))))
+        }
+        "swarm_health" => {
+            let st = read_state("swarm.json");
+            let workers = st["workers"].as_array().cloned().unwrap_or_default();
+            let healthy = workers.iter().filter(|w| w["status"].as_str() == Some("healthy")).count();
+            Ok(ToolResult::text(format!("{healthy}/{} healthy", workers.len()),
+                Some(json!({"total": workers.len(), "healthy": healthy, "workers": workers}))))
+        }
+        "graph_scc" => {
+            let edges_in = args.get("edges").and_then(|v| v.as_array())
+                .ok_or_else(|| RufloError::invalid_input("graph.edges", "edges array required"))?;
+            let sccs = compute_scc_inline(edges_in);
+            Ok(ToolResult::text(format!("{} component(s)", sccs.len()),
+                Some(json!({"components": sccs}))))
+        }
+        "json_validate" => {
+            let input = req_str(args, "input")?;
+            match serde_json::from_str::<Value>(&input) {
+                Ok(v) => Ok(ToolResult::text("valid", Some(json!({"valid": true, "type": json_type_name(&v)})))),
+                Err(e) => Ok(ToolResult::text("invalid",
+                    Some(json!({"valid": false, "error": e.to_string()})))),
+            }
+        }
+        "text_similarity" => {
+            let a = req_str(args, "text1")?;
+            let b = req_str(args, "text2")?;
+            let dim = opt_u64(args, "dim").unwrap_or(384) as usize;
+            let (va, _) = inline_embed(&a, dim);
+            let (vb, _) = inline_embed(&b, dim);
+            Ok(ToolResult::text("similarity", Some(json!({"cosine": cosine_f64(&va, &vb)}))))
+        }
+        "version_info" => {
+            Ok(ToolResult::text("native zero-node build",
+                Some(json!({
+                    "backend": "native-rust", "nodeDependency": false,
+                    "mcpTools": definitions().len(),
+                }))))
+        }
         _ => Err(RufloError::invalid_input("tool.not_found", format!("unknown tool: {name}"))),
     }
 }
@@ -809,6 +891,173 @@ fn uuid_v4() -> String {
     )
 }
 
+fn hex_lower(bytes: &[u8]) -> String {
+    let mut s = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        s.push_str(&format!("{b:02x}"));
+    }
+    s
+}
+
+fn hmac_sha256_compute(key: &[u8], msg: &[u8]) -> Vec<u8> {
+    use sha2::{Digest, Sha256};
+    const BLOCK: usize = 64;
+    let mut k = if key.len() > BLOCK {
+        Sha256::digest(key).to_vec()
+    } else {
+        key.to_vec()
+    };
+    k.resize(BLOCK, 0);
+    let mut ipad = vec![0x36u8; BLOCK];
+    let mut opad = vec![0x5cu8; BLOCK];
+    for i in 0..BLOCK {
+        ipad[i] ^= k[i];
+        opad[i] ^= k[i];
+    }
+    let mut inner = Sha256::new();
+    inner.update(&ipad);
+    inner.update(msg);
+    let inner_digest = inner.finalize();
+    let mut outer = Sha256::new();
+    outer.update(&opad);
+    outer.update(&inner_digest);
+    outer.finalize().to_vec()
+}
+
+fn b64_encode(input: &[u8]) -> String {
+    const T: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::new();
+    let mut i = 0;
+    while i + 3 <= input.len() {
+        let n = ((input[i] as u32) << 16) | ((input[i + 1] as u32) << 8) | input[i + 2] as u32;
+        out.push(T[((n >> 18) & 0x3F) as usize] as char);
+        out.push(T[((n >> 12) & 0x3F) as usize] as char);
+        out.push(T[((n >> 6) & 0x3F) as usize] as char);
+        out.push(T[(n & 0x3F) as usize] as char);
+        i += 3;
+    }
+    let rem = input.len() - i;
+    if rem == 1 {
+        let n = (input[i] as u32) << 16;
+        out.push(T[((n >> 18) & 0x3F) as usize] as char);
+        out.push(T[((n >> 12) & 0x3F) as usize] as char);
+        out.push('=');
+        out.push('=');
+    } else if rem == 2 {
+        let n = ((input[i] as u32) << 16) | ((input[i + 1] as u32) << 8);
+        out.push(T[((n >> 18) & 0x3F) as usize] as char);
+        out.push(T[((n >> 12) & 0x3F) as usize] as char);
+        out.push(T[((n >> 6) & 0x3F) as usize] as char);
+        out.push('=');
+    }
+    out
+}
+
+fn b64_decode(input: &str) -> Result<Vec<u8>, String> {
+    fn val(c: u8) -> Result<u8, String> {
+        match c {
+            b'A'..=b'Z' => Ok(c - b'A'),
+            b'a'..=b'z' => Ok(c - b'a' + 26),
+            b'0'..=b'9' => Ok(c - b'0' + 52),
+            b'+' => Ok(62),
+            b'/' => Ok(63),
+            _ => Err(format!("invalid b64 char: {c}")),
+        }
+    }
+    let filtered: Vec<u8> = input.bytes().filter(|&c| c != b'\n' && c != b'\r' && c != b' ').collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i + 4 <= filtered.len() {
+        let pad0 = filtered[i + 3] == b'=';
+        let pad1 = filtered[i + 2] == b'=';
+        let a = val(filtered[i])?;
+        let b = val(filtered[i + 1])?;
+        let c = if pad1 { 0 } else { val(filtered[i + 2])? };
+        let d = if pad0 { 0 } else { val(filtered[i + 3])? };
+        let n = ((a as u32) << 18) | ((b as u32) << 12) | ((c as u32) << 6) | d as u32;
+        out.push((n >> 16) as u8);
+        if !pad1 { out.push((n >> 8) as u8); }
+        if !pad0 { out.push(n as u8); }
+        i += 4;
+    }
+    Ok(out)
+}
+
+/// Inline Tarjan-style SCC over an edge list of [from,to] string pairs.
+fn compute_scc_inline(edges: &[Value]) -> Vec<Value> {
+    use std::collections::{HashMap, HashSet};
+    let mut nodes: HashSet<String> = HashSet::new();
+    let mut adj: HashMap<String, Vec<String>> = HashMap::new();
+    for e in edges {
+        if let Some(arr) = e.as_array() {
+            let from = arr.get(0).and_then(Value::as_str).unwrap_or("").to_string();
+            let to = arr.get(1).and_then(Value::as_str).unwrap_or("").to_string();
+            if from.is_empty() || to.is_empty() { continue; }
+            nodes.insert(from.clone());
+            nodes.insert(to.clone());
+            adj.entry(from).or_default().push(to);
+        }
+    }
+    // Kosaraju: DFS order, then DFS on reversed graph.
+    let mut visited: HashSet<String> = HashSet::new();
+    let mut order: Vec<String> = Vec::new();
+    let node_list: Vec<String> = nodes.iter().cloned().collect();
+    fn dfs1(n: &str, adj: &HashMap<String, Vec<String>>, visited: &mut HashSet<String>, order: &mut Vec<String>) {
+        if !visited.insert(n.to_string()) { return; }
+        if let Some(ns) = adj.get(n) {
+            for nb in ns { dfs1(nb, adj, visited, order); }
+        }
+        order.push(n.to_string());
+    }
+    for n in &node_list { dfs1(n, &adj, &mut visited, &mut order); }
+    let mut radj: HashMap<String, Vec<String>> = HashMap::new();
+    for (from, ns) in &adj {
+        for to in ns { radj.entry(to.clone()).or_default().push(from.clone()); }
+    }
+    visited.clear();
+    let mut components: Vec<Value> = Vec::new();
+    fn dfs2(n: &str, radj: &HashMap<String, Vec<String>>, visited: &mut HashSet<String>, comp: &mut Vec<String>) {
+        if !visited.insert(n.to_string()) { return; }
+        comp.push(n.to_string());
+        if let Some(ns) = radj.get(n) {
+            for nb in ns { dfs2(nb, radj, visited, comp); }
+        }
+    }
+    for n in order.into_iter().rev() {
+        if visited.contains(&n) { continue; }
+        let mut comp = Vec::new();
+        dfs2(&n, &radj, &mut visited, &mut comp);
+        if !comp.is_empty() {
+            components.push(json!({"nodes": comp, "cyclic": false}));
+        }
+    }
+    // Mark multi-node components as cyclic.
+    for c in components.iter_mut() {
+        if c["nodes"].as_array().map(|a| a.len() > 1).unwrap_or(false) {
+            c["cyclic"] = json!(true);
+        }
+    }
+    components
+}
+
+fn cosine_f64(a: &[f64], b: &[f64]) -> f64 {
+    let dot = a.iter().zip(b).map(|(x, y)| x * y).sum::<f64>();
+    let na = a.iter().map(|x| x * x).sum::<f64>().sqrt();
+    let nb = b.iter().map(|x| x * x).sum::<f64>().sqrt();
+    if na == 0.0 || nb == 0.0 { 0.0 } else { dot / (na * nb) }
+}
+
+fn json_type_name(v: &Value) -> &'static str {
+    match v {
+        Value::Null => "null",
+        Value::Bool(_) => "bool",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -905,5 +1154,68 @@ mod batch2_tests {
         let s = extract_symbols(src, "rust");
         assert_eq!(s["structs"].as_array().unwrap().len(), 1);
         assert_eq!(s["functions"].as_array().unwrap().len(), 2);
+    }
+}
+
+#[cfg(test)]
+mod batch3_tests {
+    use super::*;
+
+    #[test]
+    fn sha256_known_vector() {
+        use sha2::{Digest, Sha256};
+        // SHA-256("abc") = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+        let d = hex_lower(&Sha256::digest(b"abc"));
+        assert_eq!(d, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    }
+
+    #[test]
+    fn base64_roundtrip() {
+        let s = "hello world";
+        let enc = b64_encode(s.as_bytes());
+        assert_eq!(enc, "aGVsbG8gd29ybGQ=");
+        let dec = b64_decode(&enc).unwrap();
+        assert_eq!(String::from_utf8(dec).unwrap(), s);
+    }
+
+    #[test]
+    fn hmac_nonempty() {
+        let mac = hmac_sha256_compute(b"key", b"message");
+        assert_eq!(mac.len(), 32);
+        // Deterministic.
+        assert_eq!(mac, hmac_sha256_compute(b"key", b"message"));
+    }
+
+    #[test]
+    fn graph_scc_finds_cycle() {
+        let edges = vec![
+            json!(["a", "b"]), json!(["b", "c"]), json!(["c", "a"]),
+        ];
+        let comps = compute_scc_inline(&edges);
+        let cyclic: usize = comps.iter().filter(|c| c["cyclic"].as_bool().unwrap_or(false)).count();
+        assert_eq!(cyclic, 1);
+    }
+
+    #[test]
+    fn cosine_identical_is_one() {
+        let v = vec![0.1, 0.2, 0.3];
+        assert!((cosine_f64(&v, &v) - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn json_type_detection() {
+        assert_eq!(json_type_name(&json!([1])), "array");
+        assert_eq!(json_type_name(&json!("x")), "string");
+        assert_eq!(json_type_name(&json!(5)), "number");
+    }
+
+    #[test]
+    fn batch3_defs_present() {
+        let n: Vec<&str> = definitions().iter().map(|(n, _)| *n).collect();
+        for r in ["hash_sha256", "hmac_sha256", "base64_encode", "base64_decode",
+                  "daemon_status", "swarm_health", "graph_scc", "json_validate",
+                  "text_similarity", "version_info"] {
+            assert!(n.contains(&r), "missing {r}");
+        }
     }
 }

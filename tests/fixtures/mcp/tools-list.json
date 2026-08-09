@@ -441,6 +441,86 @@
             "type": "object",
             "properties": {}
           }
+        },
+        {
+          "name": "hash_sha256",
+          "description": "SHA-256 hex digest of input text.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "hmac_sha256",
+          "description": "HMAC-SHA256 of a message under a key (hex).",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "base64_encode",
+          "description": "Base64-encode input bytes.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "base64_decode",
+          "description": "Base64-decode a string to UTF-8.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "daemon_status",
+          "description": "Read daemon state (pid, ttl, budget).",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "swarm_health",
+          "description": "Aggregate swarm worker health from state.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "graph_scc",
+          "description": "Find strongly-connected components (cycles) in an edge list.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "json_validate",
+          "description": "Validate a JSON string, reporting the parse error.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "text_similarity",
+          "description": "Cosine similarity between two embedded strings.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "version_info",
+          "description": "Native build version + zero-node flag.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
         }
       ]
     }
@@ -451,7 +531,7 @@
   "provenance": {
     "kind": "reduced-schema",
     "source": "manual compatibility fixture",
-    "reduction": "minimal synthetic tools/list fixture for schema and replay tests only; regenerated after T9 batch 2 added 8 real native tools",
+    "reduction": "minimal synthetic tools/list fixture; regenerated after T9 batch 3",
     "redactions": []
   },
   "recording": {
