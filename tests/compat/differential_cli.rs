@@ -122,7 +122,10 @@ fn binary_package(binary: &str) -> &'static str {
 }
 
 fn target_debug_dir() -> PathBuf {
-    repo_root().join("target").join("debug")
+    std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| repo_root().join("target"))
+        .join("debug")
 }
 
 #[test]

@@ -11,5 +11,19 @@
         {"name": "memory_search", "description": "Find persistent memories with keyword fallback.", "inputSchema": {"type": "object", "properties": {"query": {"type": "string", "minLength": 1}, "namespace": {"type": "string"}, "limit": {"type": "integer", "minimum": 0}, "dimension": {"type": "integer", "minimum": 1}, "sleep_ms": {"type": "integer", "minimum": 0, "maximum": 5000}}, "required": ["query"], "additionalProperties": false}}
       ]
     }
+  },
+  "platform": {
+    "family": "portable"
+  },
+  "provenance": {
+    "kind": "reduced-schema",
+    "source": "/mnt/datadisk/dev/ruflo/v3/@claude-flow/cli/src/mcp-server.ts",
+    "reduction": "This is a minimal synthetic tools/list contract for the four typed native MCP tools. The legacy TypeScript catalog advertises a substantially larger JavaScript-backed surface which native Ruflo intentionally does not claim until each tool has an implemented typed contract.",
+    "redactions": []
+  },
+  "recording": {
+    "recorded_at": "2026-08-09T00:00:00Z",
+    "recorded_by": "native-compatibility-curation",
+    "harness": "mcp-stdio"
   }
 }
