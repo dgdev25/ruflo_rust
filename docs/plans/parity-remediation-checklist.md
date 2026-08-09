@@ -9,6 +9,9 @@ parses.
 - [x] MCP only advertises implemented, typed tool contracts
 - [x] Machine-derived capability manifest and release gate
 - [ ] Source-equivalent AgentDB/RVF semantic retrieval fixtures
+  - [x] BGE-base tokenizer, query-prefix, CLS pooling, and 768-dimensional RVF path
+  - [x] Node hybrid policy: multi-field BM25, meta-record penalty, and MMR reranking
+  - [ ] Node-produced ranking corpus and populated cross-runtime RVF interoperability fixture
 - [x] Safe native plugin lifecycle (without executable JavaScript plugins)
 - [x] Bounded provider connectivity verification and classifications
 - [x] Populated Node V3 memory migration/interoperability fixture
