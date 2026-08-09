@@ -258,7 +258,7 @@ fn parse_and_dispatch_errors_map_to_stable_error_objects() {
     assert_eq!(frames[1]["error"]["code"], -32602);
     assert_eq!(
         frames[1]["error"]["data"]["details"]["code"],
-        "tool.not_found"
+        "tool.unsupported"
     );
     assert_eq!(frames[2]["error"]["code"], -32602);
     assert_eq!(

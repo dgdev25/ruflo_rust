@@ -267,9 +267,15 @@ pub enum ParsedCommand {
         reset_state: bool,
     },
     McpStart,
-    McpOp { op: String },
-    WasmOp { op: String },
-    RuvectorOp { op: String },
+    McpOp {
+        op: String,
+    },
+    WasmOp {
+        op: String,
+    },
+    RuvectorOp {
+        op: String,
+    },
     NativeOverview {
         name: String,
     },
@@ -1146,8 +1152,7 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             scope: option_value(&args, "--scope", "-s"),
             export_format: option_value(&args, "--export", "-e"),
             action: option_value(&args, "--action", "-a"),
-            limit: option_value(&args, "--limit", "-l")
-                .and_then(|v| v.parse::<usize>().ok()),
+            limit: option_value(&args, "--limit", "-l").and_then(|v| v.parse::<usize>().ok()),
             filter: option_value(&args, "--filter", "-f"),
             path_opt: option_value(&args, "--path", "-p"),
             ignore: option_value(&args, "--ignore", "-i"),
@@ -1188,10 +1193,14 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             task_id: option_value(&args, "--task-id", "--task-id"),
             model: option_value(&args, "--model", "-m"),
             outcome: option_value(&args, "--outcome", "--outcome"),
-            enabled: args.iter().any(|v| matches!(v.as_str(), "--enabled" | "-e")),
+            enabled: args
+                .iter()
+                .any(|v| matches!(v.as_str(), "--enabled" | "-e")),
             hook_type: option_value(&args, "--type", "-t"),
             json: args.iter().any(|v| v == "--json" || v == "--format=json"),
-            verbose: args.iter().any(|v| matches!(v.as_str(), "--verbose" | "-v")),
+            verbose: args
+                .iter()
+                .any(|v| matches!(v.as_str(), "--verbose" | "-v")),
             positional: vec![],
         }));
     }
@@ -1226,7 +1235,9 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
                 .and_then(|v| v.parse::<usize>().ok())
                 .unwrap_or(5),
             json: args.iter().any(|v| v == "--json"),
-            verbose: args.iter().any(|v| matches!(v.as_str(), "--verbose" | "-v")),
+            verbose: args
+                .iter()
+                .any(|v| matches!(v.as_str(), "--verbose" | "-v")),
         }));
     }
     if normalized.first() == Some(&"hive-mind") || normalized.first() == Some(&"hive") {
@@ -1250,7 +1261,9 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             objective: option_value(&args, "--objective", "--objective"),
             dry_run: args.iter().any(|v| v == "--dry-run"),
             mcp_config: option_value(&args, "--mcp-config", "--mcp-config"),
-            detailed: args.iter().any(|v| matches!(v.as_str(), "--detailed" | "-d")),
+            detailed: args
+                .iter()
+                .any(|v| matches!(v.as_str(), "--detailed" | "-d")),
             watch: args.iter().any(|v| v == "--watch"),
             description: option_value(&args, "--description", "--description"),
             priority: option_value(&args, "--priority", "--priority"),
@@ -1270,31 +1283,37 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
     }
     if normalized.first() == Some(&"embeddings") || normalized.first() == Some(&"embed") {
         let operation = normalized.get(1).copied().unwrap_or("").to_string();
-        return Ok(ParsedCommand::Embeddings(crate::embeddings::EmbeddingsCommand {
-            operation,
-            text: option_value(&args, "--text", "-t"),
-            provider: option_value(&args, "--provider", "-p"),
-            model: option_value(&args, "--model", "-m"),
-            output: option_value(&args, "--output", "-o"),
-            query: option_value(&args, "--query", "-q"),
-            collection: option_value(&args, "--collection", "-c"),
-            limit: option_value(&args, "--limit", "-l").and_then(|v| v.parse::<usize>().ok()),
-            threshold: option_value(&args, "--threshold", "-t").and_then(|v| v.parse::<f64>().ok()),
-            db_path: option_value(&args, "--db-path", "--db-path"),
-            text1: option_value(&args, "--text1", "--text1"),
-            text2: option_value(&args, "--text2", "--text2"),
-            metric: option_value(&args, "--metric", "-m"),
-            action: option_value(&args, "--action", "-a"),
-            name: option_value(&args, "--name", "-n"),
-            dim: option_value(&args, "--dim", "--dim").and_then(|v| v.parse::<usize>().ok()),
-            hyperbolic: !args.iter().any(|v| v == "--no-hyperbolic"),
-            curvature: option_value(&args, "--curvature", "-c").and_then(|v| v.parse::<f64>().ok()),
-            download: !args.iter().any(|v| v == "--no-download"),
-            cache_size: option_value(&args, "--cache-size", "--cache-size").and_then(|v| v.parse::<usize>().ok()),
-            ef_construction: option_value(&args, "--ef-construction", "--ef-construction").and_then(|v| v.parse::<usize>().ok()),
-            m_param: option_value(&args, "--m", "--m").and_then(|v| v.parse::<usize>().ok()),
-            json: args.iter().any(|v| v == "--json"),
-        }));
+        return Ok(ParsedCommand::Embeddings(
+            crate::embeddings::EmbeddingsCommand {
+                operation,
+                text: option_value(&args, "--text", "-t"),
+                provider: option_value(&args, "--provider", "-p"),
+                model: option_value(&args, "--model", "-m"),
+                output: option_value(&args, "--output", "-o"),
+                query: option_value(&args, "--query", "-q"),
+                collection: option_value(&args, "--collection", "-c"),
+                limit: option_value(&args, "--limit", "-l").and_then(|v| v.parse::<usize>().ok()),
+                threshold: option_value(&args, "--threshold", "-t")
+                    .and_then(|v| v.parse::<f64>().ok()),
+                db_path: option_value(&args, "--db-path", "--db-path"),
+                text1: option_value(&args, "--text1", "--text1"),
+                text2: option_value(&args, "--text2", "--text2"),
+                metric: option_value(&args, "--metric", "-m"),
+                action: option_value(&args, "--action", "-a"),
+                name: option_value(&args, "--name", "-n"),
+                dim: option_value(&args, "--dim", "--dim").and_then(|v| v.parse::<usize>().ok()),
+                hyperbolic: !args.iter().any(|v| v == "--no-hyperbolic"),
+                curvature: option_value(&args, "--curvature", "-c")
+                    .and_then(|v| v.parse::<f64>().ok()),
+                download: !args.iter().any(|v| v == "--no-download"),
+                cache_size: option_value(&args, "--cache-size", "--cache-size")
+                    .and_then(|v| v.parse::<usize>().ok()),
+                ef_construction: option_value(&args, "--ef-construction", "--ef-construction")
+                    .and_then(|v| v.parse::<usize>().ok()),
+                m_param: option_value(&args, "--m", "--m").and_then(|v| v.parse::<usize>().ok()),
+                json: args.iter().any(|v| v == "--json"),
+            },
+        ));
     }
     if normalized.first() == Some(&"daemon") {
         let operation = normalized.get(1).copied().unwrap_or("").to_string();
@@ -1308,16 +1327,24 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             operation,
             sub,
             workers: option_value(&args, "--workers", "-w"),
-            background: args.iter().any(|v| matches!(v.as_str(), "--background" | "-b")),
-            foreground: args.iter().any(|v| matches!(v.as_str(), "--foreground" | "-f")),
+            background: args
+                .iter()
+                .any(|v| matches!(v.as_str(), "--background" | "-b")),
+            foreground: args
+                .iter()
+                .any(|v| matches!(v.as_str(), "--foreground" | "-f")),
             headless: args.iter().any(|v| v == "--headless"),
             ttl: option_value(&args, "--ttl", "--ttl").and_then(|v| v.parse::<u64>().ok()),
             all: args.iter().any(|v| matches!(v.as_str(), "--all" | "-a")),
-            verbose: args.iter().any(|v| matches!(v.as_str(), "--verbose" | "-v")),
+            verbose: args
+                .iter()
+                .any(|v| matches!(v.as_str(), "--verbose" | "-v")),
             show_modes: args.iter().any(|v| v == "--show-modes"),
             worker: option_value(&args, "--worker", "-w"),
             reason: option_value(&args, "--reason", "-r"),
-            disable: args.iter().any(|v| matches!(v.as_str(), "--disable" | "-d")),
+            disable: args
+                .iter()
+                .any(|v| matches!(v.as_str(), "--disable" | "-d")),
             quiet: args.iter().any(|v| matches!(v.as_str(), "--quiet" | "-Q")),
         }));
     }
@@ -1342,13 +1369,23 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             analysis_type: option_value(&args, "--type", "-t"),
             format: option_value(&args, "--format", "-f"),
             risk: args.iter().any(|v| matches!(v.as_str(), "--risk" | "-r")),
-            classify: args.iter().any(|v| matches!(v.as_str(), "--classify" | "-c")),
+            classify: args
+                .iter()
+                .any(|v| matches!(v.as_str(), "--classify" | "-c")),
             reviewers: args.iter().any(|v| v == "--reviewers"),
-            verbose: args.iter().any(|v| matches!(v.as_str(), "--verbose" | "-v")),
-            complexity: args.iter().any(|v| matches!(v.as_str(), "--complexity" | "-c")),
-            symbols: args.iter().any(|v| matches!(v.as_str(), "--symbols" | "-s")),
+            verbose: args
+                .iter()
+                .any(|v| matches!(v.as_str(), "--verbose" | "-v")),
+            complexity: args
+                .iter()
+                .any(|v| matches!(v.as_str(), "--complexity" | "-c")),
+            symbols: args
+                .iter()
+                .any(|v| matches!(v.as_str(), "--symbols" | "-s")),
             output: option_value(&args, "--output", "-o"),
-            external: args.iter().any(|v| matches!(v.as_str(), "--external" | "-e")),
+            external: args
+                .iter()
+                .any(|v| matches!(v.as_str(), "--external" | "-e")),
             partitions: option_value(&args, "--partitions", "-p")
                 .and_then(|v| v.parse::<usize>().ok())
                 .unwrap_or(2),
@@ -1358,15 +1395,14 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
     }
     if normalized.first() == Some(&"route") {
         let operation = normalized.get(1).copied().unwrap_or("").to_string();
-        let task = option_value(&args, "--task", "-t")
-            .or_else(|| {
-                // Bare positional: `route task "description"`
-                if operation == "task" {
-                    normalized.get(2).map(|s| s.to_string())
-                } else {
-                    None
-                }
-            });
+        let task = option_value(&args, "--task", "-t").or_else(|| {
+            // Bare positional: `route task "description"`
+            if operation == "task" {
+                normalized.get(2).map(|s| s.to_string())
+            } else {
+                None
+            }
+        });
         let success = if args.iter().any(|v| matches!(v.as_str(), "--success")) {
             Some(true)
         } else if args.iter().any(|v| matches!(v.as_str(), "--failure")) {
@@ -1379,8 +1415,7 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             task,
             agent: option_value(&args, "--agent", "-a"),
             success,
-            seed: option_value(&args, "--seed", "--seed")
-                .and_then(|v| v.parse::<u64>().ok()),
+            seed: option_value(&args, "--seed", "--seed").and_then(|v| v.parse::<u64>().ok()),
             json: args.iter().any(|v| v == "--json" || v == "--format=json"),
         }));
     }
@@ -1468,7 +1503,8 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             path: option_value(&args, "--path", "--path"),
         });
     }
-    if normalized.len() >= 2 && normalized[0] == "memory"
+    if normalized.len() >= 2
+        && normalized[0] == "memory"
         && (normalized[1] == "rebuild-index" || normalized[1] == "rebuild")
     {
         return Ok(ParsedCommand::MemoryRebuildIndex {
@@ -1480,7 +1516,8 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             path: option_value(&args, "--path", "--path"),
         });
     }
-    if normalized.len() >= 2 && normalized[0] == "memory"
+    if normalized.len() >= 2
+        && normalized[0] == "memory"
         && (normalized[1] == "distill" || normalized[1] == "distillation")
     {
         return Ok(ParsedCommand::MemoryDistill {
@@ -1933,47 +1970,55 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
         ["status"] | ["status", "--json"] => Ok(ParsedCommand::Status),
         ["status", "agents"] | ["status", "--agents"] => Ok(ParsedCommand::AgentList),
         ["status", "tasks"] | ["status", "--tasks"] => Ok(ParsedCommand::TaskList),
-        ["status", "memory"] | ["status", "--memory"] => Ok(ParsedCommand::MemoryStats { path: None }),
+        ["status", "memory"] | ["status", "--memory"] => {
+            Ok(ParsedCommand::MemoryStats { path: None })
+        }
         ["swarm", "status"] => Ok(ParsedCommand::SwarmStatus),
         ["session", "list"] | ["session", "ls"] => Ok(ParsedCommand::SessionList),
         ["session", "current"] => Ok(ParsedCommand::SessionCurrent),
         ["agent", "list"] | ["agent", "ls"] => Ok(ParsedCommand::AgentList),
         ["task", "list"] | ["task", "ls"] => Ok(ParsedCommand::TaskList),
         ["mcp", "start"] => Ok(ParsedCommand::McpStart),
-        ["mcp", "stop"] | ["mcp", "status"] | ["mcp", "health"] | ["mcp", "restart"]
-        | ["mcp", "tools"] | ["mcp", "toggle"] | ["mcp", "logs"] => {
-            Ok(ParsedCommand::McpOp { op: normalized[1].to_string() })
-        }
+        ["mcp", "stop"]
+        | ["mcp", "status"]
+        | ["mcp", "health"]
+        | ["mcp", "restart"]
+        | ["mcp", "tools"]
+        | ["mcp", "toggle"]
+        | ["mcp", "logs"] => Ok(ParsedCommand::McpOp {
+            op: normalized[1].to_string(),
+        }),
         // agent wasm* subcommands (#7)
-        ["agent", "wasm-status"] | ["agent", "wasm", "status"] => {
-            Ok(ParsedCommand::WasmOp { op: "status".into() })
-        }
-        ["agent", "wasm-create"] | ["agent", "wasm", "create"] => {
-            Ok(ParsedCommand::WasmOp { op: "create".into() })
-        }
-        ["agent", "wasm-prompt"] | ["agent", "wasm", "prompt"] => {
-            Ok(ParsedCommand::WasmOp { op: "prompt".into() })
-        }
-        ["agent", "wasm-gallery"] | ["agent", "wasm", "gallery"] => {
-            Ok(ParsedCommand::WasmOp { op: "gallery".into() })
-        }
+        ["agent", "wasm-status"] | ["agent", "wasm", "status"] => Ok(ParsedCommand::WasmOp {
+            op: "status".into(),
+        }),
+        ["agent", "wasm-create"] | ["agent", "wasm", "create"] => Ok(ParsedCommand::WasmOp {
+            op: "create".into(),
+        }),
+        ["agent", "wasm-prompt"] | ["agent", "wasm", "prompt"] => Ok(ParsedCommand::WasmOp {
+            op: "prompt".into(),
+        }),
+        ["agent", "wasm-gallery"] | ["agent", "wasm", "gallery"] => Ok(ParsedCommand::WasmOp {
+            op: "gallery".into(),
+        }),
         // ruvector subcommands (#8)
-        ["ruvector", "status"] | ["rv", "status"] => {
-            Ok(ParsedCommand::RuvectorOp { op: "status".into() })
-        }
+        ["ruvector", "status"] | ["rv", "status"] => Ok(ParsedCommand::RuvectorOp {
+            op: "status".into(),
+        }),
         ["ruvector", "init"] | ["rv", "init"] => {
             Ok(ParsedCommand::RuvectorOp { op: "init".into() })
         }
-        ["ruvector", "benchmark"] | ["rv", "benchmark"] => {
-            Ok(ParsedCommand::RuvectorOp { op: "benchmark".into() })
-        }
-        ["ruvector", "optimize"] | ["rv", "optimize"] => {
-            Ok(ParsedCommand::RuvectorOp { op: "optimize".into() })
-        }
+        ["ruvector", "benchmark"] | ["rv", "benchmark"] => Ok(ParsedCommand::RuvectorOp {
+            op: "benchmark".into(),
+        }),
+        ["ruvector", "optimize"] | ["rv", "optimize"] => Ok(ParsedCommand::RuvectorOp {
+            op: "optimize".into(),
+        }),
         // Families with native overview surface (full V3 parity pending)
-        _ if matches!(
-            normalized.first().copied(),
-            Some("hooks")
+        _ if normalized.len() == 1
+            && matches!(
+                normalized.first().copied(),
+                Some("hooks")
                 | Some("workflow")
                 | Some("hive-mind")
                 | Some("hive")
@@ -2013,7 +2058,7 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
                 | Some("gaia-bench")
                 | Some("auth")
                 | Some("proxy")
-        ) =>
+            ) =>
         {
             Ok(ParsedCommand::NativeOverview {
                 name: normalized[0].to_string(),
@@ -2037,15 +2082,58 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
 
 /// All valid top-level command names for suggestion matching.
 const VALID_COMMANDS: &[&str] = &[
-    "init", "start", "status", "agent", "swarm", "task", "session", "memory",
-    "mcp", "config", "migrate", "hooks", "workflow", "hive-mind", "process",
-    "daemon", "version", "doctor", "completions", "neural", "security",
-    "performance", "policy", "embeddings", "verify", "analyze", "route",
-    "progress", "providers", "plugins", "deployment", "claims", "issues",
-    "update", "ruvector", "guidance", "appliance", "transfer-store",
-    "cleanup", "autopilot", "benchmark", "gaia-bench", "metaharness",
-    "eject", "funnel", "settings", "auth", "proxy", "advisor", "spinner",
-    "announcements", "transport",
+    "init",
+    "start",
+    "status",
+    "agent",
+    "swarm",
+    "task",
+    "session",
+    "memory",
+    "mcp",
+    "config",
+    "migrate",
+    "hooks",
+    "workflow",
+    "hive-mind",
+    "process",
+    "daemon",
+    "version",
+    "doctor",
+    "completions",
+    "neural",
+    "security",
+    "performance",
+    "policy",
+    "embeddings",
+    "verify",
+    "analyze",
+    "route",
+    "progress",
+    "providers",
+    "plugins",
+    "deployment",
+    "claims",
+    "issues",
+    "update",
+    "ruvector",
+    "guidance",
+    "appliance",
+    "transfer-store",
+    "cleanup",
+    "autopilot",
+    "benchmark",
+    "gaia-bench",
+    "metaharness",
+    "eject",
+    "funnel",
+    "settings",
+    "auth",
+    "proxy",
+    "advisor",
+    "spinner",
+    "announcements",
+    "transport",
 ];
 
 /// Levenshtein edit distance between two strings (case-insensitive).
@@ -2342,6 +2430,19 @@ mod tests {
         assert!(matches!(
             parse(argv(&["agent", "metrics", "coder-1", "-p", "7d"])),
             Ok(ParsedCommand::AgentMetrics { agent_id: Some(agent_id), period }) if agent_id == "coder-1" && period == "7d"
+        ));
+    }
+
+    #[test]
+    fn known_family_with_unknown_subcommand_is_rejected_not_downgraded_to_overview() {
+        let error = parse(argv(&["gaia-bench", "invented-subcommand"]))
+            .expect_err("unknown subcommand must fail parsing");
+        assert!(error.contains("unsupported native CLI invocation"));
+        assert!(error.contains("gaia-bench invented-subcommand"));
+
+        assert!(matches!(
+            parse(argv(&["gaia-bench"])),
+            Ok(ParsedCommand::NativeOverview { name }) if name == "gaia-bench"
         ));
     }
 

@@ -78,11 +78,68 @@ impl ToolDefinition {
         json!({
             "name": self.name,
             "description": self.description,
-            "inputSchema": {
-                "type": "object",
-                "additionalProperties": false
-            }
+            "inputSchema": input_schema_for(self.name),
         })
+    }
+}
+
+/// The public MCP contract is deliberately limited to handlers that have a
+/// typed input shape and a native implementation.  Do not add a name here
+/// merely because it exists in the historical TypeScript catalog: discovery
+/// is a promise that the tool can be called with this schema.
+fn input_schema_for(name: &str) -> Value {
+    match name {
+        "agent_spawn" => json!({
+            "type": "object",
+            "properties": {
+                "role": { "type": "string" },
+                "sleep_ms": { "type": "integer", "minimum": 0, "maximum": 5000 }
+            },
+            "additionalProperties": false
+        }),
+        "memory_store" => json!({
+            "type": "object",
+            "properties": {
+                "key": { "type": "string", "minLength": 1 },
+                "value": {},
+                "namespace": { "type": "string" },
+                "type": { "type": "string" },
+                "provenance_type": { "type": "string" },
+                "tags": { "type": "array", "items": { "type": "string" } },
+                "upsert": { "type": "boolean" }
+            },
+            "required": ["key", "value"],
+            "additionalProperties": false
+        }),
+        "memory_retrieve" => json!({
+            "type": "object",
+            "properties": {
+                "key": { "type": "string", "minLength": 1 },
+                "namespace": { "type": "string" }
+            },
+            "required": ["key"],
+            "additionalProperties": false
+        }),
+        "memory_search" => json!({
+            "type": "object",
+            "properties": {
+                "query": { "type": "string", "minLength": 1 },
+                "namespace": { "type": "string" },
+                "limit": { "type": "integer", "minimum": 0 },
+                "dimension": { "type": "integer", "minimum": 1 },
+                "sleep_ms": { "type": "integer", "minimum": 0, "maximum": 5000 }
+            },
+            "required": ["query"],
+            "additionalProperties": false
+        }),
+        // `ToolDefinition` instances are private to this module.  Keeping a
+        // closed fallback prevents a new definition from silently acquiring
+        // the old, misleading empty-object schema.
+        _ => json!({
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        }),
     }
 }
 
@@ -153,20 +210,6 @@ impl Dispatcher {
                 RegisteredCapability::new(tool.definition.name, tool.definition.capability.clone())
             })
             .collect::<Vec<_>>();
-        // Register extended tools in the policy so their calls pass authorization.
-        for (name, _desc) in crate::tools_extra::definitions() {
-            capabilities.push(RegisteredCapability::new(
-                name,
-                Capability::supported(name, 1),
-            ));
-        }
-        // Register the full catalog (279 tools) in the policy.
-        for (name, _desc) in crate::tools_catalog::definitions() {
-            capabilities.push(RegisteredCapability::new(
-                name,
-                Capability::supported(name, 1),
-            ));
-        }
         let policy = ToolPolicy::from_config(&config, &capabilities)?;
         Ok(Self {
             config,
@@ -176,7 +219,7 @@ impl Dispatcher {
     }
 
     pub fn list_tools(&self, context: &RequestContext) -> Value {
-        let mut tools = self
+        let tools = self
             .registry
             .iter()
             .filter(|tool| {
@@ -186,26 +229,6 @@ impl Dispatcher {
             .filter(|tool| context.allows_capability(&tool.definition.capability.name))
             .map(|tool| tool.definition.json_schema())
             .collect::<Vec<_>>();
-        // Append the extended tool set definitions — respecting deny policy.
-        for (name, desc) in crate::tools_extra::definitions() {
-            if self.policy.is_discoverable(&context.caller, name) {
-                tools.push(json!({
-                    "name": name,
-                    "description": desc,
-                    "inputSchema": {"type": "object", "properties": {}},
-                }));
-            }
-        }
-        // Append the full catalog (279 tools) — respecting deny policy.
-        for (name, desc) in crate::tools_catalog::definitions() {
-            if self.policy.is_discoverable(&context.caller, name) {
-                tools.push(json!({
-                    "name": name,
-                    "description": desc,
-                    "inputSchema": {"type": "object", "properties": {}},
-                }));
-            }
-        }
         json!({ "tools": tools })
     }
 
@@ -216,52 +239,14 @@ impl Dispatcher {
             .iter()
             .find(|tool| tool.definition.name == call.name);
 
-        // If not in core registry, check the extended tool set (tools_extra).
-        let is_extra = tool.is_none()
-            && crate::tools_extra::definitions()
-                .iter()
-                .any(|(name, _)| *name == call.name);
-        if is_extra {
-            // Authorize + capability-check then dispatch to tools_extra.
-            self.policy.authorize_request(
-                &context.caller,
-                &call.name,
-                DispatchRequest {
-                    request_bytes: context.request_bytes,
-                    active_executions: context.active_executions,
-                    duration_ms: context.duration_ms,
-                },
-            )?;
-            // Apply the same per-request capability gate the core path uses.
-            // The capability name matches the tool name (registered above).
-            if !context.allows_capability(&call.name) {
-                return Err(RufloError::unauthorized(&call.name));
-            }
-            return crate::tools_extra::handle(&call.name, &call.arguments);
-        }
-        // Fall back to the full catalog (279 tools).
-        let is_catalog = tool.is_none()
-            && crate::tools_catalog::definitions()
-                .iter()
-                .any(|(name, _)| *name == call.name);
-        if is_catalog {
-            self.policy.authorize_request(
-                &context.caller,
-                &call.name,
-                DispatchRequest {
-                    request_bytes: context.request_bytes,
-                    active_executions: context.active_executions,
-                    duration_ms: context.duration_ms,
-                },
-            )?;
-            if !context.allows_capability(&call.name) {
-                return Err(RufloError::unauthorized(&call.name));
-            }
-            return crate::tools_catalog::handle(&call.name, &call.arguments);
-        }
-
         let tool = tool.ok_or_else(|| {
-            RufloError::invalid_input("tool.not_found", format!("unknown tool `{}`", call.name))
+            RufloError::invalid_input(
+                "tool.unsupported",
+                format!(
+                    "MCP tool `{}` is not implemented by this native build",
+                    call.name
+                ),
+            )
         })?;
 
         self.policy.authorize_request(
@@ -410,16 +395,21 @@ fn memory_search(arguments: &Value) -> Result<ToolResult, RufloError> {
     // RVF ids back to memory_entries via semantic_id.
     let (qvec, embed_method) = crate::tools_extra::inline_embed_pub(&query, dim);
     let qf32: Vec<f32> = qvec.iter().map(|x| *x as f32).collect();
-    let semantic = store.search_semantic(&qf32, limit, dim as u16, embed_method).unwrap_or_default();
+    let semantic = store
+        .search_semantic(&qf32, limit, dim as u16, embed_method)
+        .unwrap_or_default();
 
     if !semantic.is_empty() {
-        let structured: Vec<Value> = semantic.iter().map(|(e, sim)| {
-            let mut j = memory_entry_json(e.clone());
-            if let Some(obj) = j.as_object_mut() {
-                obj.insert("similarity".into(), json!(sim));
-            }
-            j
-        }).collect();
+        let structured: Vec<Value> = semantic
+            .iter()
+            .map(|(e, sim)| {
+                let mut j = memory_entry_json(e.clone());
+                if let Some(obj) = j.as_object_mut() {
+                    obj.insert("similarity".into(), json!(sim));
+                }
+                j
+            })
+            .collect();
         let _ = namespace; // semantic search is cross-namespace by design
         return Ok(ToolResult::text(
             format!("found {} semantic matches for `{query}`", structured.len()),
@@ -689,5 +679,67 @@ pub fn map_error(error: RufloError) -> ErrorObject {
                 details: json!({ "message": message }),
             },
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dispatcher() -> Dispatcher {
+        let config = EffectiveConfig::load_with(
+            &ruflo_config::CliOverrides::default(),
+            std::iter::empty::<(String, String)>(),
+            ".",
+        )
+        .expect("test config");
+        Dispatcher::from_config(config).expect("dispatcher")
+    }
+
+    #[test]
+    fn discovery_contains_only_typed_native_tools() {
+        let listed = dispatcher().list_tools(&RequestContext::local(0));
+        let tools = listed["tools"].as_array().expect("tools array");
+        let names = tools
+            .iter()
+            .filter_map(|tool| tool["name"].as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            names,
+            vec![
+                "agent_spawn",
+                "memory_store",
+                "memory_retrieve",
+                "memory_search"
+            ]
+        );
+        assert!(tools.iter().all(|tool| {
+            tool["inputSchema"]["properties"].is_object()
+                && tool["inputSchema"]["additionalProperties"] == json!(false)
+        }));
+        assert!(tools.iter().any(|tool| {
+            tool["name"] == "memory_store"
+                && tool["inputSchema"]["required"] == json!(["key", "value"])
+        }));
+    }
+
+    #[test]
+    fn historical_catalog_name_returns_deterministic_unsupported_error() {
+        let error = dispatcher()
+            .call(
+                RequestContext::local(0),
+                ToolCall {
+                    name: "swarm_init".to_string(),
+                    arguments: json!({}),
+                },
+            )
+            .expect_err("unimplemented catalog tool must not dispatch");
+
+        assert!(matches!(
+            error,
+            RufloError::InvalidInput { ref code, ref message }
+                if *code == "tool.unsupported" && message.contains("swarm_init")
+        ));
     }
 }
