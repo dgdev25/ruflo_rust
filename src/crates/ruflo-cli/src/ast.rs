@@ -78,6 +78,10 @@ fn analyze_treesitter(path: &str, source: &str, lang: &str) -> Option<AstAnalysi
                 tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()
             }
         }
+        "python" => tree_sitter_python::LANGUAGE.into(),
+        "go" => tree_sitter_go::LANGUAGE.into(),
+        "java" => tree_sitter_java::LANGUAGE.into(),
+        "c" | "cpp" => tree_sitter_c::LANGUAGE.into(),
         _ => return None, // no grammar compiled for this language
     };
 
@@ -139,6 +143,102 @@ fn analyze_treesitter(path: &str, source: &str, lang: &str) -> Option<AstAnalysi
                 }
             }
             "import_statement" => {
+                if let Ok(t) = node.utf8_text(source.as_bytes()) {
+                    imports.push(t.trim().to_string());
+                }
+            }
+            // Python
+            "function_definition" | "decorated_definition" => {
+                // decorated_definition wraps function_definition; dig for the inner name.
+                let inner = if kind == "decorated_definition" {
+                    node.child_by_field_name("definition")
+                } else {
+                    Some(node)
+                };
+                if let Some(def) = inner {
+                    if let Some(name) = def.child_by_field_name("name") {
+                        if let Ok(n) = name.utf8_text(source.as_bytes()) {
+                            functions.push(n.to_string());
+                        }
+                    }
+                }
+            }
+            "class_definition" => {
+                if let Some(name) = node.child_by_field_name("name") {
+                    if let Ok(n) = name.utf8_text(source.as_bytes()) {
+                        classes.push(n.to_string());
+                    }
+                }
+            }
+            "import_statement" | "import_from_statement" => {
+                if let Ok(t) = node.utf8_text(source.as_bytes()) {
+                    imports.push(t.trim().to_string());
+                }
+            }
+            // Go
+            "function_declaration" | "method_declaration" => {
+                if let Some(name) = node.child_by_field_name("name") {
+                    if let Ok(n) = name.utf8_text(source.as_bytes()) {
+                        functions.push(n.to_string());
+                    }
+                }
+            }
+            "type_declaration" => {
+                // type_declaration wraps one or more type_spec; name lives on type_spec.
+                let mut i = 0usize;
+                while let Some(child) = node.named_child(i) {
+                    if child.kind() == "type_spec" {
+                        if let Some(name) = child.child_by_field_name("name") {
+                            if let Ok(n) = name.utf8_text(source.as_bytes()) {
+                                structs.push(n.to_string());
+                            }
+                        }
+                    }
+                    i += 1;
+                }
+            }
+            "import_declaration" => {
+                if let Ok(t) = node.utf8_text(source.as_bytes()) {
+                    imports.push(t.trim().to_string());
+                }
+            }
+            // Java
+            "method_declaration" | "constructor_declaration" => {
+                if let Some(name) = node.child_by_field_name("name") {
+                    if let Ok(n) = name.utf8_text(source.as_bytes()) {
+                        functions.push(n.to_string());
+                    }
+                }
+            }
+            "class_declaration" | "interface_declaration" | "enum_declaration" => {
+                if let Some(name) = node.child_by_field_name("name") {
+                    if let Ok(n) = name.utf8_text(source.as_bytes()) {
+                        classes.push(n.to_string());
+                    }
+                }
+            }
+            "import_declaration" => {
+                if let Ok(t) = node.utf8_text(source.as_bytes()) {
+                    imports.push(t.trim().to_string());
+                }
+            }
+            // C / C++
+            "function_definition" => {
+                if let Some(name) = node.child_by_field_name("declarator") {
+                    if let Ok(n) = name.utf8_text(source.as_bytes()) {
+                        // declarator is `identifier`; just push the text.
+                        functions.push(n.trim().to_string());
+                    }
+                }
+            }
+            "struct_specifier" | "enum_specifier" | "union_specifier" => {
+                if let Some(name) = node.child_by_field_name("name") {
+                    if let Ok(n) = name.utf8_text(source.as_bytes()) {
+                        structs.push(n.to_string());
+                    }
+                }
+            }
+            "preproc_include" => {
                 if let Ok(t) = node.utf8_text(source.as_bytes()) {
                     imports.push(t.trim().to_string());
                 }
@@ -292,5 +392,46 @@ function quux(x: number): number { return x; }
         assert!(j["loc"].is_number());
         let backend = j["backend"].as_str().unwrap_or("");
         assert!(backend == "tree-sitter" || backend == "regex");
+    }
+}
+
+#[cfg(test)]
+mod extra_lang_tests {
+    use super::*;
+
+    #[test]
+    fn python_symbols() {
+        let src = "import os\n\nclass Foo:\n    def bar(self):\n        pass\n\ndef baz():\n    pass\n";
+        let a = analyze_source("x.py", src);
+        assert_eq!(a.language, "python");
+        assert!(a.functions.iter().any(|f| f == "bar"));
+        assert!(a.functions.iter().any(|f| f == "baz"));
+        assert!(a.classes.iter().any(|c| c == "Foo"));
+    }
+
+    #[test]
+    fn go_symbols() {
+        let src = "package main\nimport \"fmt\"\nfunc add(a, b int) int { return a+b }\ntype Point struct { x int }\n";
+        let a = analyze_source("x.go", src);
+        assert_eq!(a.language, "go");
+        assert!(a.functions.iter().any(|f| f == "add"));
+        assert!(a.structs.iter().any(|s| s == "Point"));
+    }
+
+    #[test]
+    fn java_symbols() {
+        let src = "import java.util.List;\nclass Foo { void bar() {} }\n";
+        let a = analyze_source("x.java", src);
+        assert_eq!(a.language, "java");
+        assert!(a.classes.iter().any(|c| c == "Foo"));
+        assert!(a.functions.iter().any(|f| f == "bar"));
+    }
+
+    #[test]
+    fn c_symbols() {
+        let src = "#include <stdio.h>\nint add(int a, int b) { return a+b; }\nstruct Point { int x; };\n";
+        let a = analyze_source("x.c", src);
+        assert_eq!(a.language, "c");
+        assert!(a.structs.iter().any(|s| s == "Point"));
     }
 }

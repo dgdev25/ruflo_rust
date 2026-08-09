@@ -15,7 +15,7 @@ default = ["ast", "onnx"]
 # Real AST analysis via tree-sitter (rust + typescript grammars). On by default
 # so `analyze ast` uses a real parser, not the regex fallback. The grammars
 # compile C and add ~30s to a clean build.
-ast = ["dep:tree-sitter", "dep:tree-sitter-rust", "dep:tree-sitter-typescript"]
+ast = ["dep:tree-sitter", "dep:tree-sitter-rust", "dep:tree-sitter-typescript", "dep:tree-sitter-python", "dep:tree-sitter-go", "dep:tree-sitter-java", "dep:tree-sitter-c"]
 # ONNX MiniLM embeddings via ort (real neural inference). On by default for the
 # native host. Disabled for Windows GNU cross-compile because ort ships no
 # prebuilt binaries for that target (build with --no-default-features there,
@@ -42,6 +42,10 @@ tokenizers = { workspace = true, optional = true }
 tree-sitter = { version = "0.25", optional = true }
 tree-sitter-rust = { version = "0.23", optional = true }
 tree-sitter-typescript = { version = "0.23", optional = true }
+tree-sitter-python = { version = "0.23", optional = true }
+tree-sitter-go = { version = "0.23", optional = true }
+tree-sitter-java = { version = "0.23", optional = true }
+tree-sitter-c = { version = "0.23", optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
