@@ -1,8 +1,8 @@
 <div align="center">
 
-# Ruflo — Native Rust AI Orchestration CLI
+# Ruflo — Rust Foundations for AI Orchestration
 
-**Native Rust CLI and core, with an optional napi-rs addon.**
+**A Rust foundation for custom Ruflo implementations, adapters, and reusable components—not a drop-in Node replacement.**
 
 [![Rust](https://img.shields.io/badge/Rust-1.97+-orange.svg)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](#license)
@@ -16,9 +16,28 @@
 
 ## What is this?
 
-Ruflo is a native Rust implementation of selected [ruflo](https://github.com/ruvnet/ruflo) CLI, persistence, MCP, and orchestration contracts. `ruflo` and `claude-flow` are Rust executables; `@ruflo/native` provides an optional in-process Node integration through a real napi-rs addon.
+Ruflo is a Rust codebase for building native Ruflo-derived applications, adapters, and experiments. It contains a reference CLI, reusable core and persistence crates, a typed MCP boundary, and an optional napi-rs addon for selected deterministic core operations.
 
-It is deliberately not presented as a complete replacement for the original Node project. The checked capability manifest currently claims **partial native parity**: unsupported CLI and MCP operations fail explicitly instead of returning success-shaped placeholder results.
+It is **not** a drop-in replacement for the original [Node Ruflo](https://github.com/ruvnet/ruflo) application. The checked capability manifest claims **partial native parity**: unsupported CLI and MCP operations fail explicitly instead of returning success-shaped placeholder results.
+
+Use this repository when you want to build a Rust-native variant around the contracts that are already implemented, or reuse its components inside another Rust application. Keep the Node implementation for workflows whose contract is not explicitly verified here.
+
+## Build on it
+
+The crates are designed as implementation building blocks, not as a finished end-user replacement product.
+
+| Crate | Use it to build |
+|-------|-----------------|
+| `ruflo-core` | Deterministic embedding, similarity, and routing operations without CLI, process, or Node dependencies |
+| `ruflo-storage` | SQLite metadata persistence and RVF adapter integration |
+| `ruflo-memory` | A semantic-memory facade and hybrid retrieval policy over the storage layer |
+| `ruflo-mcp` | A deliberately small typed MCP server boundary |
+| `ruflo-napi` | A Node addon exposing selected `ruflo-core` operations in-process |
+| `ruflo-cli` | A reference native CLI to extend, constrain, or use as an integration target |
+
+These crates are currently `publish = false`. Reuse them from this workspace or a fork/local path dependency; do not assume a stable crates.io API or published npm distribution.
+
+When creating another Rust version of Ruflo, start by depending on or adapting the smallest relevant crate, then add your own command surface and tests. Preserve the capability manifest discipline: only advertise a command, MCP tool, or migration path after its consumer contract is verified.
 
 ## Benchmark status
 
