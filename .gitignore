@@ -32,6 +32,7 @@ ruvector.db
 .build/
 .codex/
 .ruvnet-brain/
+.agentic-qe/
 .claude/
 agentdb.rvf*
 ruvector.db

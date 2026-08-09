@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "kind": "end_to_end_cli",
+  "measured_at_utc": "2026-08-09T15:16:41Z",
+  "iterations": 30,
+  "warmup_iterations": 5,
+  "methodology": {"contract":"exit 0 and exact stdout/stderr before timing","scope":"cold process startup plus dispatch and command execution","napi_native_compute":"not measured: this checkout has no Ruflo napi-rs addon"},
+  "cases": [{"name":"version","contract":"exact stdout and stderr","node":{"samples_ms":[21,21,21,21,22,22,23,23,23,23,25,25,25,26,26,26,26,26,26,27,29,29,31,31,32,32,33,33,34,37],"median_ms":26,"p95_ms":34,"mean_ms":26.633},"rust":{"samples_ms":[4,4,4,5,6,7,8,8,9,9,10,10,11,11,12,13,13,13,14,14,14,15,15,15,16,16,16,16,16,17],"median_ms":12.5,"p95_ms":16,"mean_ms":11.367}},{"name":"completions-bash","contract":"exact stdout and stderr","node":{"samples_ms":[129,135,136,136,137,137,137,139,141,141,141,142,143,143,143,145,145,145,145,146,146,146,146,147,147,148,148,151,158,160],"median_ms":144,"p95_ms":158,"mean_ms":143.433},"rust":{"samples_ms":[4,6,6,6,6,7,7,7,7,8,8,8,8,10,13,13,13,14,14,14,14,14,14,14,14,15,15,16,16,16],"median_ms":13,"p95_ms":16,"mean_ms":10.900}}
+]
+}
