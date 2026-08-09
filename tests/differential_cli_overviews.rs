@@ -35,6 +35,15 @@ struct Provenance {
 }
 
 /// Families proven byte-aligned to the TS reference this pass.
+// BYTE_ALIGNED families: the native overview output is byte-identical to the
+// captured TS source-oracle fixture. These are TRUE TS-parity commands.
+//
+// Intentionally-divergent native rewrites (NOT in this set): `route task`
+// (Thompson bandit), `auth login` (PKCE), `memory search`/`rebuild-index`
+// (RVF HNSW), `neural train` (native-sona backend label). Their overview text
+// was aligned to TS where the overview is static docs, but their runtime
+// OUTPUT (the command result, not the help) diverges by design — those are
+// exercised by differential_cli's targeted tests, not byte-alignment.
 const BYTE_ALIGNED: &[&str] = &[
     "security",
     "analyze",
