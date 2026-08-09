@@ -147,12 +147,19 @@ pub struct Dispatcher {
 impl Dispatcher {
     pub fn from_config(config: EffectiveConfig) -> Result<Self, RufloError> {
         let registry = build_registry();
-        let capabilities = registry
+        let mut capabilities = registry
             .iter()
             .map(|tool| {
                 RegisteredCapability::new(tool.definition.name, tool.definition.capability.clone())
             })
             .collect::<Vec<_>>();
+        // Register extended tools in the policy so their calls pass authorization.
+        for (name, _desc) in crate::tools_extra::definitions() {
+            capabilities.push(RegisteredCapability::new(
+                name,
+                Capability::supported(name, 1),
+            ));
+        }
         let policy = ToolPolicy::from_config(&config, &capabilities)?;
         Ok(Self {
             config,
@@ -388,7 +395,9 @@ fn maybe_sleep(arguments: &Value) -> Result<(), RufloError> {
             "field `sleep_ms` must be an unsigned integer",
         )
     })?;
-    std::thread::sleep(Duration::from_millis(sleep_ms));
+    // Cap at 5s to prevent resource exhaustion via unbounded blocking.
+    let capped = sleep_ms.min(5000);
+    std::thread::sleep(Duration::from_millis(capped));
     Ok(())
 }
 

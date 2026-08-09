@@ -84,9 +84,21 @@ fn run_inner(root: &Path, command: ClaimsCommand) -> Result<u8, String> {
             claim,
             user,
             role,
-            scope: _,
-            expires: _,
-        } => grant(root, claim, user, role),
+            scope,
+            expires,
+        } => {
+            // Reject unsupported scope/expires instead of silently discarding them
+            // (codesec HIGH: scope/expires were accepted then dropped, weakening grants).
+            if !scope.is_empty() && scope != "global" {
+                return Err(format!("scope '{scope}' not yet supported — use 'global' or omit --scope"));
+            }
+            if let Some(e) = &expires {
+                if !e.is_empty() {
+                    return Err(format!("--expires '{e}' not yet supported — grants are currently permanent"));
+                }
+            }
+            grant(root, claim, user, role)
+        }
         ClaimsCommand::Revoke { claim, user, role } => revoke(root, claim, user, role),
         ClaimsCommand::Roles { action, name } => roles(root, action, name),
         ClaimsCommand::Policies { action, name } => policies(root, action, name),

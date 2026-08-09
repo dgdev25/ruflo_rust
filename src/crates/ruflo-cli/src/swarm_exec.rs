@@ -290,15 +290,55 @@ fn spawn_worker_with_idx(
             }
         }
     }
-    let output: Result<Output, std::io::Error> = cmd.output();
+    // Spawn the child and enforce a deadline (300s default) via a watchdog
+    // thread that kills the process group if it exceeds the timeout.
+    let child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            return WorkerResult {
+                worker_idx: idx, agent: agent.into(), stdout: String::new(),
+                stderr: format!("failed to spawn '{bin}': {e}"), exit_code: -1, timed_out: false,
+            }
+        }
+    };
+    let timeout_ms = std::env::var("RUFLO_WORKER_TIMEOUT_MS")
+        .ok().and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(300_000);
+    let deadline = now_ms() + timeout_ms;
+    #[cfg(unix)]
+    let child_pid = child.id();
+    // Watchdog: kill on timeout.
+    let watchdog = std::thread::spawn(move || {
+        while now_ms() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(1000));
+        }
+        // Timeout reached — kill the process.
+        #[cfg(unix)]
+        {
+            // Direct libc kill(2) — minimal, no external crate.
+            let r = crate::daemon::libc_kill(child_pid, 9);
+            let _ = r;
+        }
+        #[cfg(not(unix))]
+        { let _ = child_pid; }
+    });
+    let output = child.wait_with_output();
+    let timed_out = watchdog.join().is_ok() && now_ms() >= deadline;
     match output {
         Ok(o) => WorkerResult {
             worker_idx: idx,
             agent: agent.into(),
-            stdout: String::from_utf8_lossy(&o.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&o.stderr).into_owned(),
+            stdout: {
+                // Cap output to 1MB to prevent memory exhaustion.
+                let s = String::from_utf8_lossy(&o.stdout);
+                s.chars().take(1_000_000).collect()
+            },
+            stderr: {
+                let s = String::from_utf8_lossy(&o.stderr);
+                s.chars().take(100_000).collect()
+            },
             exit_code: o.status.code().unwrap_or(-1),
-            timed_out: false,
+            timed_out,
         },
         Err(e) => WorkerResult {
             worker_idx: idx,

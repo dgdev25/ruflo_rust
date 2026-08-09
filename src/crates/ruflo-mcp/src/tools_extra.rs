@@ -271,14 +271,19 @@ pub fn handle(name: &str, args: &Value) -> Result<ToolResult, RufloError> {
         "claims_check" => {
             let claim = req_str(args, "claim")?;
             let st = read_state("claims.json");
-            let granted = st["claims"].as_array().map(|a| a.iter().any(|c| c["claim"].as_str() == Some(claim.as_str()))).unwrap_or(false);
+            let defaults = st["defaultClaims"].as_array().cloned().unwrap_or_default();
+            let user = args.get("user").and_then(|v| v.as_str()).unwrap_or("current");
+            let user_claims = st["users"][user]["claims"].as_array().cloned().unwrap_or_default();
+            let all: Vec<&str> = defaults.iter().chain(user_claims.iter()).filter_map(|c| c.as_str()).collect();
+            let granted = all.iter().any(|c| *c == claim || (c.ends_with(':') && claim.starts_with(*c)) || *c == "*");
             Ok(ToolResult::text(format!("claim `{claim}`: {}", if granted { "granted" } else { "denied" }),
                 Some(json!({"claim": claim, "granted": granted}))))
         }
         "claims_list" => {
             let st = read_state("claims.json");
-            let c = st["claims"].as_array().cloned().unwrap_or_default();
-            Ok(ToolResult::text(format!("{} claim(s)", c.len()), Some(json!({"claims": c}))))
+            let defaults = st["defaultClaims"].as_array().cloned().unwrap_or_default();
+            Ok(ToolResult::text(format!("{} default claim(s)", defaults.len()),
+                Some(json!({"defaultClaims": defaults, "users": st["users"].clone()}))))
         }
         _ => Err(RufloError::invalid_input("tool.not_found", format!("unknown tool: {name}"))),
     }

@@ -341,7 +341,7 @@ unsafe extern "C" {
     fn kill(pid: u32, sig: i32) -> i32;
 }
 #[cfg(unix)]
-fn libc_kill(pid: u32, sig: i32) -> i32 {
+pub fn libc_kill(pid: u32, sig: i32) -> i32 {
     // Safety: kill(2) is a sound libc syscall; pid/sig are plain integers.
     unsafe { kill(pid, sig) }
 }
@@ -360,10 +360,12 @@ fn start(root: &Path, command: &DaemonCommand) -> u8 {
         .unwrap_or_else(|| DEFAULT_WORKERS.iter().map(|s| s.to_string()).collect());
 
     let ttl_ms = command.ttl.unwrap_or(12 * 60 * 60 * 1000); // 12h default
+    // Don't claim a running PID — native start doesn't spawn a worker loop.
+    // Record config + intent only. The PID field is omitted so stop/status
+    // don't signal a short-lived CLI process that may have been reused.
     let state = json!({
-        "pid": std::process::id(),
         "startedAt": now_ms(),
-        "running": true,
+        "running": false,
         "foreground": command.foreground,
         "config": {
             "workers": workers.iter().map(|w| json!({"type": w, "enabled": true})).collect::<Vec<_>>(),
