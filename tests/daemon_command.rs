@@ -50,6 +50,7 @@ fn start_records_state_and_status_reflects_it() {
         let s = stdout(&status);
         assert!(s.contains("Workers Enabled: 2"));
         assert!(s.contains("TTL: 12h"));
+        let _ = run_with_budget(binary, project.path(), budget.path(), &["daemon", "stop"]);
     }
 }
 
@@ -71,6 +72,7 @@ fn enable_then_disable_worker() {
     assert_eq!(map["enabled"], false);
     let predict = workers.iter().find(|w| w["type"] == "predict").unwrap();
     assert_eq!(predict["enabled"], true);
+    let _ = run_with_budget("ruflo", project.path(), budget.path(), &["daemon", "stop"]);
 }
 
 #[test]

@@ -98,11 +98,25 @@ Examples:
                 }
                 0
             }
-            Some("start") => {
-                eprintln!("[NOTE] Native daemon starts via subprocess (ADR-0008).");
-                eprintln!("  Workers spawn via swarm_exec (native).");
-                1
-            }
+            Some("start") => crate::daemon::run(
+                root,
+                crate::daemon::DaemonCommand {
+                    operation: "start".into(),
+                    sub: None,
+                    workers: None,
+                    background: true,
+                    foreground: false,
+                    headless: false,
+                    ttl: None,
+                    all: false,
+                    verbose: false,
+                    show_modes: false,
+                    worker: None,
+                    reason: None,
+                    disable: false,
+                    quiet: false,
+                },
+            ),
             other => {
                 eprintln!("[ERROR] Unknown daemon action: {other:?} (start|stop|status)");
                 1
@@ -130,7 +144,14 @@ Examples:
         "workers" => {
             println!("\nWorker Processes");
             println!("{}", "\u{2500}".repeat(50));
-            println!("  No active workers (daemon not running).");
+            match read_pid(root) {
+                Some(pid) if is_running(pid) => {
+                    println!("  Supervisor pid {pid} is running.");
+                    println!("  Queue ticks are idle unless work is enqueued.");
+                }
+                Some(pid) => println!("  Stale supervisor pid {pid} (not running)."),
+                None => println!("  No active workers (daemon not running)."),
+            }
             0
         }
         "signals" => {

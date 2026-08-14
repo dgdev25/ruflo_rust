@@ -469,41 +469,41 @@ pub mod headless {
             cmd.arg(a);
         }
         cmd.stdin(std::process::Stdio::null())
-           .stdout(std::process::Stdio::piped())  // #1: pipe stdout for capture
-           .stderr(std::process::Stdio::piped());  // #1: pipe stderr for capture
+           .stdout(std::process::Stdio::piped())
+           .stderr(std::process::Stdio::piped());
 
-        // spawn + watchdog timeout (mirrors swarm_exec pattern)
         match cmd.spawn() {
             Ok(mut child) => {
+                use std::io::Read;
+                use std::sync::{Arc, Mutex};
+                let stdout_h = child.stdout.take();
+                let stderr_h = child.stderr.take();
+                let stdout_buf = Arc::new(Mutex::new(Vec::new()));
+                let stderr_buf = Arc::new(Mutex::new(Vec::new()));
+                let so = stdout_buf.clone();
+                let se = stderr_buf.clone();
+                let so_t = std::thread::spawn(move || {
+                    if let Some(mut h) = stdout_h {
+                        let _ = h.read_to_end(&mut *so.lock().unwrap_or_else(|e| e.into_inner()));
+                    }
+                });
+                let se_t = std::thread::spawn(move || {
+                    if let Some(mut h) = stderr_h {
+                        let _ = h.read_to_end(&mut *se.lock().unwrap_or_else(|e| e.into_inner()));
+                    }
+                });
+
                 let timeout = Duration::from_millis(timeout_ms.max(1000));
                 let start = std::time::Instant::now();
-                loop {
+                let status = loop {
                     match child.try_wait() {
-                        Ok(Some(status)) => {
-                            let stdout = child.stdout.take()
-                                .and_then(|mut s| { let mut o = String::new(); std::io::Read::read_to_string(&mut s, &mut o).ok(); Some(o) })
-                                .unwrap_or_default();
-                            let stderr = child.stderr.take()
-                                .and_then(|mut s| { let mut o = String::new(); std::io::Read::read_to_string(&mut s, &mut o).ok(); Some(o) })
-                                .unwrap_or_default();
-                            // Cap output to bound memory.
-                            let stdout_cap: String = stdout.chars().take(1_000_000).collect();
-                            let stderr_cap: String = stderr.chars().take(100_000).collect();
-                            let entry = json!({
-                                "id": id, "type": worker_type, "binary": binary,
-                                "status": if status.success() { "completed" } else { "failed" },
-                                "exitCode": status.code(),
-                                "stdout": stdout_cap, "stderr": stderr_cap,
-                                "startedAt": started, "finishedAt": now_ms(),
-                                "durationMs": now_ms().saturating_sub(started),
-                            });
-                            record(&entry);
-                            return entry;
-                        }
+                        Ok(Some(status)) => break Some(status),
                         Ok(None) => {
                             if start.elapsed() > timeout {
                                 let _ = child.kill();
                                 let _ = child.wait();
+                                let _ = so_t.join();
+                                let _ = se_t.join();
                                 let entry = json!({
                                     "id": id, "type": worker_type, "binary": binary,
                                     "status": "timeout", "timeoutMs": timeout_ms,
@@ -515,6 +515,8 @@ pub mod headless {
                             std::thread::sleep(Duration::from_millis(50));
                         }
                         Err(e) => {
+                            let _ = so_t.join();
+                            let _ = se_t.join();
                             let entry = json!({
                                 "id": id, "type": worker_type, "binary": binary,
                                 "status": "error", "error": e.to_string(),
@@ -524,7 +526,24 @@ pub mod headless {
                             return entry;
                         }
                     }
-                }
+                };
+                let _ = so_t.join();
+                let _ = se_t.join();
+                let stdout_raw = stdout_buf.lock().unwrap_or_else(|e| e.into_inner());
+                let stderr_raw = stderr_buf.lock().unwrap_or_else(|e| e.into_inner());
+                let stdout_cap: String = String::from_utf8_lossy(&stdout_raw).chars().take(1_000_000).collect();
+                let stderr_cap: String = String::from_utf8_lossy(&stderr_raw).chars().take(100_000).collect();
+                let status = status.expect("loop only breaks with Some");
+                let entry = json!({
+                    "id": id, "type": worker_type, "binary": binary,
+                    "status": if status.success() { "completed" } else { "failed" },
+                    "exitCode": status.code(),
+                    "stdout": stdout_cap, "stderr": stderr_cap,
+                    "startedAt": started, "finishedAt": now_ms(),
+                    "durationMs": now_ms().saturating_sub(started),
+                });
+                record(&entry);
+                entry
             }
             Err(e) => {
                 let entry = json!({
@@ -2347,10 +2366,7 @@ mod headless_tests {
     fn execute_runs_subprocess_and_captures_status() {
         // `true` ignores args and exits 0 — proves the spawn/wait/status path.
         let r = headless::execute("test", "true", "ignored", 5000, &[]);
-        let _ = r; // cleanup state not needed
-        // The result is recorded with status completed/failed (not spawn_failed).
-        let last = headless::list().last().cloned().unwrap_or_default();
-        let status = last["status"].as_str().unwrap_or("");
+        let status = r["status"].as_str().unwrap_or("");
         assert!(status == "completed" || status == "failed", "got {status}");
         assert_ne!(status, "spawn_failed");
     }

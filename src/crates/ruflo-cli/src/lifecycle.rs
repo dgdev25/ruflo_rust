@@ -7,6 +7,18 @@ use serde::{Deserialize, Serialize};
 
 const CONFIG: &str = "# Native Ruflo project configuration\nversion: 3\n";
 
+fn pid_is_alive(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        std::path::Path::new(&format!("/proc/{pid}")).exists()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = pid;
+        false
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectStatus {
     pub agents: usize,
@@ -833,6 +845,10 @@ pub fn agent_health(
     Ok(agents
         .into_iter()
         .map(|agent| {
+            let _supervisor_live = std::fs::read_to_string(project_root.join(".claude-flow/daemon.pid"))
+                .ok()
+                .and_then(|s| s.trim().parse::<u32>().ok())
+                .is_some_and(pid_is_alive);
             let health = if agent.status == "error" {
                 "unhealthy"
             } else if agent.status == "terminated" {

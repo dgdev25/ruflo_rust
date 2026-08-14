@@ -312,13 +312,47 @@ fn build_registry() -> Vec<RegisteredTool> {
 fn agent_spawn(arguments: &Value) -> Result<ToolResult, RufloError> {
     maybe_sleep(arguments)?;
     let role = optional_string(arguments, "role")?.unwrap_or_else(|| "generalist".to_string());
-    let agent_id = format!("agent-{role}");
+    let safe: String = role
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let agent_id = format!("agent-{safe}");
+    let dir = std::path::Path::new(".swarm/agents");
+    std::fs::create_dir_all(dir).map_err(|e| {
+        RufloError::invalid_input("agent.persist", format!("cannot create agent dir: {e}"))
+    })?;
+    let path = dir.join(format!("{agent_id}.json"));
+    if path.exists() {
+        return Err(RufloError::invalid_input(
+            "agent.exists",
+            format!("agent `{agent_id}` already exists"),
+        ));
+    }
+    let record = json!({
+        "id": agent_id,
+        "agent_type": safe,
+        "status": "idle",
+        "role": role,
+        "process": false,
+        "note": "persisted record only; one-shot jobs run via swarm start",
+    });
+    std::fs::write(&path, serde_json::to_vec_pretty(&record).unwrap_or_default()).map_err(
+        |e| RufloError::invalid_input("agent.persist", format!("cannot write agent record: {e}")),
+    )?;
     Ok(ToolResult::text(
-        format!("spawned agent `{agent_id}`"),
+        format!("recorded idle agent `{agent_id}`"),
         Some(json!({
             "agentId": agent_id,
             "role": role,
-            "status": "spawned"
+            "status": "idle",
+            "persisted": true,
+            "running": false
         })),
     ))
 }

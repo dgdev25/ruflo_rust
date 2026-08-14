@@ -180,6 +180,7 @@ pub enum ParsedCommand {
         agent: String,
         dry_run: bool,
         keep_env: bool,
+        worktree: bool,
     },
     SwarmStop {
         swarm_id: String,
@@ -1826,6 +1827,7 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
         let agent = option_value(&args, "--agent", "-a").unwrap_or_else(|| "claude".into());
         let dry_run = args.iter().any(|v| v == "--dry-run");
         let keep_env = args.iter().any(|v| v == "--keep-env");
+        let worktree = args.iter().any(|v| v == "--worktree");
         return Ok(ParsedCommand::SwarmStart {
             objective,
             strategy,
@@ -1833,6 +1835,7 @@ pub fn parse(argv: impl IntoIterator<Item = OsString>) -> Result<ParsedCommand, 
             agent,
             dry_run,
             keep_env,
+            worktree,
         });
     }
     if normalized.len() >= 3 && normalized[0] == "swarm" && normalized[1] == "stop" {
@@ -2385,7 +2388,7 @@ mod tests {
         ));
         assert!(matches!(
             parse(argv(&["swarm", "start", "-o", "Build API", "-s", "testing"])),
-            Ok(ParsedCommand::SwarmStart { objective, strategy, .. }) if objective == "Build API" && strategy == "testing"
+            Ok(ParsedCommand::SwarmStart { objective, strategy, worktree, .. }) if objective == "Build API" && strategy == "testing" && !worktree
         ));
         assert!(matches!(
             parse(argv(&["swarm", "stop", "swarm-1"])),

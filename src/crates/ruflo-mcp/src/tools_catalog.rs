@@ -5,7 +5,7 @@
 //!   pattern the TS tools use — this is genuine persistence, not a stub).
 //! - Compute tools delegate to real native modules: agentdb_* → RVF HNSW,
 //!   embeddings_* → hash/ONNX vectorizer, aidefence_* → regex PII/threat scan,
-//!   github_* → `gh` CLI subprocess, terminal_* → shell subprocess,
+//!   github_* → `gh` CLI subprocess, terminal_* → state only (no shell),
 //!   analyze_diff → `git diff` subprocess.
 //! - Domains requiring a runtime dep that isn't bundled (wasm_*, browser_*,
 //!   ruvllm_*) degrade with a documented reason, not a silent stub.
@@ -254,24 +254,13 @@ fn terminal(name: &str, args: &Value) -> Result<ToolResult, RufloError> {
     match name {
         "terminal_create" | "terminal_list" | "terminal_history" => state_crud(name, args),
         _ => {
-            if let Some(cmd) = cmd {
-                // Bounded shell exec (read-only intent — no rm/dd/mkfs/sudo).
-                let banned = ["rm ", "rmdir", "dd ", "mkfs", "sudo", ":(){", "shutdown", "reboot", "> /"];
-                if banned.iter().any(|b| cmd.contains(b)) {
-                    return Err(RufloError::invalid_input("terminal.banned",
-                        "command contains a banned destructive token"));
-                }
-                let out = std::process::Command::new("bash").arg("-c").arg(cmd).output();
-                match out {
-                    Ok(o) => Ok(ToolResult::text("terminal exec",
-                        Some(json!({"tool": name, "exit": o.status.code(),
-                            "stdout": String::from_utf8_lossy(&o.stdout).chars().take(4000).collect::<String>(),
-                            "stderr": String::from_utf8_lossy(&o.stderr).chars().take(1000).collect::<String>()})))),
-                    Err(e) => runtime_na(name, &format!("exec: {e}")),
-                }
-            } else {
-                state_crud(name, args)
+            if cmd.is_some() {
+                return Err(RufloError::invalid_input(
+                    "tool.unsupported",
+                    "terminal command execution is not available in the native MCP catalog",
+                ));
             }
+            state_crud(name, args)
         }
     }
 }

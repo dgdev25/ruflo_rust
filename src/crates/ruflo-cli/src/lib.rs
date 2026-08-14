@@ -1299,6 +1299,7 @@ Subcommands:
             agent,
             dry_run,
             keep_env,
+            worktree,
         }) => {
             let project_root = current_directory();
             match lifecycle::start_swarm(&project_root, &objective, &strategy) {
@@ -1313,6 +1314,7 @@ Subcommands:
                         &project_root,
                         keep_env,
                         dry_run,
+                        worktree,
                     );
                     println!("{}", outcome.summary());
                     if !dry_run {

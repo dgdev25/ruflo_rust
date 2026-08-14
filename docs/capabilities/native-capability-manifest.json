@@ -11,6 +11,7 @@
     {"name": "populated-memory-migration", "status": "verified"},
     {"name": "semantic-bge-ranking-parity", "status": "unproven"},
     {"name": "napi-platform-packages", "status": "unproven"},
-    {"name": "signed-sbom-release-bundles", "status": "unproven"}
+    {"name": "signed-sbom-release-bundles", "status": "unproven"},
+    {"name": "appliance-supervisor-host", "status": "unproven"}
   ]
 }

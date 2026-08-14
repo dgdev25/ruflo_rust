@@ -224,13 +224,15 @@ fn denied_tool_is_hidden_from_discovery_and_invocation() {
 
 #[test]
 fn stdout_contains_only_newline_delimited_jsonrpc_frames() {
-    let output = run_stdio(
+    let project = tempfile::TempDir::new().unwrap();
+    let output = run_stdio_in(
         "ruflo",
         &[
             r#"{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}"#,
             r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"agent_spawn","arguments":{"role":"coder"}}}"#,
         ],
         &[],
+        project.path(),
     );
 
     assert!(output.status.success());

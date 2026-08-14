@@ -52,34 +52,82 @@ fn sign(command: &ApplianceAdvancedCommand) -> u8 {
         eprintln!("[ERROR] File not found: {file}");
         return 1;
     }
+    let mut generated_key: Option<String> = None;
     if command.generate_keys {
-        println!("\nGenerating Signing Key (HMAC-SHA256)");
-        println!("{}", "\u{2500}".repeat(50));
-        let key = (0..32).map(|i| format!("{:02x}", i as u8 + 0x41)).collect::<String>();
-        println!("  Key: {key}");
-        eprintln!("  Save this key to RUFLO_SIGN_KEY env var.");
+        match random_hex_key() {
+            Ok(key) => {
+                println!("\nGenerating Signing Key (HMAC-SHA256)");
+                println!("{}", "\u{2500}".repeat(50));
+                println!("  Key: {key}");
+                eprintln!("  Save this key to RUFLO_SIGN_KEY. It is shown once.");
+                generated_key = Some(key);
+            }
+            Err(e) => {
+                eprintln!("[ERROR] Could not generate a random signing key: {e}");
+                return 1;
+            }
+        }
     }
-    // Native sign: HMAC-SHA256 of the RVFA manifest (no Ed25519 dep needed).
-    use sha2::{Digest, Sha256};
+    let Some(sign_key) = generated_key.or_else(|| std::env::var("RUFLO_SIGN_KEY").ok()) else {
+        eprintln!("[ERROR] RUFLO_SIGN_KEY is required. Refusing to derive a key from the file.");
+        eprintln!("  Generate one with: ruflo appliance-advanced sign --file <rvfa> --generate-keys");
+        return 1;
+    };
     let content = fs::read(file).unwrap_or_default();
-    let sign_key = std::env::var("RUFLO_SIGN_KEY").unwrap_or_else(|_| {
-        // Derive a deterministic key from the file content.
-        let h = Sha256::digest(&content);
-        h.iter().map(|b| format!("{b:02x}")).collect::<String>()
-    });
     let mac = hmac_sha256_inline(sign_key.as_bytes(), &content);
     let sig_hex: String = mac.iter().map(|b| format!("{b:02x}")).collect();
-    // Append the signature to the RVFA file.
-    if let Ok(mut rvfa) = serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&content)) {
-        rvfa["signature"] = json!(sig_hex);
-        rvfa["signedAt"] = json!(now_ms_adv());
-        let _ = fs::write(file, serde_json::to_vec_pretty(&rvfa).unwrap_or_default());
+    let mut rvfa = match serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&content)) {
+        Ok(v) if v.is_object() => v,
+        _ => {
+            eprintln!("[ERROR] Invalid RVFA format");
+            return 1;
+        }
+    };
+    rvfa["signature"] = json!(sig_hex);
+    rvfa["signedAt"] = json!(now_ms_adv());
+    if fs::write(file, serde_json::to_vec_pretty(&rvfa).unwrap_or_default()).is_err() {
+        eprintln!("[ERROR] Failed to write signed RVFA: {file}");
+        return 1;
     }
     println!("\nRVFA Signed");
     println!("  File:      {file}");
     println!("  Signature: {sig_hex}");
     println!("  Method:    HMAC-SHA256");
     0
+}
+
+fn random_hex_key() -> Result<String, String> {
+    let mut buf = [0u8; 32];
+    fill_random(&mut buf)?;
+    Ok(buf.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+#[cfg(unix)]
+fn fill_random(buf: &mut [u8]) -> Result<(), String> {
+    use std::io::Read;
+    std::fs::File::open("/dev/urandom")
+        .and_then(|mut f| f.read_exact(buf))
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(windows)]
+fn fill_random(buf: &mut [u8]) -> Result<(), String> {
+    // RtlGenRandom / SystemFunction036 — no extra crate on the Windows target.
+    #[link(name = "advapi32")]
+    unsafe extern "system" {
+        fn SystemFunction036(buf: *mut u8, len: u32) -> u8;
+    }
+    let ok = unsafe { SystemFunction036(buf.as_mut_ptr(), buf.len() as u32) };
+    if ok == 0 {
+        Err("RtlGenRandom failed".into())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
+fn fill_random(_buf: &mut [u8]) -> Result<(), String> {
+    Err("no CSPRNG on this target".into())
 }
 
 fn hmac_sha256_inline(key: &[u8], msg: &[u8]) -> Vec<u8> {
@@ -220,4 +268,86 @@ fn fmt_size(bytes: u64) -> String {
         return format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0));
     }
     format!("{:.2} GB", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    static SIGN_KEY_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn sign_refuses_file_derived_key() {
+        let _g = SIGN_KEY_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("box.rvfa");
+        fs::write(&file, r#"{"manifest":{"format":"rvfa"},"checksum":"x"}"#).unwrap();
+        let prev = std::env::var("RUFLO_SIGN_KEY").ok();
+        std::env::remove_var("RUFLO_SIGN_KEY");
+        let code = sign(&ApplianceAdvancedCommand {
+            operation: "sign".into(),
+            file: Some(file.to_string_lossy().into_owned()),
+            section: None,
+            patch: None,
+            data: None,
+            key: None,
+            generate_keys: false,
+            key_dir: String::new(),
+            signer: None,
+            name: None,
+            description: None,
+            version: "1".into(),
+            no_backup: false,
+            public_key: None,
+        });
+        match prev {
+            Some(v) => std::env::set_var("RUFLO_SIGN_KEY", v),
+            None => std::env::remove_var("RUFLO_SIGN_KEY"),
+        }
+        assert_eq!(code, 1);
+    }
+
+    #[test]
+    fn sign_with_explicit_key_writes_signature() {
+        let _g = SIGN_KEY_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("box.rvfa");
+        fs::write(&file, r#"{"manifest":{"format":"rvfa"},"checksum":"x"}"#).unwrap();
+        let prev = std::env::var("RUFLO_SIGN_KEY").ok();
+        std::env::set_var("RUFLO_SIGN_KEY", "unit-test-key");
+        let code = sign(&ApplianceAdvancedCommand {
+            operation: "sign".into(),
+            file: Some(file.to_string_lossy().into_owned()),
+            section: None,
+            patch: None,
+            data: None,
+            key: None,
+            generate_keys: false,
+            key_dir: String::new(),
+            signer: None,
+            name: None,
+            description: None,
+            version: "1".into(),
+            no_backup: false,
+            public_key: None,
+        });
+        match prev {
+            Some(v) => std::env::set_var("RUFLO_SIGN_KEY", v),
+            None => std::env::remove_var("RUFLO_SIGN_KEY"),
+        }
+        assert_eq!(code, 0);
+        let signed: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&file).unwrap()).unwrap();
+        assert!(signed["signature"].as_str().unwrap().len() == 64);
+    }
+
+    #[test]
+    fn random_hex_key_is_64_hex_and_not_sequential() {
+        let a = random_hex_key().expect("csprng");
+        let b = random_hex_key().expect("csprng");
+        assert_eq!(a.len(), 64);
+        assert_ne!(a, b);
+        let sequential: String = (0..32).map(|i| format!("{:02x}", i as u8 + 0x41)).collect();
+        assert_ne!(a, sequential);
+    }
 }
