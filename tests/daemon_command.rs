@@ -166,6 +166,15 @@ fn trigger_records_marker() {
     let out = run_with_budget("ruflo", project.path(), budget.path(), &["daemon", "trigger", "-w", "audit"]);
     assert_eq!(out.status.code(), Some(0));
     assert!(project.path().join(".claude-flow/daemon-triggers.jsonl").is_file());
+    let s = stdout(&out);
+    assert!(s.contains("Queued resident job") || s.contains("Supervisor step"));
+    assert!(project.path().join(".swarm/memory.db").is_file());
+    let store = ruflo_storage::ApplianceStore::open(project.path()).unwrap();
+    let agents = store.list_agents().unwrap();
+    assert!(
+        agents.iter().any(|a| a.id == "resident-audit"),
+        "trigger must create a resident slot, got {agents:?}"
+    );
 }
 
 #[test]

@@ -890,8 +890,14 @@ fn trigger(root: &Path, command: &DaemonCommand) -> u8 {
             Err(e) => eprintln!("[ERROR] Failed to queue job: {e}"),
         }
     }
-    let tick = crate::services::worker_daemon_v2::tick(worker);
-    println!("Worker tick: {}", tick["status"].as_str().unwrap_or("done"));
+    let step = supervisor_step(root, &[worker.to_string()], std::process::id());
+    println!(
+        "Supervisor step: {}",
+        step["status"].as_str().unwrap_or("done")
+    );
+    if let Some(job) = step["jobId"].as_str() {
+        println!("Job: {job} result={}", step["result"].as_str().unwrap_or("?"));
+    }
     0
 }
 
