@@ -124,6 +124,24 @@ fn cloud_profile_is_packed_in_tree() {
     assert!(raw.contains("store: sqlite"));
 }
 
+#[test]
+fn dockerfile_entrypoint_is_standalone_supervisor() {
+    let dockerfile = Path::new(env!("CARGO_MANIFEST_DIR")).join("Dockerfile");
+    let raw = fs::read_to_string(&dockerfile).expect("shipped Dockerfile must exist");
+    assert!(
+        raw.contains(r#"ENTRYPOINT ["ruflo", "daemon", "start", "--foreground""#),
+        "ENTRYPOINT must start the supervisor: {raw}"
+    );
+    assert!(
+        raw.contains("COPY config/appliance/cloud.yaml"),
+        "image must pack the cloud profile: {raw}"
+    );
+    assert!(
+        raw.contains("/usr/local/bin/ruflo"),
+        "image must install the standalone binary"
+    );
+}
+
 fn run(cwd: &Path, args: &[&str]) -> Output {
     let _g = LOCK.lock().unwrap();
     Command::new(executable())
