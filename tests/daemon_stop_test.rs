@@ -2,9 +2,8 @@
 //!
 //! `daemon stop` (per-workspace) operates only on the workspace's daemon-state
 //! file and exits cleanly whether or not a daemon is running. `daemon stop --all`
-//! enumerates running ruflo/claude-flow daemon processes via /proc, SIGTERMs
-//! them, and exits 0 regardless of how many it found. The budget dir is
-//! redirected to a tempdir to avoid writing to the developer's home.
+//! signals only registered supervisor PIDs after a cmdline/cwd identity
+//! check. The budget dir is redirected to a tempdir.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -18,6 +17,32 @@ fn stop_without_running_daemon_marks_stopped() {
     assert_eq!(out.status.code(), Some(0));
     // Graceful: reports no daemon found rather than crashing.
     assert!(stdout(&out).contains("No running daemon"));
+}
+
+#[test]
+fn stop_does_not_signal_reused_pid() {
+    let project = tempfile::tempdir().unwrap();
+    let budget = tempfile::tempdir().unwrap();
+    let dir = project.path().join(".claude-flow");
+    std::fs::create_dir_all(&dir).unwrap();
+    // Point state at this test process — it is live but not a supervisor.
+    let state = format!(
+        r#"{{"running":true,"pid":{}}}"#,
+        std::process::id()
+    );
+    std::fs::write(dir.join("daemon-state.json"), state).unwrap();
+    let out = run(project.path(), budget.path(), &["daemon", "stop"]);
+    assert_eq!(out.status.code(), Some(0));
+    let combined = format!("{}{}", stdout(&out), String::from_utf8_lossy(&out.stderr));
+    assert!(
+        combined.contains("not this workspace") || combined.contains("No running daemon"),
+        "stop must refuse a reused PID: {combined}"
+    );
+    assert!(
+        Path::new("/proc").join(std::process::id().to_string()).exists()
+            || cfg!(not(target_os = "linux")),
+        "test process must still be alive"
+    );
 }
 
 #[test]

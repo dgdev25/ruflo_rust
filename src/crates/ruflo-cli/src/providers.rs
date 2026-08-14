@@ -81,10 +81,15 @@ fn providers_file(root: &Path) -> PathBuf {
 }
 
 fn load_config(root: &Path) -> Value {
-    fs::read_to_string(providers_file(root))
+    let path = providers_file(root);
+    let value = fs::read_to_string(&path)
         .ok()
         .and_then(|r| serde_json::from_str(&r).ok())
-        .unwrap_or_else(|| json!({}))
+        .unwrap_or_else(|| json!({}));
+    if path.exists() {
+        restrict_owner_only(&path);
+    }
+    value
 }
 
 fn save_config(root: &Path, config: &Value) -> bool {
@@ -95,7 +100,48 @@ fn save_config(root: &Path, config: &Value) -> bool {
     let Ok(bytes) = serde_json::to_vec_pretty(config) else {
         return false;
     };
-    fs::write(&tmp, &bytes).is_ok() && fs::rename(&tmp, &path).is_ok()
+    if !write_private_bytes(&tmp, &bytes) {
+        let _ = fs::remove_file(&tmp);
+        return false;
+    }
+    if fs::rename(&tmp, &path).is_err() {
+        let _ = fs::remove_file(&tmp);
+        return false;
+    }
+    restrict_owner_only(&path);
+    true
+}
+
+fn write_private_bytes(path: &Path, bytes: &[u8]) -> bool {
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)
+            .and_then(|mut f| f.write_all(bytes))
+            .is_ok()
+    }
+    #[cfg(not(unix))]
+    {
+        fs::write(path, bytes).is_ok()
+    }
+}
+
+fn restrict_owner_only(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+    }
 }
 
 fn is_active(p: &Provider, config: &Value) -> bool {
@@ -381,6 +427,35 @@ mod tests {
             write!(stream, "HTTP/1.1 {status} Test\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
         });
         format!("http://{address}/models")
+    }
+
+    #[test]
+    fn configure_writes_owner_only_providers_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let code = configure(
+            dir.path(),
+            &ProvidersCommand {
+                operation: "configure".into(),
+                provider: Some("openai".into()),
+                key: Some("sk-test-secret-key".into()),
+                model: None,
+                base_url: None,
+                filter_type: None,
+                active_only: false,
+                json: false,
+            },
+        );
+        assert_eq!(code, 0);
+        let path = providers_file(dir.path());
+        assert!(path.is_file());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "providers.json must be owner-only, got {mode:#o}");
+        }
+        let raw = fs::read_to_string(&path).unwrap();
+        assert!(raw.contains("sk-test-secret-key"));
     }
 
     #[test]

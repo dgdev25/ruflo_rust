@@ -82,14 +82,12 @@ Examples:
             }
             Some("stop") => {
                 if let Some(pid) = read_pid(root) {
-                    if is_running(pid) {
-                        #[cfg(unix)]
-                        {
-                            let _ = std::process::Command::new("kill")
-                                .args(["-TERM", &pid.to_string()])
-                                .status();
-                        }
+                    if crate::daemon::terminate_recorded_supervisor(root, pid) {
                         println!("Sent SIGTERM to pid {pid}");
+                    } else if is_running(pid) {
+                        eprintln!(
+                            "[WARN] pid {pid} is live but is not this workspace's Ruflo supervisor; not signaled."
+                        );
                     }
                     let _ = fs::remove_file(pid_file(root));
                     println!("Removed PID file.");

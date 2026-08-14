@@ -318,19 +318,80 @@ fn write_daemon_state(root: &Path, v: &Value) -> bool {
     ok
 }
 
+fn is_safe_pid(pid: u32) -> bool {
+    // pid 0 is the caller's process group; pid 1 is init. Neither is a daemon
+    // we started, and signaling them is unsafe.
+    pid > 1
+}
+
 #[cfg(unix)]
 fn is_process_running(pid: u32) -> bool {
+    if !is_safe_pid(pid) {
+        return false;
+    }
     // kill(pid, 0) returns Ok if the process exists (or we lack permission to
     // signal it — still "exists"). Either way it's running.
     libc_kill(pid, 0) == 0
 }
 
 #[cfg(not(unix))]
-fn is_process_running(_pid: u32) -> bool {
+fn is_process_running(pid: u32) -> bool {
     // No portable pid-liveness probe on Windows without a crate; conservatively
     // report not-running so status reflects that the native-managed daemon
     // isn't a live background process here.
+    let _ = pid;
     false
+}
+
+/// True only when `pid` is a live Ruflo supervisor for `root`.
+/// Fail closed: a reused PID, a non-supervisor cmdline, or a different cwd
+/// is not signaled.
+fn is_supervisor_process(pid: u32, root: &Path) -> bool {
+    if !is_safe_pid(pid) || !is_process_running(pid) {
+        return false;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let raw = match fs::read(format!("/proc/{pid}/cmdline")) {
+            Ok(b) => b,
+            Err(_) => return false,
+        };
+        let args: Vec<&[u8]> = raw.split(|b| *b == 0).filter(|a| !a.is_empty()).collect();
+        let has = |tok: &[u8]| args.iter().any(|a| *a == tok);
+        if !(has(b"daemon") && has(b"start") && has(b"--foreground")) {
+            return false;
+        }
+        if let Ok(cwd) = fs::read_link(format!("/proc/{pid}/cwd")) {
+            if let (Ok(want), Ok(got)) = (root.canonicalize(), cwd.canonicalize()) {
+                if want != got {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        // Without /proc cmdline, require a registry record that names this
+        // workspace so a reused PID is not signaled.
+        let rec_path = budget_dir().join("daemons").join(pid.to_string());
+        let Ok(s) = fs::read_to_string(rec_path) else {
+            return false;
+        };
+        let Ok(v) = serde_json::from_str::<Value>(&s) else {
+            return false;
+        };
+        v["workspace"].as_str() == Some(&root.display().to_string())
+    }
+}
+
+/// SIGTERM a recorded supervisor PID only after identity checks.
+/// Returns true if a signal was sent.
+pub(crate) fn terminate_recorded_supervisor(root: &Path, pid: u32) -> bool {
+    if !is_supervisor_process(pid, root) {
+        return false;
+    }
+    libc_kill(pid, 15) == 0
 }
 
 // Minimal libc kill(2) binding for pid liveness — avoids pulling a crate for
@@ -367,7 +428,7 @@ fn start(root: &Path, command: &DaemonCommand) -> u8 {
 
     let existing = read_daemon_state(root);
     if let Some(pid) = existing["pid"].as_u64().map(|p| p as u32) {
-        if existing["running"].as_bool().unwrap_or(false) && is_process_running(pid) {
+        if existing["running"].as_bool().unwrap_or(false) && is_supervisor_process(pid, root) {
             if !command.quiet {
                 println!("Daemon already running (pid {pid}).");
             }
@@ -569,10 +630,12 @@ fn stop(root: &Path, command: &DaemonCommand) -> u8 {
     let pid = state["pid"].as_u64().map(|p| p as u32);
     let mut stopped = false;
     if let Some(pid) = pid {
-        if is_process_running(pid) {
-            // SIGTERM for graceful shutdown.
-            libc_kill(pid, 15);
+        if terminate_recorded_supervisor(root, pid) {
             stopped = true;
+        } else if is_safe_pid(pid) && is_process_running(pid) {
+            eprintln!(
+                "[WARN] pid {pid} is live but is not this workspace's Ruflo supervisor; not signaled."
+            );
         }
         unregister_global_daemon(pid);
     }
@@ -602,11 +665,16 @@ fn stop_all() -> u8 {
         for e in entries.flatten() {
             let name = e.file_name();
             let Ok(pid) = name.to_string_lossy().parse::<u32>() else { continue };
-            if pid == std::process::id() {
+            if pid == std::process::id() || !is_safe_pid(pid) {
                 continue;
             }
-            if is_process_running(pid) {
-                libc_kill(pid, 15);
+            let rec: Value = fs::read_to_string(e.path())
+                .ok()
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_else(|| json!({}));
+            let ws = rec["workspace"].as_str().unwrap_or("");
+            let root = Path::new(ws);
+            if !ws.is_empty() && terminate_recorded_supervisor(root, pid) {
                 killed += 1;
             }
             let _ = fs::remove_file(e.path());
@@ -657,7 +725,7 @@ fn status(root: &Path, command: &DaemonCommand) -> u8 {
     let state = read_daemon_state(root);
     let pid = state["pid"].as_u64().map(|p| p as u32);
     let running_flag = state["running"].as_bool().unwrap_or(false);
-    let alive = pid.map(is_process_running).unwrap_or(false);
+    let alive = pid.is_some_and(|p| is_supervisor_process(p, root));
     let is_running = running_flag && alive;
     let started_at = state["startedAt"].as_u64().unwrap_or(0);
     let ttl_ms = state["config"]["ttlMs"].as_u64().unwrap_or(0);
@@ -723,7 +791,7 @@ fn status_all() -> u8 {
                 .and_then(|s| serde_json::from_str(&s).ok())
                 .unwrap_or_else(|| json!({}));
             let ws = rec["workspace"].as_str().unwrap_or("?");
-            let live = is_process_running(pid);
+            let live = ws != "?" && is_supervisor_process(pid, Path::new(ws));
             let icon = if live { "\u{25cf}" } else { "\u{25cb}" };
             count += 1;
             println!("  pid {pid:<7} {icon} {ws}");
@@ -1063,5 +1131,21 @@ mod tests {
     #[test]
     fn civil_from_days_epoch() {
         assert_eq!(civil_from_days(0), (1970, 1, 1));
+    }
+
+    #[test]
+    fn safe_pid_rejects_process_group_and_init() {
+        assert!(!is_safe_pid(0));
+        assert!(!is_safe_pid(1));
+        assert!(is_safe_pid(2));
+    }
+
+    #[test]
+    fn current_process_is_not_a_supervisor() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!is_supervisor_process(std::process::id(), dir.path()));
+        assert!(!terminate_recorded_supervisor(dir.path(), 0));
+        assert!(!terminate_recorded_supervisor(dir.path(), 1));
+        assert!(!terminate_recorded_supervisor(dir.path(), std::process::id()));
     }
 }
