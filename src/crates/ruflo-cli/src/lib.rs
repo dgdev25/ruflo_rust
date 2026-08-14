@@ -82,6 +82,8 @@ use std::ffi::OsString;
 use std::process::ExitCode;
 
 pub use command::ParsedCommand;
+pub use appliance::CLOUD_PROFILE;
+pub use daemon::{ensure_cloud_profile, supervisor_step};
 
 
 pub fn run(argv: impl IntoIterator<Item = std::ffi::OsString>) -> std::process::ExitCode {

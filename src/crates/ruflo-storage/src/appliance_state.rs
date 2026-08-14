@@ -222,6 +222,24 @@ impl ApplianceStore {
         Ok(job)
     }
 
+    pub fn get_job(&self, id: &str) -> Result<Option<JobRow>, RufloError> {
+        self.conn
+            .query_row(
+                "SELECT id, worker_type, payload, status FROM appliance_jobs WHERE id = ?1",
+                params![id],
+                |r| {
+                    Ok(JobRow {
+                        id: r.get(0)?,
+                        worker_type: r.get(1)?,
+                        payload: r.get(2)?,
+                        status: r.get(3)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(map_sql("appliance.job.get"))
+    }
+
     pub fn finish_job(&self, id: &str, ok: bool) -> Result<(), RufloError> {
         let status = if ok { "done" } else { "failed" };
         self.conn

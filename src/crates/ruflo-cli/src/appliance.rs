@@ -10,6 +10,9 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use serde_json::json;
 
+/// Cloud appliance profile packed into the standalone binary.
+pub const CLOUD_PROFILE: &str = include_str!("../../../../config/appliance/cloud.yaml");
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApplianceCommand {
     pub operation: String,
@@ -91,6 +94,8 @@ fn build(command: &ApplianceCommand) -> u8 {
         "format": "rvfa", "version": 1, "profile": profile,
         "arch": arch, "files": file_entries,
         "host": host,
+        "cloudProfileSha256": hex_sha256(CLOUD_PROFILE.as_bytes()),
+        "standalone": true,
         "createdAt": now_ms(),
     });
     let manifest_str = serde_json::to_string_pretty(&manifest).unwrap_or_default();
@@ -185,6 +190,24 @@ fn verify(command: &ApplianceCommand) -> u8 {
         return 1;
     }
     println!("  ✓ Checksum verified: {computed}");
+    if let Some(expected) = rvfa["manifest"]["host"]["sha256"].as_str() {
+        if let Some(host_path) = rvfa["manifest"]["host"]["path"].as_str() {
+            match fs::read(host_path) {
+                Ok(bytes) => {
+                    let actual = hex_sha256(&bytes);
+                    if actual != expected {
+                        eprintln!("  ✗ Host hash mismatch: stored={expected} computed={actual}");
+                        return 1;
+                    }
+                    println!("  ✓ Host hash verified");
+                }
+                Err(e) => {
+                    eprintln!("  ✗ Host binary missing ({host_path}): {e}");
+                    return 1;
+                }
+            }
+        }
+    }
     if quick {
         return 0;
     }
@@ -320,6 +343,13 @@ fn run_cmd(command: &ApplianceCommand) -> u8 {
             return 1;
         }
     };
+    let stored_checksum = rvfa["checksum"].as_str().unwrap_or("");
+    let manifest_str = serde_json::to_string_pretty(&rvfa["manifest"]).unwrap_or_default();
+    let computed = hex_sha256(manifest_str.as_bytes());
+    if stored_checksum != computed {
+        eprintln!("[ERROR] RVFA checksum mismatch. Refusing to run.");
+        return 1;
+    }
     let Some(host_path) = rvfa["manifest"]["host"]["path"].as_str() else {
         eprintln!("[ERROR] RVFA has no host binary path. Rebuild with `ruflo appliance build`.");
         return 1;
@@ -417,5 +447,13 @@ mod tests {
         });
         assert_eq!(code, 1);
         assert!(!target.join("etc/passwd").exists());
+    }
+
+    #[test]
+    fn embedded_cloud_profile_is_standalone() {
+        assert!(CLOUD_PROFILE.contains("profile: cloud"));
+        assert!(CLOUD_PROFILE.contains("store: sqlite"));
+        assert!(CLOUD_PROFILE.contains("\"daemon\""));
+        assert!(CLOUD_PROFILE.contains("\"start\""));
     }
 }

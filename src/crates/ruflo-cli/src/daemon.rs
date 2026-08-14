@@ -422,6 +422,7 @@ fn start(root: &Path, command: &DaemonCommand) -> u8 {
 
     let ttl_ms = command.ttl.unwrap_or(12 * 60 * 60 * 1000); // 12h default
 
+    ensure_cloud_profile(root);
     if command.foreground || std::env::var_os("RUFLO_DAEMON_SERVE").is_some() {
         return serve_loop(root, command, &workers, ttl_ms);
     }
@@ -581,48 +582,7 @@ fn serve_loop(root: &Path, command: &DaemonCommand, workers: &[String], ttl_ms: 
             break;
         }
 
-        if let Ok(store) = ruflo_storage::ApplianceStore::open(root) {
-            let _ = store.put_kv(
-                "daemon",
-                &json!({"pid": pid, "running": true, "heartbeatAt": now_ms()}).to_string(),
-            );
-            for worker in workers {
-                let id = format!("resident-{worker}");
-                let _ = store.upsert_agent(&ruflo_storage::AgentRow {
-                    id,
-                    agent_type: worker.clone(),
-                    status: "resident-idle".into(),
-                    role: worker.clone(),
-                    heartbeat_ms: now_ms(),
-                });
-            }
-            if let Ok(Some(job)) = store.claim_job() {
-                let slot = format!("resident-{}", job.worker_type);
-                let _ = store.upsert_agent(&ruflo_storage::AgentRow {
-                    id: slot,
-                    agent_type: job.worker_type.clone(),
-                    status: "resident-busy".into(),
-                    role: job.worker_type.clone(),
-                    heartbeat_ms: now_ms(),
-                });
-                let result = crate::services::worker_daemon_v2::tick(&job.worker_type);
-                let ok = result["status"].as_str() != Some("blocked");
-                let _ = store.finish_job(&job.id, ok);
-            }
-        } else {
-            let enabled: Vec<String> = live["config"]["workers"]
-                .as_array()
-                .map(|arr| {
-                    arr.iter()
-                        .filter(|w| w["enabled"].as_bool().unwrap_or(false))
-                        .filter_map(|w| w["type"].as_str().map(str::to_string))
-                        .collect()
-                })
-                .unwrap_or_else(|| workers.to_vec());
-            for worker in enabled {
-                let _ = crate::services::worker_daemon_v2::tick(&worker);
-            }
-        }
+        let _ = supervisor_step(root, workers, pid);
 
         std::thread::sleep(std::time::Duration::from_secs(2));
     }
@@ -633,6 +593,76 @@ fn serve_loop(root: &Path, command: &DaemonCommand, workers: &[String], ttl_ms: 
     let _ = write_daemon_state(root, &done);
     unregister_global_daemon(pid);
     0
+}
+
+/// One supervisor tick: the same claim → run → finish path the serve loop uses.
+/// Tests and the live daemon both call this. LLM work stays one-shot.
+pub fn supervisor_step(root: &Path, workers: &[String], pid: u32) -> serde_json::Value {
+    ensure_cloud_profile(root);
+    let Ok(store) = ruflo_storage::ApplianceStore::open(root) else {
+        return json!({"status": "store-unavailable"});
+    };
+    let _ = store.put_kv(
+        "daemon",
+        &json!({"pid": pid, "running": true, "heartbeatAt": now_ms()}).to_string(),
+    );
+    for worker in workers {
+        let id = format!("resident-{worker}");
+        let _ = store.upsert_agent(&ruflo_storage::AgentRow {
+            id,
+            agent_type: worker.clone(),
+            status: "resident-idle".into(),
+            role: worker.clone(),
+            heartbeat_ms: now_ms(),
+        });
+    }
+    let Ok(Some(job)) = store.claim_job() else {
+        return json!({"status": "idle", "pid": pid});
+    };
+    let slot = format!("resident-{}", job.worker_type);
+    let _ = store.upsert_agent(&ruflo_storage::AgentRow {
+        id: slot.clone(),
+        agent_type: job.worker_type.clone(),
+        status: "resident-busy".into(),
+        role: job.worker_type.clone(),
+        heartbeat_ms: now_ms(),
+    });
+    // Drive the same headless execute path hive/trigger use so spend applies.
+    let result = crate::services::headless::execute(
+        &job.worker_type,
+        "claude",
+        &job.payload,
+        5_000,
+        &[],
+    );
+    let status = result["status"].as_str().unwrap_or("unknown");
+    let ok = status != "blocked";
+    let _ = store.finish_job(&job.id, ok);
+    let _ = store.upsert_agent(&ruflo_storage::AgentRow {
+        id: slot,
+        agent_type: job.worker_type.clone(),
+        status: "resident-idle".into(),
+        role: job.worker_type.clone(),
+        heartbeat_ms: now_ms(),
+    });
+    json!({
+        "status": "ran",
+        "jobId": job.id,
+        "workerType": job.worker_type,
+        "result": status,
+        "pid": pid,
+    })
+}
+
+/// Write the embedded cloud profile if the workspace has no config yet.
+pub fn ensure_cloud_profile(root: &Path) {
+    let dir = root.join(".claude-flow");
+    let path = dir.join("config.yaml");
+    if path.exists() {
+        return;
+    }
+    let _ = fs::create_dir_all(&dir);
+    let _ = fs::write(&path, crate::appliance::CLOUD_PROFILE);
 }
 
 fn write_pid_file(root: &Path, pid: u32) {
@@ -679,7 +709,7 @@ fn stop(root: &Path, command: &DaemonCommand) -> u8 {
         return 0;
     }
     if stopped {
-        println!("Daemon (pid {:?}) stopped.", pid);
+        println!("Daemon (pid {}) stopped.", pid.unwrap_or(0));
     } else {
         println!("No running daemon found in this workspace (state marked stopped).");
     }
@@ -770,7 +800,10 @@ fn status(root: &Path, command: &DaemonCommand) -> u8 {
     let st = if is_running { "RUNNING" } else { "STOPPED" };
     println!("\n\u{256d} RuFlo Daemon \u{256e}");
     println!("  Status: {icon} {st}");
-    println!("  PID:    {:?}", pid);
+    println!(
+        "  PID:    {}",
+        pid.map(|p| p.to_string()).unwrap_or_else(|| "-".into())
+    );
     if started_at > 0 {
         println!("  Started: {}", fmt_iso(started_at));
     }
@@ -1184,5 +1217,21 @@ mod tests {
         assert!(!terminate_recorded_supervisor(dir.path(), 0));
         assert!(!terminate_recorded_supervisor(dir.path(), 1));
         assert!(!terminate_recorded_supervisor(dir.path(), std::process::id()));
+    }
+
+    #[test]
+    fn supervisor_step_claims_queued_job_into_resident_slot() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = ruflo_storage::ApplianceStore::open(dir.path()).unwrap();
+        let job_id = store.enqueue_job("audit", "fixture-scan").unwrap();
+        let out = supervisor_step(dir.path(), &["audit".into()], 42);
+        assert_eq!(out["status"], "ran");
+        assert_eq!(out["jobId"], job_id);
+        let job = store.get_job(&job_id).unwrap().unwrap();
+        assert!(job.status == "done" || job.status == "failed", "{}", job.status);
+        let slot = store.get_agent("resident-audit").unwrap().unwrap();
+        assert_eq!(slot.status, "resident-idle");
+        assert!(dir.path().join(".swarm/memory.db").is_file());
+        assert!(!dir.path().join(".swarm/agents/resident-audit.json").exists());
     }
 }

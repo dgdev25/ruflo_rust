@@ -1,4 +1,4 @@
-# Default cloud appliance profile. Packed into the image and RVFA host section.
+# Default cloud appliance profile. Embedded in the standalone ruflo binary.
 profile: cloud
 supervisor:
   command: ["ruflo", "daemon", "start", "--foreground", "--ttl", "0"]
