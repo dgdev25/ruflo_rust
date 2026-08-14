@@ -264,7 +264,8 @@ mod tests {
         let (entries, ok) = verify_ledger();
         assert!(ok, "ledger should verify");
         assert_eq!(entries.len(), 2);
-        assert_eq!(entries[0]["prevHash"].as_str(), Some("0".repeat(64).as_str()));
+        let genesis = "0".repeat(64);
+        assert_eq!(entries[0]["prevHash"].as_str(), Some(genesis.as_str()));
         assert_eq!(entries[1]["prevHash"], entries[0]["hash"]);
     }
 
