@@ -1,10 +1,12 @@
 #![allow(clippy::all)]
 
+mod appliance_state;
 mod memory_sqlite;
 mod migration;
 mod port;
 mod rvf_adapter;
 
+pub use appliance_state::{AgentRow, ApplianceStore, JobRow, SpendLedger};
 pub use memory_sqlite::{MemoryEntry, MemoryStats, MemoryStoreInput, SqliteMemoryStore};
 pub use migration::{
     MigrationMetadata, MigrationOutcome, MigrationPlan, MigrationSession, RecoveryMetadata,

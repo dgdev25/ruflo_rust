@@ -581,17 +581,47 @@ fn serve_loop(root: &Path, command: &DaemonCommand, workers: &[String], ttl_ms: 
             break;
         }
 
-        let enabled: Vec<String> = live["config"]["workers"]
-            .as_array()
-            .map(|arr| {
-                arr.iter()
-                    .filter(|w| w["enabled"].as_bool().unwrap_or(false))
-                    .filter_map(|w| w["type"].as_str().map(str::to_string))
-                    .collect()
-            })
-            .unwrap_or_else(|| workers.to_vec());
-        for worker in enabled {
-            let _ = crate::services::worker_daemon_v2::tick(&worker);
+        if let Ok(store) = ruflo_storage::ApplianceStore::open(root) {
+            let _ = store.put_kv(
+                "daemon",
+                &json!({"pid": pid, "running": true, "heartbeatAt": now_ms()}).to_string(),
+            );
+            for worker in workers {
+                let id = format!("resident-{worker}");
+                let _ = store.upsert_agent(&ruflo_storage::AgentRow {
+                    id,
+                    agent_type: worker.clone(),
+                    status: "resident-idle".into(),
+                    role: worker.clone(),
+                    heartbeat_ms: now_ms(),
+                });
+            }
+            if let Ok(Some(job)) = store.claim_job() {
+                let slot = format!("resident-{}", job.worker_type);
+                let _ = store.upsert_agent(&ruflo_storage::AgentRow {
+                    id: slot,
+                    agent_type: job.worker_type.clone(),
+                    status: "resident-busy".into(),
+                    role: job.worker_type.clone(),
+                    heartbeat_ms: now_ms(),
+                });
+                let result = crate::services::worker_daemon_v2::tick(&job.worker_type);
+                let ok = result["status"].as_str() != Some("blocked");
+                let _ = store.finish_job(&job.id, ok);
+            }
+        } else {
+            let enabled: Vec<String> = live["config"]["workers"]
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter(|w| w["enabled"].as_bool().unwrap_or(false))
+                        .filter_map(|w| w["type"].as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_else(|| workers.to_vec());
+            for worker in enabled {
+                let _ = crate::services::worker_daemon_v2::tick(&worker);
+            }
         }
 
         std::thread::sleep(std::time::Duration::from_secs(2));
@@ -821,7 +851,12 @@ fn trigger(root: &Path, command: &DaemonCommand) -> u8 {
         }
     }
     println!("Trigger recorded for worker '{worker}'.");
-    // Execute the worker tick natively (worker_daemon_v2 behavioral).
+    if let Ok(store) = ruflo_storage::ApplianceStore::open(root) {
+        match store.enqueue_job(worker, "manual-trigger") {
+            Ok(id) => println!("Queued resident job {id} for worker '{worker}'."),
+            Err(e) => eprintln!("[ERROR] Failed to queue job: {e}"),
+        }
+    }
     let tick = crate::services::worker_daemon_v2::tick(worker);
     println!("Worker tick: {}", tick["status"].as_str().unwrap_or("done"));
     0
@@ -953,6 +988,7 @@ fn budget_pause(reason: Option<&str>) -> u8 {
         return 1;
     }
     append_receipt(json!({"event": "manual-pause", "at": now, "reason": r}));
+    let _ = crate::spend::pause(r);
     println!("Autonomous AI worker launches paused across all daemons.");
     println!("Resume with: ruflo daemon budget resume");
     0
@@ -987,6 +1023,7 @@ fn budget_resume() -> u8 {
     if was_paused {
         append_receipt(json!({"event": "manual-resume", "at": now}));
     }
+    let _ = crate::spend::resume();
     println!("Autonomous AI worker launches resumed.");
     0
 }

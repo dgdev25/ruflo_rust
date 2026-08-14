@@ -279,7 +279,7 @@ pub fn run_swarm(
     // spawn. This ports the critical enforcement path from
     // services/global-ai-budget.ts into the native swarm executor.
     if !dry_run && (agent == "claude" || agent == "codex") {
-        if let Some(reason) = check_budget_paused(cwd) {
+        if let Err(reason) = crate::spend::check() {
             return SwarmOutcome {
                 dry_run: false,
                 workers: 0,
@@ -341,12 +341,8 @@ pub fn run_swarm(
         }
     }
 
-    // Record launch reservations in the budget ledger so daemon.rs::status and
-    // check_budget_paused observe in-flight workers (concurrent-limit gate) and
-    // rate-limit counters stay accurate. Permits are removed once all workers
-    // finish; launches are retained (sliding-window counters).
-    let mut ledger = match read_budget_ledger() {
-        Ok(v) => v,
+    let spend_permit = match crate::spend::reserve("swarm", agent, cwd) {
+        Ok(p) => p,
         Err(e) => {
             return SwarmOutcome {
                 dry_run: false,
@@ -355,7 +351,7 @@ pub fn run_swarm(
                     worker_idx: 0,
                     agent: agent.into(),
                     stdout: String::new(),
-                    stderr: format!("AI budget ledger unreadable: {e}"),
+                    stderr: format!("AI budget ledger: {e}"),
                     exit_code: -1,
                     timed_out: false,
                 }],
@@ -363,58 +359,8 @@ pub fn run_swarm(
             };
         }
     };
-    let active_now = ledger["active"].as_array().map(|a| a.len()).unwrap_or(0);
-    let remaining = LIMIT_CONCURRENT.saturating_sub(active_now);
-    if remaining == 0 {
-        return SwarmOutcome {
-            dry_run: false,
-            workers: 0,
-            results: vec![WorkerResult {
-                worker_idx: 0,
-                agent: agent.into(),
-                stdout: String::new(),
-                stderr: format!(
-                    "AI budget concurrent limit reached ({active_now}/{LIMIT_CONCURRENT})"
-                ),
-                exit_code: -1,
-                timed_out: false,
-            }],
-            plan: vec![json!({"blocked": "budget_concurrent"})],
-        };
-    }
-    let n = n.min(remaining);
+    let n = n.min(1);
     let roles = worker_roles(n);
-    let spawn_pid = std::process::id();
-    let reservation_at = now_ms();
-    let permits: Vec<String> = (0..n)
-        .map(|i| format!("swarm-{reservation_at}-{i}"))
-        .collect();
-    {
-        {
-            let active = ensure_array_mut(&mut ledger, "active");
-            for permit in &permits {
-                active.push(json!({
-                    "permitId": permit,
-                    "at": reservation_at,
-                    "pid": spawn_pid,
-                    "workerType": agent,
-                }));
-            }
-        }
-        {
-            let launches = ensure_array_mut(&mut ledger, "launches");
-            for _ in 0..n {
-                launches.push(json!({
-                    "at": reservation_at,
-                    "pid": spawn_pid,
-                    "workerType": agent,
-                    "model": agent,
-                    "workspace": cwd.to_string_lossy(),
-                }));
-            }
-        }
-        write_budget_ledger(&ledger);
-    }
 
     // Spawn N workers in parallel (one thread each). Collect handles first,
     // then join — calling .join() inside .map() would block each spawn until
@@ -501,18 +447,7 @@ pub fn run_swarm(
         );
     }
 
-    // Release the active reservations now that every worker has finished. The
-    // launches array is left intact — daemon.rs prunes entries older than 24h.
-    if let Ok(mut ledger) = read_budget_ledger() {
-        let active = ensure_array_mut(&mut ledger, "active");
-        active.retain(|a| {
-            a["permitId"]
-                .as_str()
-                .map(|p| !permits.iter().any(|permitted| permitted == p))
-                .unwrap_or(true)
-        });
-        write_budget_ledger(&ledger);
-    }
+    crate::spend::release(&spend_permit);
 
     let plan: Vec<Value> = (0..n)
         .map(|i| {

@@ -1,0 +1,11 @@
+{
+  "consumer": "appliance-host",
+  "contract": "appliance-supervisor-host",
+  "wave": 3,
+  "steps": [
+    "appliance build writes host sha256",
+    "daemon start records a live pid",
+    "agents persist in .swarm/memory.db",
+    "budget pause blocks spend"
+  ]
+}

@@ -323,28 +323,23 @@ fn agent_spawn(arguments: &Value) -> Result<ToolResult, RufloError> {
         })
         .collect();
     let agent_id = format!("agent-{safe}");
-    let dir = std::path::Path::new(".swarm/agents");
-    std::fs::create_dir_all(dir).map_err(|e| {
-        RufloError::invalid_input("agent.persist", format!("cannot create agent dir: {e}"))
+    let root = std::env::current_dir().map_err(|e| {
+        RufloError::invalid_input("agent.persist", format!("cwd: {e}"))
     })?;
-    let path = dir.join(format!("{agent_id}.json"));
-    if path.exists() {
+    let store = ruflo_storage::ApplianceStore::open(&root)?;
+    if store.get_agent(&agent_id)?.is_some() {
         return Err(RufloError::invalid_input(
             "agent.exists",
             format!("agent `{agent_id}` already exists"),
         ));
     }
-    let record = json!({
-        "id": agent_id,
-        "agent_type": safe,
-        "status": "idle",
-        "role": role,
-        "process": false,
-        "note": "persisted record only; one-shot jobs run via swarm start",
-    });
-    std::fs::write(&path, serde_json::to_vec_pretty(&record).unwrap_or_default()).map_err(
-        |e| RufloError::invalid_input("agent.persist", format!("cannot write agent record: {e}")),
-    )?;
+    store.upsert_agent(&ruflo_storage::AgentRow {
+        id: agent_id.clone(),
+        agent_type: safe.clone(),
+        status: "idle".into(),
+        role: role.clone(),
+        heartbeat_ms: 0,
+    })?;
     Ok(ToolResult::text(
         format!("recorded idle agent `{agent_id}`"),
         Some(json!({
@@ -352,6 +347,7 @@ fn agent_spawn(arguments: &Value) -> Result<ToolResult, RufloError> {
             "role": role,
             "status": "idle",
             "persisted": true,
+            "store": "sqlite",
             "running": false
         })),
     ))
