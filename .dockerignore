@@ -1,0 +1,9 @@
+target
+.git
+.swarm
+.claude-flow
+.cargo-cache
+node_modules
+*.db
+*.rvf
+*.rvf.lock
