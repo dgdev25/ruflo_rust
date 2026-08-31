@@ -1,0 +1,9 @@
+# Default cloud appliance profile. Embedded in the standalone ruflo binary.
+profile: cloud
+supervisor:
+  command: ["ruflo", "daemon", "start", "--foreground", "--ttl", "0"]
+  workers: [map, audit, optimize, consolidate, testgaps]
+store: sqlite
+spend: fail-closed
+mcp:
+  tools: [agent_spawn, memory_store, memory_retrieve, memory_search]

@@ -312,13 +312,43 @@ fn build_registry() -> Vec<RegisteredTool> {
 fn agent_spawn(arguments: &Value) -> Result<ToolResult, RufloError> {
     maybe_sleep(arguments)?;
     let role = optional_string(arguments, "role")?.unwrap_or_else(|| "generalist".to_string());
-    let agent_id = format!("agent-{role}");
+    let safe: String = role
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let agent_id = format!("agent-{safe}");
+    let root = std::env::current_dir().map_err(|e| {
+        RufloError::invalid_input("agent.persist", format!("cwd: {e}"))
+    })?;
+    let store = ruflo_storage::ApplianceStore::open(&root)?;
+    if store.get_agent(&agent_id)?.is_some() {
+        return Err(RufloError::invalid_input(
+            "agent.exists",
+            format!("agent `{agent_id}` already exists"),
+        ));
+    }
+    store.upsert_agent(&ruflo_storage::AgentRow {
+        id: agent_id.clone(),
+        agent_type: safe.clone(),
+        status: "idle".into(),
+        role: role.clone(),
+        heartbeat_ms: 0,
+    })?;
     Ok(ToolResult::text(
-        format!("spawned agent `{agent_id}`"),
+        format!("recorded idle agent `{agent_id}`"),
         Some(json!({
             "agentId": agent_id,
             "role": role,
-            "status": "spawned"
+            "status": "idle",
+            "persisted": true,
+            "store": "sqlite",
+            "running": false
         })),
     ))
 }

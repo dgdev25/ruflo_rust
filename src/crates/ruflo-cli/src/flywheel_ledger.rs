@@ -106,15 +106,16 @@ fn chain_head() -> String {
 pub fn append_receipt(event: &str, payload: &Value) -> Value {
     let _g = LEDGER_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let prev = chain_head();
-    let id = format!("rcpt-{}-{}", now_ms(), nonce());
-    let body = json!({"id": id, "event": event, "payload": payload, "prevHash": prev, "at": now_ms()});
+    let at = now_ms();
+    let id = format!("rcpt-{at}-{}", nonce());
+    let body = json!({"id": id, "event": event, "payload": payload, "prevHash": prev, "at": at});
     let body_str = serde_json::to_string(&body).unwrap_or_default();
     let body_hash = hex(&Sha256::digest(body_str.as_bytes()));
     let chain_msg = format!("{}{}", prev, body_hash);
     let sig = hex(&hmac_sha256(&hmac_key(), chain_msg.as_bytes()));
     let entry = json!({
         "id": id, "event": event, "payload": payload,
-        "prevHash": prev, "bodyHash": body_hash, "signature": sig, "at": now_ms(),
+        "prevHash": prev, "bodyHash": body_hash, "signature": sig, "at": at,
         "hash": body_hash,
     });
     // Append to ledger (jsonl).
@@ -264,7 +265,8 @@ mod tests {
         let (entries, ok) = verify_ledger();
         assert!(ok, "ledger should verify");
         assert_eq!(entries.len(), 2);
-        assert_eq!(entries[0]["prevHash"].as_str(), Some("0".repeat(64).as_str()));
+        let genesis = "0".repeat(64);
+        assert_eq!(entries[0]["prevHash"].as_str(), Some(genesis.as_str()));
         assert_eq!(entries[1]["prevHash"], entries[0]["hash"]);
     }
 

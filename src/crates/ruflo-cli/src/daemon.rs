@@ -318,19 +318,80 @@ fn write_daemon_state(root: &Path, v: &Value) -> bool {
     ok
 }
 
+fn is_safe_pid(pid: u32) -> bool {
+    // pid 0 is the caller's process group; pid 1 is init. Neither is a daemon
+    // we started, and signaling them is unsafe.
+    pid > 1
+}
+
 #[cfg(unix)]
 fn is_process_running(pid: u32) -> bool {
+    if !is_safe_pid(pid) {
+        return false;
+    }
     // kill(pid, 0) returns Ok if the process exists (or we lack permission to
     // signal it — still "exists"). Either way it's running.
     libc_kill(pid, 0) == 0
 }
 
 #[cfg(not(unix))]
-fn is_process_running(_pid: u32) -> bool {
+fn is_process_running(pid: u32) -> bool {
     // No portable pid-liveness probe on Windows without a crate; conservatively
     // report not-running so status reflects that the native-managed daemon
     // isn't a live background process here.
+    let _ = pid;
     false
+}
+
+/// True only when `pid` is a live Ruflo supervisor for `root`.
+/// Fail closed: a reused PID, a non-supervisor cmdline, or a different cwd
+/// is not signaled.
+fn is_supervisor_process(pid: u32, root: &Path) -> bool {
+    if !is_safe_pid(pid) || !is_process_running(pid) {
+        return false;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let raw = match fs::read(format!("/proc/{pid}/cmdline")) {
+            Ok(b) => b,
+            Err(_) => return false,
+        };
+        let args: Vec<&[u8]> = raw.split(|b| *b == 0).filter(|a| !a.is_empty()).collect();
+        let has = |tok: &[u8]| args.iter().any(|a| *a == tok);
+        if !(has(b"daemon") && has(b"start") && has(b"--foreground")) {
+            return false;
+        }
+        if let Ok(cwd) = fs::read_link(format!("/proc/{pid}/cwd")) {
+            if let (Ok(want), Ok(got)) = (root.canonicalize(), cwd.canonicalize()) {
+                if want != got {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        // Without /proc cmdline, require a registry record that names this
+        // workspace so a reused PID is not signaled.
+        let rec_path = budget_dir().join("daemons").join(pid.to_string());
+        let Ok(s) = fs::read_to_string(rec_path) else {
+            return false;
+        };
+        let Ok(v) = serde_json::from_str::<Value>(&s) else {
+            return false;
+        };
+        v["workspace"].as_str() == Some(&root.display().to_string())
+    }
+}
+
+/// SIGTERM a recorded supervisor PID only after identity checks.
+/// Returns true if a signal was sent.
+pub(crate) fn terminate_recorded_supervisor(root: &Path, pid: u32) -> bool {
+    if !is_supervisor_process(pid, root) {
+        return false;
+    }
+    libc_kill(pid, 15) == 0
 }
 
 // Minimal libc kill(2) binding for pid liveness — avoids pulling a crate for
@@ -360,13 +421,90 @@ fn start(root: &Path, command: &DaemonCommand) -> u8 {
         .unwrap_or_else(|| DEFAULT_WORKERS.iter().map(|s| s.to_string()).collect());
 
     let ttl_ms = command.ttl.unwrap_or(12 * 60 * 60 * 1000); // 12h default
-    // Don't claim a running PID — native start doesn't spawn a worker loop.
-    // Record config + intent only. The PID field is omitted so stop/status
-    // don't signal a short-lived CLI process that may have been reused.
+
+    ensure_cloud_profile(root);
+    if command.foreground || std::env::var_os("RUFLO_DAEMON_SERVE").is_some() {
+        return serve_loop(root, command, &workers, ttl_ms);
+    }
+
+    let existing = read_daemon_state(root);
+    if let Some(pid) = existing["pid"].as_u64().map(|p| p as u32) {
+        if existing["running"].as_bool().unwrap_or(false) && is_supervisor_process(pid, root) {
+            if !command.quiet {
+                println!("Daemon already running (pid {pid}).");
+            }
+            return 0;
+        }
+    }
+
+    let exe = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("[ERROR] Cannot resolve current executable: {e}");
+            return 1;
+        }
+    };
+    let dir = root.join(".claude-flow");
+    if fs::create_dir_all(&dir).is_err() {
+        eprintln!("[ERROR] Failed to create {}", dir.display());
+        return 1;
+    }
+    let log_path = dir.join("daemon.log");
+    let log = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path);
+
+    let mut cmd = std::process::Command::new(exe);
+    cmd.arg("daemon").arg("start").arg("--foreground");
+    if let Some(w) = &command.workers {
+        cmd.arg("--workers").arg(w);
+    }
+    if command.headless {
+        cmd.arg("--headless");
+    }
+    if let Some(ttl) = command.ttl {
+        cmd.arg("--ttl").arg(ttl.to_string());
+    }
+    cmd.current_dir(root);
+    cmd.env("RUFLO_DAEMON_SERVE", "1");
+    if let Ok(dir) = std::env::var("RUFLO_AI_BUDGET_DIR") {
+        cmd.env("RUFLO_AI_BUDGET_DIR", dir);
+    }
+    cmd.stdin(std::process::Stdio::null());
+    match log {
+        Ok(f) => match f.try_clone() {
+            Ok(err) => {
+                cmd.stdout(std::process::Stdio::from(f));
+                cmd.stderr(std::process::Stdio::from(err));
+            }
+            Err(_) => {
+                cmd.stdout(std::process::Stdio::from(f));
+                cmd.stderr(std::process::Stdio::null());
+            }
+        },
+        Err(_) => {
+            cmd.stdout(std::process::Stdio::null());
+            cmd.stderr(std::process::Stdio::null());
+        }
+    }
+
+    let child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("[ERROR] Failed to spawn daemon: {e}");
+            return 1;
+        }
+    };
+    let pid = child.id();
+    std::mem::forget(child);
+
     let state = json!({
         "startedAt": now_ms(),
-        "running": false,
-        "foreground": command.foreground,
+        "running": true,
+        "pid": pid,
+        "foreground": false,
+        "heartbeatAt": now_ms(),
         "config": {
             "workers": workers.iter().map(|w| json!({"type": w, "enabled": true})).collect::<Vec<_>>(),
             "maxConcurrent": LIMIT_CONCURRENT,
@@ -383,21 +521,163 @@ fn start(root: &Path, command: &DaemonCommand) -> u8 {
         eprintln!("[ERROR] Failed to write daemon state.");
         return 1;
     }
+    write_pid_file(root, pid);
+    register_global_daemon(pid, root);
 
     if command.quiet {
         return 0;
     }
     println!("\nRuFlo Daemon");
-    println!("  Status:  \u{25cf} state recorded");
-    println!("  PID:     {}", std::process::id());
+    println!("  Status:  \u{25cf} RUNNING");
+    println!("  PID:     {pid}");
     println!("  TTL:     {}h", if ttl_ms > 0 { ttl_ms / HOUR_MS } else { 0 });
     println!("  Workers: {}", workers.join(", "));
     println!("  AI:      {}", if command.headless { "enabled (budget-capped)" } else { "off (local-only)" });
-    println!();
-    eprintln!("[WARN] The worker event-loop is Node-based (ADR-0005). Native start");
-    eprintln!("       records daemon state (status/stop/enable work) but does not spawn");
-    eprintln!("       the worker loop. Run `ruflo daemon start` for live workers.");
     0
+}
+
+fn serve_loop(root: &Path, command: &DaemonCommand, workers: &[String], ttl_ms: u64) -> u8 {
+    let pid = std::process::id();
+    let started = now_ms();
+    let state = json!({
+        "startedAt": started,
+        "running": true,
+        "pid": pid,
+        "foreground": true,
+        "heartbeatAt": started,
+        "config": {
+            "workers": workers.iter().map(|w| json!({"type": w, "enabled": true})).collect::<Vec<_>>(),
+            "maxConcurrent": LIMIT_CONCURRENT,
+            "ttlMs": ttl_ms,
+            "aiWorkersEnabled": command.headless,
+            "resourceThresholds": {
+                "maxCpuLoad": 4.0,
+                "minFreeMemoryPercent": 15,
+            },
+        },
+        "nativeManaged": true,
+    });
+    if !write_daemon_state(root, &state) {
+        eprintln!("[ERROR] Failed to write daemon state.");
+        return 1;
+    }
+    write_pid_file(root, pid);
+    register_global_daemon(pid, root);
+
+    if !command.quiet {
+        println!("RuFlo daemon serving (pid {pid}). Stop with: ruflo daemon stop");
+    }
+
+    loop {
+        let mut live = read_daemon_state(root);
+        if live["running"].as_bool() == Some(false) {
+            break;
+        }
+        live["heartbeatAt"] = json!(now_ms());
+        live["pid"] = json!(pid);
+        live["running"] = json!(true);
+        let _ = write_daemon_state(root, &live);
+
+        if ttl_ms > 0 && now_ms().saturating_sub(started) >= ttl_ms {
+            break;
+        }
+
+        let _ = supervisor_step(root, workers, pid);
+
+        std::thread::sleep(std::time::Duration::from_secs(2));
+    }
+
+    let mut done = read_daemon_state(root);
+    done["running"] = json!(false);
+    done["stoppedAt"] = json!(now_ms());
+    let _ = write_daemon_state(root, &done);
+    unregister_global_daemon(pid);
+    0
+}
+
+/// One supervisor tick: the same claim → run → finish path the serve loop uses.
+/// Tests and the live daemon both call this. LLM work stays one-shot.
+pub fn supervisor_step(root: &Path, workers: &[String], pid: u32) -> serde_json::Value {
+    ensure_cloud_profile(root);
+    let Ok(store) = ruflo_storage::ApplianceStore::open(root) else {
+        return json!({"status": "store-unavailable"});
+    };
+    let _ = store.put_kv(
+        "daemon",
+        &json!({"pid": pid, "running": true, "heartbeatAt": now_ms()}).to_string(),
+    );
+    for worker in workers {
+        let id = format!("resident-{worker}");
+        let _ = store.upsert_agent(&ruflo_storage::AgentRow {
+            id,
+            agent_type: worker.clone(),
+            status: "resident-idle".into(),
+            role: worker.clone(),
+            heartbeat_ms: now_ms(),
+        });
+    }
+    let Ok(Some(job)) = store.claim_job() else {
+        return json!({"status": "idle", "pid": pid});
+    };
+    let slot = format!("resident-{}", job.worker_type);
+    let _ = store.upsert_agent(&ruflo_storage::AgentRow {
+        id: slot.clone(),
+        agent_type: job.worker_type.clone(),
+        status: "resident-busy".into(),
+        role: job.worker_type.clone(),
+        heartbeat_ms: now_ms(),
+    });
+    // Drive the same headless execute path hive/trigger use so spend applies.
+    let result = crate::services::headless::execute(
+        &job.worker_type,
+        "claude",
+        &job.payload,
+        5_000,
+        &[],
+    );
+    let status = result["status"].as_str().unwrap_or("unknown");
+    let ok = status != "blocked";
+    let _ = store.finish_job(&job.id, ok);
+    let _ = store.upsert_agent(&ruflo_storage::AgentRow {
+        id: slot,
+        agent_type: job.worker_type.clone(),
+        status: "resident-idle".into(),
+        role: job.worker_type.clone(),
+        heartbeat_ms: now_ms(),
+    });
+    json!({
+        "status": "ran",
+        "jobId": job.id,
+        "workerType": job.worker_type,
+        "result": status,
+        "pid": pid,
+    })
+}
+
+/// Write the embedded cloud profile if the workspace has no config yet.
+pub fn ensure_cloud_profile(root: &Path) {
+    let dir = root.join(".claude-flow");
+    let path = dir.join("config.yaml");
+    if path.exists() {
+        return;
+    }
+    let _ = fs::create_dir_all(&dir);
+    let _ = fs::write(&path, crate::appliance::CLOUD_PROFILE);
+}
+
+fn write_pid_file(root: &Path, pid: u32) {
+    let _ = fs::write(root.join(".claude-flow/daemon.pid"), pid.to_string());
+}
+
+fn register_global_daemon(pid: u32, root: &Path) {
+    let dir = budget_dir().join("daemons");
+    let _ = fs::create_dir_all(&dir);
+    let rec = json!({"pid": pid, "workspace": root.display().to_string(), "at": now_ms()});
+    let _ = fs::write(dir.join(pid.to_string()), rec.to_string());
+}
+
+fn unregister_global_daemon(pid: u32) {
+    let _ = fs::remove_file(budget_dir().join("daemons").join(pid.to_string()));
 }
 
 // ---- stop -------------------------------------------------------------------
@@ -410,22 +690,26 @@ fn stop(root: &Path, command: &DaemonCommand) -> u8 {
     let pid = state["pid"].as_u64().map(|p| p as u32);
     let mut stopped = false;
     if let Some(pid) = pid {
-        if is_process_running(pid) {
-            // SIGTERM for graceful shutdown.
-            libc_kill(pid, 15);
+        if terminate_recorded_supervisor(root, pid) {
             stopped = true;
+        } else if is_safe_pid(pid) && is_process_running(pid) {
+            eprintln!(
+                "[WARN] pid {pid} is live but is not this workspace's Ruflo supervisor; not signaled."
+            );
         }
+        unregister_global_daemon(pid);
     }
-    // Mark stopped in state regardless.
+    // Mark stopped in state regardless so a serve loop that polls state exits.
     let mut next = state.clone();
     next["running"] = json!(false);
     next["stoppedAt"] = json!(now_ms());
     let _ = write_daemon_state(root, &next);
+    let _ = fs::remove_file(root.join(".claude-flow/daemon.pid"));
     if command.quiet {
         return 0;
     }
     if stopped {
-        println!("Daemon (pid {:?}) stopped.", pid);
+        println!("Daemon (pid {}) stopped.", pid.unwrap_or(0));
     } else {
         println!("No running daemon found in this workspace (state marked stopped).");
     }
@@ -433,34 +717,27 @@ fn stop(root: &Path, command: &DaemonCommand) -> u8 {
 }
 
 fn stop_all() -> u8 {
-    // Enumerate running ruflo/claude-flow daemon processes and SIGTERM them.
-    // /proc is Linux-specific; on other platforms there is no portable
-    // enumeration, so report zero and let the per-workspace state drive stops.
-    //
-    // We must never kill our own ancestry: the ruflo process running this code
-    // is itself launched from a shell/test-runner whose cmdline often contains
-    // "ruflo" (via the repo path) and "daemon" (via the subcommand arg or the
-    // parent binary name). Collect the full ancestor PID set and skip them.
-    let ancestors = ancestor_pids();
+    // Only signal PIDs that a prior `daemon start` registered. Do not scan
+    // /proc command lines — that matches test runners and `daemon status`.
+    let dir = budget_dir().join("daemons");
     let mut killed = 0u32;
-    #[cfg(unix)]
-    {
-        if let Ok(entries) = fs::read_dir("/proc") {
-            for e in entries.flatten() {
-                let name = e.file_name();
-                let name = name.to_string_lossy();
-                let Ok(pid) = name.parse::<u32>() else { continue };
-                if pid == std::process::id() || ancestors.contains(&pid) {
-                    continue;
-                }
-                if let Ok(cmdline) = fs::read_to_string(e.path().join("cmdline")) {
-                    let cmd = cmdline.replace('\0', " ");
-                    if (cmd.contains("ruflo") || cmd.contains("claude-flow")) && cmd.contains("daemon") {
-                        libc_kill(pid, 15);
-                        killed += 1;
-                    }
-                }
+    if let Ok(entries) = fs::read_dir(&dir) {
+        for e in entries.flatten() {
+            let name = e.file_name();
+            let Ok(pid) = name.to_string_lossy().parse::<u32>() else { continue };
+            if pid == std::process::id() || !is_safe_pid(pid) {
+                continue;
             }
+            let rec: Value = fs::read_to_string(e.path())
+                .ok()
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_else(|| json!({}));
+            let ws = rec["workspace"].as_str().unwrap_or("");
+            let root = Path::new(ws);
+            if !ws.is_empty() && terminate_recorded_supervisor(root, pid) {
+                killed += 1;
+            }
+            let _ = fs::remove_file(e.path());
         }
     }
     println!("Stopped {killed} daemon process(es) across all workspaces.");
@@ -508,7 +785,7 @@ fn status(root: &Path, command: &DaemonCommand) -> u8 {
     let state = read_daemon_state(root);
     let pid = state["pid"].as_u64().map(|p| p as u32);
     let running_flag = state["running"].as_bool().unwrap_or(false);
-    let alive = pid.map(is_process_running).unwrap_or(false);
+    let alive = pid.is_some_and(|p| is_supervisor_process(p, root));
     let is_running = running_flag && alive;
     let started_at = state["startedAt"].as_u64().unwrap_or(0);
     let ttl_ms = state["config"]["ttlMs"].as_u64().unwrap_or(0);
@@ -523,7 +800,10 @@ fn status(root: &Path, command: &DaemonCommand) -> u8 {
     let st = if is_running { "RUNNING" } else { "STOPPED" };
     println!("\n\u{256d} RuFlo Daemon \u{256e}");
     println!("  Status: {icon} {st}");
-    println!("  PID:    {:?}", pid);
+    println!(
+        "  PID:    {}",
+        pid.map(|p| p.to_string()).unwrap_or_else(|| "-".into())
+    );
     if started_at > 0 {
         println!("  Started: {}", fmt_iso(started_at));
     }
@@ -553,7 +833,10 @@ fn status(root: &Path, command: &DaemonCommand) -> u8 {
 
     if command.verbose || command.show_modes {
         println!("\nExecution Modes");
-        println!("  Native build: workers are local-only (no Node event-loop).");
+        println!("  Native supervisor: queue ticks + heartbeat; workers are one-shot jobs.");
+        if let Some(hb) = state["heartbeatAt"].as_u64() {
+            println!("  Last heartbeat: {}", fmt_iso(hb));
+        }
     }
     0
 }
@@ -561,31 +844,24 @@ fn status(root: &Path, command: &DaemonCommand) -> u8 {
 fn status_all() -> u8 {
     println!("\n\u{256d} Daemons Across All Workspaces \u{256e}");
     let mut count = 0u32;
-    #[cfg(unix)]
-    {
-        if let Ok(entries) = fs::read_dir("/proc") {
-            for e in entries.flatten() {
-                let name = e.file_name();
-                let name = name.to_string_lossy();
-                let Ok(pid) = name.parse::<u32>() else { continue };
-                if let Ok(cmdline) = fs::read_to_string(e.path().join("cmdline")) {
-                    let cmd = cmdline.replace('\0', " ");
-                    if (cmd.contains("ruflo") || cmd.contains("claude-flow")) && cmd.contains("daemon") {
-                        let cwd = fs::read_link(e.path().join("cwd")).ok();
-                        count += 1;
-                        println!("  pid {pid:<7} \u{25cf} {}", cwd.map(|c| c.display().to_string()).unwrap_or_else(|| "?".into()));
-                    }
-                }
-            }
+    let dir = budget_dir().join("daemons");
+    if let Ok(entries) = fs::read_dir(&dir) {
+        for e in entries.flatten() {
+            let name = e.file_name();
+            let Ok(pid) = name.to_string_lossy().parse::<u32>() else { continue };
+            let rec: Value = fs::read_to_string(e.path())
+                .ok()
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_else(|| json!({}));
+            let ws = rec["workspace"].as_str().unwrap_or("?");
+            let live = ws != "?" && is_supervisor_process(pid, Path::new(ws));
+            let icon = if live { "\u{25cf}" } else { "\u{25cb}" };
+            count += 1;
+            println!("  pid {pid:<7} {icon} {ws}");
         }
     }
-    #[cfg(not(unix))]
-    {
-        let _ = &mut count;
-        println!("  (cross-workspace daemon enumeration is Linux/proc-only)");
-    }
     if count == 0 {
-        println!("  No ruflo daemons running.");
+        println!("  No ruflo daemons registered.");
     }
     0
 }
@@ -608,9 +884,20 @@ fn trigger(root: &Path, command: &DaemonCommand) -> u8 {
         }
     }
     println!("Trigger recorded for worker '{worker}'.");
-    // Execute the worker tick natively (worker_daemon_v2 behavioral).
-    let tick = crate::services::worker_daemon_v2::tick(worker);
-    println!("Worker tick: {}", tick["status"].as_str().unwrap_or("done"));
+    if let Ok(store) = ruflo_storage::ApplianceStore::open(root) {
+        match store.enqueue_job(worker, "manual-trigger") {
+            Ok(id) => println!("Queued resident job {id} for worker '{worker}'."),
+            Err(e) => eprintln!("[ERROR] Failed to queue job: {e}"),
+        }
+    }
+    let step = supervisor_step(root, &[worker.to_string()], std::process::id());
+    println!(
+        "Supervisor step: {}",
+        step["status"].as_str().unwrap_or("done")
+    );
+    if let Some(job) = step["jobId"].as_str() {
+        println!("Job: {job} result={}", step["result"].as_str().unwrap_or("?"));
+    }
     0
 }
 
@@ -740,6 +1027,7 @@ fn budget_pause(reason: Option<&str>) -> u8 {
         return 1;
     }
     append_receipt(json!({"event": "manual-pause", "at": now, "reason": r}));
+    let _ = crate::spend::pause(r);
     println!("Autonomous AI worker launches paused across all daemons.");
     println!("Resume with: ruflo daemon budget resume");
     0
@@ -774,6 +1062,7 @@ fn budget_resume() -> u8 {
     if was_paused {
         append_receipt(json!({"event": "manual-resume", "at": now}));
     }
+    let _ = crate::spend::resume();
     println!("Autonomous AI worker launches resumed.");
     0
 }
@@ -781,15 +1070,39 @@ fn budget_resume() -> u8 {
 // ---- supervisor -------------------------------------------------------------
 
 fn install_supervisor(root: &Path, _command: &DaemonCommand) -> u8 {
-    // Write a crontab-style @reboot line the user can install. Native can't
-    // install into launchd/systemd without platform work; degrade honestly.
     let dir = root.join(".claude-flow");
     let _ = fs::create_dir_all(&dir);
-    let path = dir.join("daemon-supervisor.cron");
-    let _ = fs::write(&path, "# install with: crontab daemon-supervisor.cron\n@reboot ruflo daemon start --background\n");
-    println!("Supervisor config written to {}", path.display());
-    println!("Install it with: crontab {}", path.display());
-    eprintln!("[WARN] Native build writes the config only; install into launchd/systemd/cron is manual.");
+    let exe = std::env::current_exe()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|_| "ruflo".into());
+    let unit = format!(
+        "[Unit]\n\
+         Description=Ruflo appliance supervisor\n\
+         After=network.target\n\n\
+         [Service]\n\
+         Type=simple\n\
+         WorkingDirectory={cwd}\n\
+         ExecStart={exe} daemon start --foreground --ttl 0\n\
+         Restart=on-failure\n\
+         RestartSec=5\n\n\
+         [Install]\n\
+         WantedBy=default.target\n",
+        cwd = root.display(),
+        exe = exe
+    );
+    let unit_path = dir.join("ruflo-daemon.service");
+    if fs::write(&unit_path, unit).is_err() {
+        eprintln!("[ERROR] Failed to write {}", unit_path.display());
+        return 1;
+    }
+    let cron_path = dir.join("daemon-supervisor.cron");
+    let _ = fs::write(
+        &cron_path,
+        format!("# install with: crontab {cron}\n@reboot {exe} daemon start --ttl 0\n", cron = cron_path.display(), exe = exe),
+    );
+    println!("Supervisor unit written to {}", unit_path.display());
+    println!("Enable with: systemctl --user link {} && systemctl --user enable --now ruflo-daemon.service", unit_path.display());
+    println!("Cron fallback: {}", cron_path.display());
     0
 }
 
@@ -894,5 +1207,37 @@ mod tests {
     #[test]
     fn civil_from_days_epoch() {
         assert_eq!(civil_from_days(0), (1970, 1, 1));
+    }
+
+    #[test]
+    fn safe_pid_rejects_process_group_and_init() {
+        assert!(!is_safe_pid(0));
+        assert!(!is_safe_pid(1));
+        assert!(is_safe_pid(2));
+    }
+
+    #[test]
+    fn current_process_is_not_a_supervisor() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!is_supervisor_process(std::process::id(), dir.path()));
+        assert!(!terminate_recorded_supervisor(dir.path(), 0));
+        assert!(!terminate_recorded_supervisor(dir.path(), 1));
+        assert!(!terminate_recorded_supervisor(dir.path(), std::process::id()));
+    }
+
+    #[test]
+    fn supervisor_step_claims_queued_job_into_resident_slot() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = ruflo_storage::ApplianceStore::open(dir.path()).unwrap();
+        let job_id = store.enqueue_job("audit", "fixture-scan").unwrap();
+        let out = supervisor_step(dir.path(), &["audit".into()], 42);
+        assert_eq!(out["status"], "ran");
+        assert_eq!(out["jobId"], job_id);
+        let job = store.get_job(&job_id).unwrap().unwrap();
+        assert!(job.status == "done" || job.status == "failed", "{}", job.status);
+        let slot = store.get_agent("resident-audit").unwrap().unwrap();
+        assert_eq!(slot.status, "resident-idle");
+        assert!(dir.path().join(".swarm/memory.db").is_file());
+        assert!(!dir.path().join(".swarm/agents/resident-audit.json").exists());
     }
 }

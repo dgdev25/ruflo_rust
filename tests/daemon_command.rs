@@ -31,6 +31,51 @@ fn overview_lists_subcommands() {
 }
 
 #[test]
+fn start_status_stop_reports_live_running_pid_twice() {
+    let project = tempfile::tempdir().unwrap();
+    let budget = tempfile::tempdir().unwrap();
+    for cycle in 1..=2 {
+        let start = run_with_budget(
+            "ruflo",
+            project.path(),
+            budget.path(),
+            &["daemon", "start", "-w", "map"],
+        );
+        assert_eq!(start.status.code(), Some(0), "cycle {cycle} start: {}", stdout(&start));
+        let mut status_out = String::new();
+        let mut pid: Option<u32> = None;
+        for _ in 0..40 {
+            let status = run_with_budget("ruflo", project.path(), budget.path(), &["daemon", "status"]);
+            status_out = stdout(&status);
+            if status_out.contains("RUNNING") {
+                if let Some(p) = status_out
+                    .lines()
+                    .find_map(|l| l.split("PID:").nth(1).and_then(|s| s.trim().parse().ok()))
+                {
+                    pid = Some(p);
+                    break;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let pid = pid.expect(&format!("cycle {cycle} never RUNNING: {status_out}"));
+        assert!(
+            Path::new(&format!("/proc/{pid}")).exists() || cfg!(not(target_os = "linux")),
+            "cycle {cycle} pid {pid} not alive"
+        );
+        let stop = run_with_budget("ruflo", project.path(), budget.path(), &["daemon", "stop"]);
+        assert_eq!(stop.status.code(), Some(0), "cycle {cycle} stop");
+        let after = run_with_budget("ruflo", project.path(), budget.path(), &["daemon", "status"]);
+        let after_s = stdout(&after);
+        assert!(
+            !after_s.contains("RUNNING") || after_s.contains("STOPPED"),
+            "cycle {cycle} still running: {after_s}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
+#[test]
 fn start_records_state_and_status_reflects_it() {
     for binary in ["ruflo", "claude-flow"] {
         let project = tempfile::tempdir().unwrap();
@@ -50,6 +95,7 @@ fn start_records_state_and_status_reflects_it() {
         let s = stdout(&status);
         assert!(s.contains("Workers Enabled: 2"));
         assert!(s.contains("TTL: 12h"));
+        let _ = run_with_budget(binary, project.path(), budget.path(), &["daemon", "stop"]);
     }
 }
 
@@ -71,6 +117,7 @@ fn enable_then_disable_worker() {
     assert_eq!(map["enabled"], false);
     let predict = workers.iter().find(|w| w["type"] == "predict").unwrap();
     assert_eq!(predict["enabled"], true);
+    let _ = run_with_budget("ruflo", project.path(), budget.path(), &["daemon", "stop"]);
 }
 
 #[test]
@@ -119,6 +166,15 @@ fn trigger_records_marker() {
     let out = run_with_budget("ruflo", project.path(), budget.path(), &["daemon", "trigger", "-w", "audit"]);
     assert_eq!(out.status.code(), Some(0));
     assert!(project.path().join(".claude-flow/daemon-triggers.jsonl").is_file());
+    let s = stdout(&out);
+    assert!(s.contains("Queued resident job") || s.contains("Supervisor step"));
+    assert!(project.path().join(".swarm/memory.db").is_file());
+    let store = ruflo_storage::ApplianceStore::open(project.path()).unwrap();
+    let agents = store.list_agents().unwrap();
+    assert!(
+        agents.iter().any(|a| a.id == "resident-audit"),
+        "trigger must create a resident slot, got {agents:?}"
+    );
 }
 
 #[test]

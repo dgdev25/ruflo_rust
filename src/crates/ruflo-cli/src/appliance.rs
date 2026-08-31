@@ -7,8 +7,11 @@
 //! file-existence checks.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 use serde_json::json;
+
+/// Cloud appliance profile packed into the standalone binary.
+pub const CLOUD_PROFILE: &str = include_str!("../../../../config/appliance/cloud.yaml");
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApplianceCommand {
@@ -77,9 +80,22 @@ fn build(command: &ApplianceCommand) -> u8 {
             file_entries.push(json!({"path": f, "sha256": hash, "size": content.len()}));
         }
     }
+    let mut host = json!(null);
+    if let Ok(exe) = std::env::current_exe() {
+        if let Ok(bytes) = fs::read(&exe) {
+            host = json!({
+                "path": exe.display().to_string(),
+                "sha256": hex_sha256(&bytes),
+                "size": bytes.len(),
+            });
+        }
+    }
     let manifest = json!({
         "format": "rvfa", "version": 1, "profile": profile,
         "arch": arch, "files": file_entries,
+        "host": host,
+        "cloudProfileSha256": hex_sha256(CLOUD_PROFILE.as_bytes()),
+        "standalone": true,
         "createdAt": now_ms(),
     });
     let manifest_str = serde_json::to_string_pretty(&manifest).unwrap_or_default();
@@ -174,24 +190,61 @@ fn verify(command: &ApplianceCommand) -> u8 {
         return 1;
     }
     println!("  ✓ Checksum verified: {computed}");
-    if !quick {
-        if let Some(files) = rvfa["manifest"]["files"].as_array() {
-            let mut ok = 0;
-            for f in files {
-                let path = f["path"].as_str().unwrap_or("");
-                let expected = f["sha256"].as_str().unwrap_or("");
-                match fs::read(path) {
-                    Ok(content) => {
-                        let actual = hex_sha256(&content);
-                        if actual == expected { ok += 1; }
-                        else { eprintln!("  ✗ {path}: hash mismatch"); }
+    if let Some(expected) = rvfa["manifest"]["host"]["sha256"].as_str() {
+        if let Some(host_path) = rvfa["manifest"]["host"]["path"].as_str() {
+            match fs::read(host_path) {
+                Ok(bytes) => {
+                    let actual = hex_sha256(&bytes);
+                    if actual != expected {
+                        eprintln!("  ✗ Host hash mismatch: stored={expected} computed={actual}");
+                        return 1;
                     }
-                    Err(_) => { eprintln!("  ✗ {path}: missing"); }
+                    println!("  ✓ Host hash verified");
+                }
+                Err(e) => {
+                    eprintln!("  ✗ Host binary missing ({host_path}): {e}");
+                    return 1;
                 }
             }
-            println!("  ✓ {ok}/{} files verified", files.len());
         }
     }
+    if quick {
+        return 0;
+    }
+    let Some(files) = rvfa["manifest"]["files"].as_array() else {
+        return 0;
+    };
+    let mut ok = 0usize;
+    let mut failed = false;
+    for f in files {
+        let path = f["path"].as_str().unwrap_or("");
+        if confined_rel(path).is_err() {
+            eprintln!("  ✗ {path}: path is not confined");
+            failed = true;
+            continue;
+        }
+        let expected = f["sha256"].as_str().unwrap_or("");
+        match fs::read(path) {
+            Ok(content) => {
+                let actual = hex_sha256(&content);
+                if actual == expected {
+                    ok += 1;
+                } else {
+                    eprintln!("  ✗ {path}: hash mismatch");
+                    failed = true;
+                }
+            }
+            Err(_) => {
+                eprintln!("  ✗ {path}: missing");
+                failed = true;
+            }
+        }
+    }
+    if failed {
+        eprintln!("  ✗ {ok}/{} files verified", files.len());
+        return 1;
+    }
+    println!("  ✓ {ok}/{} files verified", files.len());
     0
 }
 
@@ -209,23 +262,59 @@ fn extract(command: &ApplianceCommand) -> u8 {
         Err(_) => { eprintln!("[ERROR] Invalid RVFA format"); return 1; }
     };
     let target = command.target_dir.as_deref().unwrap_or("./extracted");
-    let _ = fs::create_dir_all(target);
-    // Extract: copy each listed file from the manifest (if present).
+    if fs::create_dir_all(target).is_err() {
+        eprintln!("[ERROR] Cannot create target directory: {target}");
+        return 1;
+    }
     let mut extracted = 0;
+    let mut rejected = 0;
     if let Some(files) = rvfa["manifest"]["files"].as_array() {
         for f in files {
             let path = f["path"].as_str().unwrap_or("");
-            if Path::new(path).exists() {
-                let dest = format!("{target}/{path}");
-                if let Some(parent) = Path::new(&dest).parent() {
-                    let _ = fs::create_dir_all(parent);
-                }
-                if fs::copy(path, &dest).is_ok() { extracted += 1; }
+            if let Err(reason) = confined_rel(path) {
+                eprintln!("[ERROR] Rejected path '{path}': {reason}");
+                rejected += 1;
+                continue;
+            }
+            if !Path::new(path).exists() {
+                continue;
+            }
+            let dest = PathBuf::from(target).join(path);
+            if let Some(parent) = dest.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            if fs::copy(path, &dest).is_ok() {
+                extracted += 1;
             }
         }
     }
     println!("\nRVFA Extracted: {extracted} files to {target}");
+    if rejected > 0 {
+        eprintln!("[ERROR] {rejected} path(s) rejected");
+        return 1;
+    }
     0
+}
+
+/// Reject absolute paths and any `..` segment so extract/verify cannot leave
+/// the intended tree.
+pub(crate) fn confined_rel(path: &str) -> Result<&str, String> {
+    if path.is_empty() {
+        return Err("empty path".into());
+    }
+    let p = Path::new(path);
+    if p.is_absolute() {
+        return Err("absolute paths are not allowed".into());
+    }
+    for c in p.components() {
+        match c {
+            Component::Normal(_) | Component::CurDir => {}
+            Component::Prefix(_) | Component::RootDir | Component::ParentDir => {
+                return Err("parent or root segments are not allowed".into());
+            }
+        }
+    }
+    Ok(path)
 }
 
 fn run_cmd(command: &ApplianceCommand) -> u8 {
@@ -240,7 +329,131 @@ fn run_cmd(command: &ApplianceCommand) -> u8 {
     println!("\nRunning RVFA Appliance");
     println!("  File: {file}");
     println!();
-    eprintln!("[NOTE] RVFA run: spawn the configured binary (native).");
-    eprintln!("  Use: ruflo appliance run -f {file}");
-    1
+    let content = match fs::read_to_string(file) {
+        Ok(c) => c,
+        Err(_) => {
+            eprintln!("[ERROR] Cannot read: {file}");
+            return 1;
+        }
+    };
+    let rvfa: serde_json::Value = match serde_json::from_str(&content) {
+        Ok(v) => v,
+        Err(_) => {
+            eprintln!("[ERROR] Invalid RVFA format");
+            return 1;
+        }
+    };
+    let stored_checksum = rvfa["checksum"].as_str().unwrap_or("");
+    let manifest_str = serde_json::to_string_pretty(&rvfa["manifest"]).unwrap_or_default();
+    let computed = hex_sha256(manifest_str.as_bytes());
+    if stored_checksum != computed {
+        eprintln!("[ERROR] RVFA checksum mismatch. Refusing to run.");
+        return 1;
+    }
+    let Some(host_path) = rvfa["manifest"]["host"]["path"].as_str() else {
+        eprintln!("[ERROR] RVFA has no host binary path. Rebuild with `ruflo appliance build`.");
+        return 1;
+    };
+    let expected = rvfa["manifest"]["host"]["sha256"].as_str().unwrap_or("");
+    let bytes = match fs::read(host_path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("[ERROR] Cannot read host binary {host_path}: {e}");
+            return 1;
+        }
+    };
+    let actual = hex_sha256(&bytes);
+    if !expected.is_empty() && actual != expected {
+        eprintln!("[ERROR] Host binary hash mismatch. Refusing to run.");
+        return 1;
+    }
+    let status = std::process::Command::new(host_path)
+        .args(["daemon", "start", "--foreground", "--ttl", "0"])
+        .status();
+    match status {
+        Ok(s) => s.code().unwrap_or(1) as u8,
+        Err(e) => {
+            eprintln!("[ERROR] Failed to exec host: {e}");
+            1
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn confined_rel_rejects_parent_and_absolute() {
+        assert!(confined_rel("ok/file.json").is_ok());
+        assert!(confined_rel("../secret").is_err());
+        assert!(confined_rel("/etc/passwd").is_err());
+        assert!(confined_rel("").is_err());
+        assert!(confined_rel("a/../../b").is_err());
+    }
+
+    static CWD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn verify_fails_when_listed_file_hash_mismatches() {
+        let _g = CWD_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("payload.txt"), b"hello").unwrap();
+        let manifest = json!({
+            "format": "rvfa",
+            "files": [{"path": "payload.txt", "sha256": "00", "size": 5}],
+        });
+        let checksum = hex_sha256(serde_json::to_string_pretty(&manifest).unwrap().as_bytes());
+        fs::write(
+            dir.path().join("box.rvfa"),
+            serde_json::to_vec_pretty(&json!({"manifest": manifest, "checksum": checksum})).unwrap(),
+        )
+        .unwrap();
+        let cwd = std::env::current_dir().unwrap();
+        std::env::set_current_dir(dir.path()).unwrap();
+        let code = verify(&ApplianceCommand {
+            operation: "verify".into(),
+            file: Some("box.rvfa".into()),
+            output: None,
+            profile: None,
+            arch: None,
+            json: false,
+            quick: false,
+            target_dir: None,
+        });
+        let _ = std::env::set_current_dir(cwd);
+        assert_eq!(code, 1);
+    }
+
+    #[test]
+    fn extract_rejects_parent_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let rvfa = json!({
+            "manifest": {"files": [{"path": "../etc/passwd", "sha256": "00"}]},
+            "checksum": "x",
+        });
+        let file = dir.path().join("box.rvfa");
+        fs::write(&file, serde_json::to_vec_pretty(&rvfa).unwrap()).unwrap();
+        let target = dir.path().join("out");
+        let code = extract(&ApplianceCommand {
+            operation: "extract".into(),
+            file: Some(file.to_string_lossy().into_owned()),
+            output: None,
+            profile: None,
+            arch: None,
+            json: false,
+            quick: false,
+            target_dir: Some(target.to_string_lossy().into_owned()),
+        });
+        assert_eq!(code, 1);
+        assert!(!target.join("etc/passwd").exists());
+    }
+
+    #[test]
+    fn embedded_cloud_profile_is_standalone() {
+        assert!(CLOUD_PROFILE.contains("profile: cloud"));
+        assert!(CLOUD_PROFILE.contains("store: sqlite"));
+        assert!(CLOUD_PROFILE.contains("\"daemon\""));
+        assert!(CLOUD_PROFILE.contains("\"start\""));
+    }
 }

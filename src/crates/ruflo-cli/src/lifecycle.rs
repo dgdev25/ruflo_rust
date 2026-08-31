@@ -7,6 +7,18 @@ use serde::{Deserialize, Serialize};
 
 const CONFIG: &str = "# Native Ruflo project configuration\nversion: 3\n";
 
+fn pid_is_alive(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        std::path::Path::new(&format!("/proc/{pid}")).exists()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = pid;
+        false
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectStatus {
     pub agents: usize,
@@ -228,6 +240,12 @@ pub fn restore_session(project_root: &Path, session_id: &str) -> io::Result<Sess
         &record.agents,
         |record| &record.id,
     )?;
+    if let Ok(store) = appliance_store(project_root) {
+        let _ = store.clear_agents();
+        for agent in &record.agents {
+            let _ = persist_agent(project_root, agent);
+        }
+    }
     replace_records(project_root.join(".swarm/tasks"), &record.tasks, |record| {
         &record.id
     })?;
@@ -564,11 +582,7 @@ pub fn assign_task(
     } else {
         for agent_id in agent_ids {
             let agent_id = safe_identifier(agent_id)?;
-            if !project_root
-                .join(".swarm/agents")
-                .join(format!("{agent_id}.json"))
-                .is_file()
-            {
+            if get_agent(project_root, &agent_id).is_err() {
                 return Err(io::Error::new(
                     io::ErrorKind::NotFound,
                     format!("agent `{agent_id}` does not exist"),
@@ -608,41 +622,80 @@ pub fn retry_task(project_root: &Path, task_id: &str, reset_state: bool) -> io::
     Ok(task)
 }
 
+fn appliance_store(project_root: &Path) -> io::Result<ruflo_storage::ApplianceStore> {
+    ruflo_storage::ApplianceStore::open(project_root).map_err(io::Error::other)
+}
+
+fn persist_agent(project_root: &Path, record: &AgentRecord) -> io::Result<()> {
+    let store = appliance_store(project_root)?;
+    store
+        .upsert_agent(&ruflo_storage::AgentRow {
+            id: record.id.clone(),
+            agent_type: record.agent_type.clone(),
+            status: record.status.clone(),
+            role: record.agent_type.clone(),
+            heartbeat_ms: 0,
+        })
+        .map_err(io::Error::other)?;
+    Ok(())
+}
+
+fn migrate_json_agents(project_root: &Path) -> io::Result<()> {
+    let dir = project_root.join(".swarm/agents");
+    if !dir.is_dir() {
+        return Ok(());
+    }
+    let store = appliance_store(project_root)?;
+    for entry in fs::read_dir(&dir)? {
+        let entry = entry?;
+        if entry.path().extension().is_some_and(|ext| ext == "json") {
+            if let Ok(record) = serde_json::from_slice::<AgentRecord>(&fs::read(entry.path())?) {
+                let _ = store.upsert_agent(&ruflo_storage::AgentRow {
+                    id: record.id,
+                    agent_type: record.agent_type,
+                    status: record.status,
+                    role: String::new(),
+                    heartbeat_ms: 0,
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn spawn_agent(project_root: &Path, agent_type: &str, name: &str) -> io::Result<AgentRecord> {
     status(project_root)?;
     let id = safe_identifier(name)?;
-    let record = AgentRecord {
-        id: id.clone(),
-        agent_type: safe_identifier(agent_type)?,
-        status: "idle".into(),
-    };
-    let path = project_root
-        .join(".swarm/agents")
-        .join(format!("{id}.json"));
-    if path.exists() {
+    if get_agent(project_root, &id).is_ok() {
         return Err(io::Error::new(
             io::ErrorKind::AlreadyExists,
             format!("agent `{id}` already exists"),
         ));
     }
-    fs::write(
-        path,
-        serde_json::to_vec_pretty(&record).expect("agent record is serializable"),
-    )?;
+    let record = AgentRecord {
+        id: id.clone(),
+        agent_type: safe_identifier(agent_type)?,
+        status: "idle".into(),
+    };
+    persist_agent(project_root, &record)?;
     append_agent_log(project_root, &id, "info", "agent spawned")?;
     Ok(record)
 }
 
 pub fn list_agents(project_root: &Path) -> io::Result<Vec<AgentRecord>> {
     status(project_root)?;
-    let mut agents: Vec<AgentRecord> = Vec::new();
-    for entry in fs::read_dir(project_root.join(".swarm/agents"))? {
-        let entry = entry?;
-        if entry.path().extension().is_some_and(|ext| ext == "json") {
-            agents
-                .push(serde_json::from_slice(&fs::read(entry.path())?).map_err(io::Error::other)?);
-        }
-    }
+    migrate_json_agents(project_root)?;
+    let store = appliance_store(project_root)?;
+    let mut agents: Vec<AgentRecord> = store
+        .list_agents()
+        .map_err(io::Error::other)?
+        .into_iter()
+        .map(|row| AgentRecord {
+            id: row.id,
+            agent_type: row.agent_type,
+            status: row.status,
+        })
+        .collect();
     agents.sort_by(|left, right| left.id.cmp(&right.id));
     Ok(agents)
 }
@@ -650,21 +703,23 @@ pub fn list_agents(project_root: &Path) -> io::Result<Vec<AgentRecord>> {
 pub fn get_agent(project_root: &Path, agent_id: &str) -> io::Result<AgentRecord> {
     status(project_root)?;
     let agent_id = safe_identifier(agent_id)?;
-    let path = project_root
-        .join(".swarm/agents")
-        .join(format!("{agent_id}.json"));
-    serde_json::from_slice(&fs::read(path)?).map_err(io::Error::other)
+    migrate_json_agents(project_root)?;
+    let store = appliance_store(project_root)?;
+    store
+        .get_agent(&agent_id)
+        .map_err(io::Error::other)?
+        .map(|row| AgentRecord {
+            id: row.id,
+            agent_type: row.agent_type,
+            status: row.status,
+        })
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, format!("agent `{agent_id}` not found")))
 }
 
 pub fn stop_agent(project_root: &Path, agent_id: &str) -> io::Result<AgentRecord> {
     let mut agent = get_agent(project_root, agent_id)?;
     agent.status = "terminated".into();
-    fs::write(
-        project_root
-            .join(".swarm/agents")
-            .join(format!("{}.json", agent.id)),
-        serde_json::to_vec_pretty(&agent).expect("agent record is serializable"),
-    )?;
+    persist_agent(project_root, &agent)?;
     append_agent_log(project_root, &agent.id, "info", "agent stopped")?;
     Ok(agent)
 }
@@ -833,6 +888,10 @@ pub fn agent_health(
     Ok(agents
         .into_iter()
         .map(|agent| {
+            let _supervisor_live = std::fs::read_to_string(project_root.join(".claude-flow/daemon.pid"))
+                .ok()
+                .and_then(|s| s.trim().parse::<u32>().ok())
+                .is_some_and(pid_is_alive);
             let health = if agent.status == "error" {
                 "unhealthy"
             } else if agent.status == "terminated" {

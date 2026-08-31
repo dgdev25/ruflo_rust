@@ -32,7 +32,9 @@ impl NewAgent {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentState {
-    Spawned,
+    Idle,
+    Running,
+    Terminated,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

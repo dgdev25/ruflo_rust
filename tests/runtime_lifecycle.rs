@@ -97,7 +97,7 @@ fn unknown_handles_and_invalid_swarm_references_are_rejected_stably() {
     ));
 
     match runtime.get_handle(HandleRef::Agent(agent.id)).unwrap() {
-        RuntimeHandle::Agent(handle) => assert_eq!(handle.state, AgentState::Spawned),
+        RuntimeHandle::Agent(handle) => assert_eq!(handle.state, AgentState::Idle),
         other => panic!("expected agent handle, got {other:?}"),
     }
 }

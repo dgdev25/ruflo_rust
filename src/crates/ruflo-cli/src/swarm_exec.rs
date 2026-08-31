@@ -111,16 +111,18 @@ fn budget_ledger_path() -> PathBuf {
     budget_dir().join("ai-budget.json")
 }
 
-/// Read the budget ledger. Missing/malformed → empty ledger (fail-safe so a
-/// corrupt file never blocks spawning).
-fn read_budget_ledger() -> Value {
+/// Read the budget ledger. Missing file → empty ledger. Malformed file is a
+/// hard error so a corrupt ledger cannot reopen the circuit breaker.
+fn read_budget_ledger() -> Result<Value, String> {
     let path = budget_ledger_path();
     match std::fs::read_to_string(&path) {
-        Ok(s) if s.trim().is_empty() => json!({"version": 1, "launches": [], "active": []}),
-        Ok(s) => serde_json::from_str(&s).unwrap_or_else(|_| {
-            json!({"version": 1, "launches": [], "active": []})
-        }),
-        Err(_) => json!({"version": 1, "launches": [], "active": []}),
+        Ok(s) if s.trim().is_empty() => Ok(json!({"version": 1, "launches": [], "active": []})),
+        Ok(s) => serde_json::from_str::<Value>(&s)
+            .map_err(|e| format!("budget ledger at {} is malformed: {e}", path.display())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            Ok(json!({"version": 1, "launches": [], "active": []}))
+        }
+        Err(e) => Err(format!("cannot read budget ledger at {}: {e}", path.display())),
     }
 }
 
@@ -266,8 +268,10 @@ pub fn run_swarm(
     cwd: &Path,
     keep_env: bool,
     dry_run: bool,
+    isolate_worktree: bool,
 ) -> SwarmOutcome {
-    let n = workers.clamp(1, 50);
+    let requested = workers.clamp(1, 50);
+    let n = requested;
     let roles = worker_roles(n);
 
     // Service: global AI budget enforcement. Check the circuit breaker before
@@ -275,7 +279,7 @@ pub fn run_swarm(
     // spawn. This ports the critical enforcement path from
     // services/global-ai-budget.ts into the native swarm executor.
     if !dry_run && (agent == "claude" || agent == "codex") {
-        if let Some(reason) = check_budget_paused(cwd) {
+        if let Err(reason) = crate::spend::check() {
             return SwarmOutcome {
                 dry_run: false,
                 workers: 0,
@@ -337,42 +341,26 @@ pub fn run_swarm(
         }
     }
 
-    // Record launch reservations in the budget ledger so daemon.rs::status and
-    // check_budget_paused observe in-flight workers (concurrent-limit gate) and
-    // rate-limit counters stay accurate. Permits are removed once all workers
-    // finish; launches are retained (sliding-window counters).
-    let spawn_pid = std::process::id();
-    let reservation_at = now_ms();
-    let permits: Vec<String> = (0..n)
-        .map(|i| format!("swarm-{reservation_at}-{i}"))
-        .collect();
-    {
-        let mut ledger = read_budget_ledger();
-        {
-            let active = ensure_array_mut(&mut ledger, "active");
-            for permit in &permits {
-                active.push(json!({
-                    "permitId": permit,
-                    "at": reservation_at,
-                    "pid": spawn_pid,
-                    "workerType": agent,
-                }));
-            }
+    let spend_permit = match crate::spend::reserve("swarm", agent, cwd) {
+        Ok(p) => p,
+        Err(e) => {
+            return SwarmOutcome {
+                dry_run: false,
+                workers: 0,
+                results: vec![WorkerResult {
+                    worker_idx: 0,
+                    agent: agent.into(),
+                    stdout: String::new(),
+                    stderr: format!("AI budget ledger: {e}"),
+                    exit_code: -1,
+                    timed_out: false,
+                }],
+                plan: vec![json!({"blocked": "budget_ledger", "reason": e})],
+            };
         }
-        {
-            let launches = ensure_array_mut(&mut ledger, "launches");
-            for _ in 0..n {
-                launches.push(json!({
-                    "at": reservation_at,
-                    "pid": spawn_pid,
-                    "workerType": agent,
-                    "model": agent,
-                    "workspace": cwd.to_string_lossy(),
-                }));
-            }
-        }
-        write_budget_ledger(&ledger);
-    }
+    };
+    let n = n.min(1);
+    let roles = worker_roles(n);
 
     // Spawn N workers in parallel (one thread each). Collect handles first,
     // then join — calling .join() inside .map() would block each spawn until
@@ -394,8 +382,30 @@ pub fn run_swarm(
                     timed_out: false,
                 });
             }
+            let use_wt = isolate_worktree;
             std::thread::spawn(move || {
-                spawn_worker_with_idx(i, &agent_for_thread, &prompt, &cwd_owned, keep_env)
+                let work_dir = if use_wt {
+                    match add_worker_worktree(&cwd_owned, i) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            return WorkerResult {
+                                worker_idx: i,
+                                agent: agent_for_thread,
+                                stdout: String::new(),
+                                stderr: format!("worktree: {e}"),
+                                exit_code: -1,
+                                timed_out: false,
+                            };
+                        }
+                    }
+                } else {
+                    cwd_owned.clone()
+                };
+                let result = spawn_worker_with_idx(i, &agent_for_thread, &prompt, &work_dir, keep_env);
+                if use_wt {
+                    remove_worker_worktree(&cwd_owned, &work_dir);
+                }
+                result
             })
         })
         .collect();
@@ -437,19 +447,7 @@ pub fn run_swarm(
         );
     }
 
-    // Release the active reservations now that every worker has finished. The
-    // launches array is left intact — daemon.rs prunes entries older than 24h.
-    {
-        let mut ledger = read_budget_ledger();
-        let active = ensure_array_mut(&mut ledger, "active");
-        active.retain(|a| {
-            a["permitId"]
-                .as_str()
-                .map(|p| !permits.iter().any(|permitted| permitted == p))
-                .unwrap_or(true)
-        });
-        write_budget_ledger(&ledger);
-    }
+    crate::spend::release(&spend_permit);
 
     let plan: Vec<Value> = (0..n)
         .map(|i| {
@@ -467,6 +465,37 @@ pub fn run_swarm(
         results,
         plan,
     }
+}
+
+fn add_worker_worktree(root: &Path, idx: usize) -> Result<PathBuf, String> {
+    let dir = root.join(".claude-flow/worktrees").join(format!("worker-{idx}"));
+    if let Some(parent) = dir.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if dir.exists() {
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+    let out = Command::new("git")
+        .args([
+            "worktree",
+            "add",
+            "--detach",
+            &dir.to_string_lossy(),
+        ])
+        .current_dir(root)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    Ok(dir)
+}
+
+fn remove_worker_worktree(root: &Path, work_dir: &Path) {
+    let _ = Command::new("git")
+        .args(["worktree", "remove", "--force", &work_dir.to_string_lossy()])
+        .current_dir(root)
+        .status();
 }
 
 fn spawn_worker_with_idx(

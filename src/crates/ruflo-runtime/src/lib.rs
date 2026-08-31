@@ -79,10 +79,36 @@ impl Runtime {
         let handle = AgentHandle {
             id,
             name: agent.name,
-            state: AgentState::Spawned,
+            state: AgentState::Idle,
         };
         state.agents.insert(id, handle.clone());
         Ok(handle)
+    }
+
+    pub fn start_agent(&self, agent_id: AgentId) -> Result<AgentHandle, RufloError> {
+        let mut state = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let agent = state
+            .agents
+            .get_mut(&agent_id)
+            .ok_or_else(|| unknown_handle_error(HandleRef::Agent(agent_id)))?;
+        if agent.state == AgentState::Terminated {
+            return Err(RufloError::invalid_input(
+                "runtime.agent.terminated",
+                format!("agent `{agent_id}` is terminated"),
+            ));
+        }
+        agent.state = AgentState::Running;
+        Ok(agent.clone())
+    }
+
+    pub fn stop_agent(&self, agent_id: AgentId) -> Result<AgentHandle, RufloError> {
+        let mut state = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let agent = state
+            .agents
+            .get_mut(&agent_id)
+            .ok_or_else(|| unknown_handle_error(HandleRef::Agent(agent_id)))?;
+        agent.state = AgentState::Terminated;
+        Ok(agent.clone())
     }
 
     pub fn create_task(&self, task: NewTask) -> Result<TaskHandle, RufloError> {
