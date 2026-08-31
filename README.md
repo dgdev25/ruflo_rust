@@ -99,7 +99,23 @@ cat docs/capabilities/native-capability-manifest.json
 
 See the [parity remediation checklist](docs/plans/parity-remediation-checklist.md) for the current verified and unproven contracts.
 
+### How a call is dispatched
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/workflow-dark.svg">
+  <img src="assets/workflow-light.svg" alt="ruflo-rust workflow: a CLI or MCP call enters the dispatcher, which checks the capability manifest; a registered capability runs the real typed crate operation and returns a typed result, an unregistered one returns a deterministic tool.unsupported error." width="100%">
+</picture>
+
+Every dispatch is checked against the capability manifest before it runs. A registered capability reaches real crate code; an unregistered one returns `tool.unsupported` deterministically, with a non-zero exit — never a silent success.
+
 ## Architecture
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/architecture-dark.svg">
+  <img src="assets/architecture-light.svg" alt="ruflo-rust architecture: a foundation layer (ruflo-types, ruflo-config) feeding a deterministic core layer (ruflo-core, ruflo-storage, ruflo-memory), consumed by typed boundary crates (ruflo-cli, ruflo-mcp, ruflo-actions) plus an optional ruflo-napi Node addon." width="100%">
+</picture>
+
+**[Explore this diagram interactively →](https://htmlpreview.github.io/?https://github.com/dgdev25/ruflo_rust/blob/main/docs/diagrams/architecture-interactive.html)** — click a crate for its outgoing/incoming dependencies, pan/zoom, or present it live.
 
 ### Rust workspace
 
